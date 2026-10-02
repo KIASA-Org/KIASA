@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #030807;
+  --foreground: #ecfff3;
+  --muted: #a2b5ab;
+  --accent: #d9df65;
+  /* The leaf drawing: about half its earlier size, and never too small for its fine veins. */
+  --mark-size: clamp(200px, 26vmin, 240px);
+}
+/* Where supported, keep the drawing an even number of pixels wide so it and the
+   bar beneath it centre on whole pixels and stay sharp. */
+@supports (width: round(nearest, 1px, 2px)) {
+  :root { --mark-size: clamp(200px, round(nearest, 26vmin, 2px), 240px); }
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; background: var(--background); }
+body { color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
+a, button, input { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 2px; }
+
+/* One composition for the landing page, the stage in front of a loading page and
+   the inspector: the mark centred over a faint forest glow. */
+.landing, .startup-stage, .preview-stage {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(circle at 50% 50%, rgb(8 37 29 / 0.55), transparent min(44vmin, 420px)), var(--background);
+}
+.landing:focus { outline: none; }
+
+/* The mark and its loading bar, centred together. */
+.mark-group { display: grid; justify-items: center; gap: 24px; }
+.mark { display: block; width: var(--mark-size); height: var(--mark-size); overflow: visible; }
+/* The loading bar: a small, thin pill-shaped track with one solid fill in a soft,
+   light green (quieter than the travelling light above it). Whole-pixel sizes
+   keep its edges sharp; the fill is a pill too, so its leading end is as round
+   as the track. */
+.mark-bar { position: relative; width: 112px; height: 3px; border-radius: 1.5px; overflow: hidden; background: rgb(236 255 243 / 0.14); }
+.mark-bar-fill { position: absolute; inset: 0; border-radius: inherit; background: #b8ec93; }
+/* The bar and its small "Loading..." label sit together, closer than the leaf. */
+.mark-loader { display: grid; justify-items: center; gap: 12px; }
+.mark-label {
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.16em;
+  color: rgb(236 255 243 / 0.62);
+  user-select: none;
+  /* The dots are absolutely placed, so the word stays centred as they appear. */
+  position: relative;
+  animation: label-breathe 2.4s ease-in-out infinite;
+}
+.mark-dots { position: absolute; left: 100%; }
+.mark-dots span { animation: dot 1.4s ease-in-out infinite; opacity: 0; }
+.mark-dots span:nth-child(2) { animation-delay: 0.2s; }
+.mark-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot { 0%, 15% { opacity: 0; } 35%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes label-breathe { 50% { color: rgb(236 255 243 / 0.82); } }
+@media (prefers-reduced-motion: reduce) { .mark-dots span { opacity: 1; } }
+/* Travelling light glows like a filament: a tight bright halo inside a wider,
+   softer one in the light's own colour. Both stay close to the line. */
+.mark-flow { filter: drop-shadow(0 0 1.5px rgb(152 255 77 / 0.85)) drop-shadow(0 0 5px rgb(84 214 30 / 0.5)); }
+.mark-water { filter: drop-shadow(0 0 1.5px rgb(69 200 255 / 0.85)) drop-shadow(0 0 5px rgb(24 160 245 / 0.55)); }
+.mark-seed-core { animation: seed-in 0.45s ease-out both; }
+.mark-seed-halo { animation: seed-in 0.7s ease-out both, seed-breathe 2.2s ease-in-out 0.7s infinite alternate; }
+@keyframes seed-in { from { opacity: 0; } }
+@keyframes seed-breathe { to { opacity: 0.5; } }
+/* The server renders the finished mark. While the entrance is waiting for scripts,
+   show only its first frame, the small light, so nothing has to be un-drawn. */
+html[data-kiasa-intro="waiting"] .mark-lines { opacity: 0; }
+html[data-kiasa-intro="waiting"] .mark-seed { opacity: 1 !important; }
+html[data-kiasa-intro="waiting"] .mark-bar-fill { transform: translateX(-100%) !important; }
+/* If scripts never take over, the finished mark fades in instead of popping. */
+html:not([data-kiasa-intro]) .mark-lines { transition: opacity 0.6s ease; }
+
+/* The stage in front of a page that is still loading (StartupBoundary). Hidden
+   unless the pre-paint script opts in, so a page is never covered without JavaScript. */
+#kiasa-intro {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  min-height: 0;
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+html[data-kiasa-intro] #kiasa-intro, #kiasa-intro[data-pending] { display: grid; }
+html[data-kiasa-intro] #site-content { pointer-events: none; }
+.skip-intro {
+  position: absolute;
+  top: max(24px, env(safe-area-inset-top));
+  right: max(28px, env(safe-area-inset-right));
+  min-height: 44px;
+  padding: 12px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 150ms;
+}
+.skip-intro:hover, .skip-intro:focus-visible { color: var(--foreground); }
+
+/* Development only: the inspector and the pending-request fixture. */
+.preview-stage { height: 100svh; overflow: hidden; }
+.preview-caption { position: absolute; top: 28px; left: 32px; margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #6f8279; }
+.preview-panel { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); padding: 16px 20px; background: #0b1b16ee; border: 1px solid #a2b5ab33; border-radius: 12px; font-size: 13px; z-index: 60; }
+.preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.preview-heading output { font-variant-numeric: tabular-nums; color: var(--muted); }
+.preview-panel input[type="range"] { width: 100%; accent-color: #76d82b; margin: 12px 0 10px; }
+.preview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.preview-actions button { cursor: pointer; color: var(--foreground); border: 1px solid #a2b5ab40; border-radius: 6px; padding: 7px 12px; background: transparent; font: inherit; }
+.preview-actions button:hover, .preview-actions button[aria-pressed="true"] { background: #168e4440; }
+.preview-actions .preview-gap { margin-left: auto; }
+.dev-site { min-height: 100svh; display: grid; place-content: center; gap: 12px; padding: 32px; text-align: center; color: var(--muted); }
+.dev-site h1 { margin: 0; font-size: 20px; font-weight: 600; color: var(--foreground); }
+.dev-site p { margin: 0; font-size: 14px; }
+.dev-site a { color: var(--foreground); }
+
+@media (max-width: 480px) {
+  .mark-bar { width: 96px; }
+  .skip-intro { top: max(14px, env(safe-area-inset-top)); right: max(20px, env(safe-area-inset-right)); }
+  .preview-actions .preview-gap { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
