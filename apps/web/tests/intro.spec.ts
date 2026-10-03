@@ -249,33 +249,22 @@ test.describe("the entrance in front of the homepage", () => {
     await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 
-  test("the entrance plays once in a session; a reload opens the page at once, even before hydration", async ({ page }) => {
-    await page.goto("/");
-    expect((await ended(page)).reason).toBe("complete");
-    await page.route(SCRIPTS, route => route.abort());
-    await page.reload({ waitUntil: "domcontentloaded" });
-    expect((await ended(page)).reason).toBe("returning-visit");
-    await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
-    await expect(page.locator("#kiasa-intro")).toBeHidden();
-    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
-  });
-
-  test("a skipped entrance is not replayed on reload", async ({ page }) => {
-    await page.goto("/");
-    await page.keyboard.press("Escape");
-    await ended(page);
-    await page.reload();
-    expect((await ended(page)).reason).toBe("returning-visit");
-    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
-  });
-
-  test("unavailable session storage fails open to the page", async ({ page }) => {
+  test("every homepage load draws the leaf again: a reload starts from the first light, with or without session storage", async ({ page }) => {
     await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
     await page.goto("/");
-    expect((await ended(page)).reason).toBe("storage-unavailable");
-    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+    expect((await ended(page)).reason).toBe("complete");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", /waiting|playing/);
+    expect(await page.evaluate(() => window.__kiasaIntro!.active)).toBe(true);
+    expect((await ended(page)).reason).toBe("complete");
+  });
+
+  test("a skipped entrance plays again on reload", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("Escape");
+    expect((await ended(page)).reason).toBe("skip");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", /waiting|playing/);
   });
 
   test("an entrance overdue in a background tab settles the moment the visitor returns", async ({ page }) => {
@@ -304,23 +293,43 @@ test.describe("the entrance in front of the homepage", () => {
   });
 });
 
-test.describe("every-visit policy", () => {
+test.describe("once-per-session policy", () => {
   // The same inline script the site ships, with only its policy argument switched.
   test.beforeEach(async ({ page }) => {
     // The policy is the script's second argument; the same words also appear inside it.
     await rewriteBootstrap(page, script => {
-      expect(script).toContain(',"once-per-session",');
-      return script.replace(',"once-per-session",', ',"every-visit",');
+      expect(script).toContain(',"every-visit",');
+      return script.replace(',"every-visit",', ',"once-per-session",');
     });
   });
 
-  test("every homepage load draws the leaf again, with or without session storage", async ({ page }) => {
-    await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
+  test("the entrance plays once in a session; a reload opens the page at once, even before hydration", async ({ page }) => {
     await page.goto("/");
     expect((await ended(page)).reason).toBe("complete");
+    await page.route(SCRIPTS, route => route.abort());
+    await page.reload({ waitUntil: "domcontentloaded" });
+    expect((await ended(page)).reason).toBe("returning-visit");
+    await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
+    await expect(page.locator("#kiasa-intro")).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+  });
+
+  test("a skipped entrance is not replayed on reload", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("Escape");
+    await ended(page);
     await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", /waiting|playing/);
-    expect(await page.evaluate(() => window.__kiasaIntro!.active)).toBe(true);
+    expect((await ended(page)).reason).toBe("returning-visit");
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+  });
+
+  test("unavailable session storage fails open to the page", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
+    await page.goto("/");
+    expect((await ended(page)).reason).toBe("storage-unavailable");
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 });
 

@@ -6,7 +6,7 @@
  * - "every-visit": every homepage load draws it.
  */
 export type IntroFrequency = "every-visit" | "once-per-session";
-export const INTRO_FREQUENCY: IntroFrequency = "once-per-session";
+export const INTRO_FREQUENCY: IntroFrequency = "every-visit";
 
 /** Versioned: bump it when a redesigned entrance should play again for open sessions. */
 export const SESSION_KEY = "kiasa:intro:dew-v3";

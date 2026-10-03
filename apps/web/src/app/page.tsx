@@ -6,6 +6,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     const { LoadingDemo } = await import("@/components/intro/loading-demo");
     return <LoadingDemo />;
   }
-  // The homepage, with the animated mark in front of it on the first visit of a session.
+  // The homepage, with the animated mark in front of it on every load.
   return <StartupBoundary><HomePage /></StartupBoundary>;
 }

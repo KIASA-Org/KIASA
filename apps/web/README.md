@@ -5,7 +5,7 @@ it on the first visit.
 
 - **The loading mark.** A small light appears, the leaf is drawn line by line
   in white while a thin bar fills, dew rolls along its veins, and then the mark
-  fades away. It plays once per browser session.
+  fades away. It plays on every load of the homepage.
 - **The homepage.** Planned on the structure of Accenture's homepage: header
   with panels of links, a hero, eight featured cards, a leader's words, client
   spotlight, recognition, careers, news, footer. All of its content is **sample
@@ -29,8 +29,7 @@ npm run dev
 
 Open http://localhost:3000. For a local production run: `npm run build`, then `npm start`.
 
-The loading mark plays once per browser tab. To see it again, open the site in
-a new tab or a private window.
+The loading mark plays on every load of the homepage; a refresh starts it again.
 
 ## Change the content
 
@@ -53,7 +52,7 @@ a new tab or a private window.
 | "Loading..." label text, size, colour, dot animation | `Bar` in `scene.tsx`; `.mark-label` and `.mark-dots` in `globals.css` |
 | Pace of the drawing | `TEMPO`, `PHASE`, `SPEED` in `src/components/intro/timing.ts` |
 | Colours and line weights | `LEAF`, `WATER` in `src/components/intro/scene.tsx`; `INK`, `inkWidth` in `drawing.ts` |
-| Once per session, or on every visit | `INTRO_FREQUENCY` in `src/components/intro/config.ts` |
+| On every visit, or once per session | `INTRO_FREQUENCY` in `src/components/intro/config.ts` |
 | How long the mark takes to fade away | `LEAVE_MS` in `config.ts` and the transition on `#kiasa-intro` in `globals.css` |
 | Which lines exist | the tables in `scripts/trace-logo.mjs`, then re-run it |
 

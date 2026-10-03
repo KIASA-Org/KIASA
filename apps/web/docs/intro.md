@@ -5,7 +5,8 @@ All source and asset paths below are relative to `apps/web`.
 The homepage opens with the KIASA leaf as a white line drawing, about 240 px
 wide, on a near-black ground, with a thin loading bar and a small "Loading..."
 label beneath it. The leaf is drawn once; then the mark fades away and the
-company page is there. It plays on the first visit of a browser session only.
+company page is there. It plays on every load of the homepage, so a refresh
+starts again from the first light.
 
 ## What plays
 
