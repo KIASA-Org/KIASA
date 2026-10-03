@@ -8,26 +8,56 @@
   --accent: #d9df65;
   /* The leaf drawing: about half its earlier size, and never too small for its fine veins. */
   --mark-size: clamp(200px, 26vmin, 240px);
+
+  /* The site's palette, taken from the loading mark: night ground, pale ink,
+     the soft green of the loading bar, the blue of the dew. */
+  --night: #030807;
+  --night-raised: #0a1410;
+  --night-control: #121e19;
+  --ink: #ecfff3;
+  --ink-soft: #c5d4cb;
+  --ink-mute: #8ea196;
+  --line: rgb(236 255 243 / 0.14);
+  --line-strong: rgb(236 255 243 / 0.3);
+  --leaf: #b8ec93;
+  --leaf-bright: #98ff4d;
+  --dew: #45c8ff;
+  --forest: #0e3a2a;
+  --paper: #edf2e9;
+  --paper-shade: #e0e8db;
+  --paper-ink: #0a1d15;
+
+  --sans: var(--font-grotesk), "Helvetica Neue", Arial, sans-serif;
+  --serif: var(--font-newsreader), Georgia, "Times New Roman", serif;
 }
 /* Where supported, keep the drawing an even number of pixels wide so it and the
    bar beneath it centre on whole pixels and stay sharp. */
 @supports (width: round(nearest, 1px, 2px)) {
   :root { --mark-size: clamp(200px, round(nearest, 26vmin, 2px), 240px); }
+  /* What is centred lands on half pixels whenever the space left over is odd, and
+     a 3 px bar on half pixels is a soft 4 px one. One pixel of padding corrects
+     that: on the left when the stage is an odd width (beside a scrollbar it often
+     is), and on top when its height is even, because the mark and its loader
+     together are an odd height (an even drawing, then 24 + 3 + 12 + 14). */
+  .startup-stage, .preview-stage { padding-left: mod(100%, 2px); padding-top: mod(calc(100dvh + 1px), 2px); }
 }
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: var(--sans);
+  --font-serif: var(--serif);
 }
 * { box-sizing: border-box; }
 html, body { min-height: 100%; margin: 0; background: var(--background); }
-body { color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
+/* The gutter is always reserved, so nothing moves when the entrance releases the page's scrolling. */
+html { scrollbar-gutter: stable; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { color: var(--foreground); font-family: var(--sans); }
 a, button, input { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 2px; }
 
-/* One composition for the landing page, the stage in front of a loading page and
-   the inspector: the mark centred over a faint forest glow. */
-.landing, .startup-stage, .preview-stage {
+/* One composition for the stage in front of the page and for the inspector: the
+   mark centred over a faint forest glow. */
+.startup-stage, .preview-stage {
   min-height: 100svh;
   display: grid;
   place-items: center;
@@ -35,7 +65,8 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
   isolation: isolate;
   background: radial-gradient(circle at 50% 50%, rgb(8 37 29 / 0.55), transparent min(44vmin, 420px)), var(--background);
 }
-.landing:focus { outline: none; }
+/* The page's content takes focus when the entrance ends; it is not a control, so it shows no ring. */
+#main-content:focus { outline: none; }
 
 /* The mark and its loading bar, centred together. */
 .mark-group { display: grid; justify-items: center; gap: 24px; }
@@ -81,18 +112,25 @@ html[data-kiasa-intro="waiting"] .mark-bar-fill { transform: translateX(-100%) !
 /* If scripts never take over, the finished mark fades in instead of popping. */
 html:not([data-kiasa-intro]) .mark-lines { transition: opacity 0.6s ease; }
 
-/* The stage in front of a page that is still loading (StartupBoundary). Hidden
-   unless the pre-paint script opts in, so a page is never covered without JavaScript. */
+/* The stage in front of the page (StartupBoundary). Hidden unless the pre-paint
+   script opts in, so a page is never covered without JavaScript. When the
+   entrance ends the stage fades away and then stops being rendered; where the
+   browser cannot animate that, it simply goes. */
 #kiasa-intro {
   display: none;
+  opacity: 0;
+  pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 50;
   min-height: 0;
   overscroll-behavior: contain;
   touch-action: none;
+  transition: opacity 0.6s ease, display 0.6s allow-discrete;
 }
-html[data-kiasa-intro] #kiasa-intro, #kiasa-intro[data-pending] { display: grid; }
+html[data-kiasa-intro] #kiasa-intro, #kiasa-intro[data-pending] { display: grid; opacity: 1; pointer-events: auto; transition: none; }
+/* The covered page can be neither used nor scrolled, so it opens at its top. */
+html[data-kiasa-intro] { overflow: hidden; }
 html[data-kiasa-intro] #site-content { pointer-events: none; }
 .skip-intro {
   position: absolute;

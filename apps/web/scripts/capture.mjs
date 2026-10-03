@@ -1,5 +1,6 @@
 // Writes inspection screenshots to artifacts/: named frames of the entrance and
-// the loop from the development inspector, plus the live homepage at rest.
+// the loop from the development inspector, plus the homepage once the entrance
+// has handed over to it.
 // Needs the development server: npm run dev   (then: node scripts/capture.mjs)
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -24,13 +25,17 @@ for (const [name, viewport, deviceScaleFactor] of [["desktop", { width: 1440, he
     await page.waitForTimeout(150);
     await page.screenshot({ path: `artifacts/${name}-${frame.toLowerCase().replace(" ", "-")}.png`, style: hideTools });
   }
-  // The real homepage, once the entrance has finished and the loop is running.
-  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  // The real homepage: the mark while it is being drawn, then the page it leaves behind.
+  await page.goto(`${BASE}/`);
+  await page.waitForFunction(() => document.documentElement.dataset.kiasaIntro === "playing");
+  await page.waitForTimeout(1500);
+  const mark = await page.locator("svg.mark").boundingBox();
+  await page.screenshot({ path: `artifacts/${name}-entrance.png` });
   await page.waitForFunction(() => window.__kiasaIntro?.result);
   const result = await page.evaluate(() => window.__kiasaIntro.result);
-  await page.waitForTimeout(900);
-  await page.screenshot({ path: `artifacts/${name}-homepage.png`, style: hideTools });
-  const mark = await page.locator("svg.mark").boundingBox();
+  await page.locator("#kiasa-intro").waitFor({ state: "detached" });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `artifacts/${name}-homepage.png` });
   report.push({ viewport: name, result, mark, errors });
   await page.close();
 }
