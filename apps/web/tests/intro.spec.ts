@@ -15,6 +15,8 @@ const SETTLED_MS = SETTLED * 1000;
 const SCRIPTS = "**/_next/static/**/*.js";
 const BOOTSTRAP = /<script id="kiasa-intro-bootstrap">[\s\S]*?<\/script>/;
 const INK = "#ECFFF3";
+/** The homepage's main heading: what remains when the entrance is over. */
+const HEADLINE = "Where change takes root";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -82,13 +84,17 @@ function drawing(page: Page) {
 /** True once light is travelling: the loop is running. */
 const flowing = (page: Page) => expect.poll(async () => (await drawing(page)).green, { timeout: 6000 }).toBeGreaterThan(0);
 
-test.describe("landing page", () => {
-  test("draws the leaf once from a small light, then keeps a green line flowing", async ({ page }, info) => {
+test.describe("the entrance in front of the homepage", () => {
+  test("draws the leaf once from a small light, then fades away and leaves the page", async ({ page }, info) => {
     const errors = collectErrors(page);
     await page.goto("/");
+    const stage = page.locator("#kiasa-intro");
     const mark = page.locator("svg.mark");
     await expect(mark).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
+    // The page is already there behind the mark, but it cannot be used or scrolled yet.
+    await expect(page.locator("#site-content")).toHaveAttribute("inert", "");
+    await expect(page.locator("html")).toHaveCSS("overflow-y", "hidden");
     const before = await mark.boundingBox();
     const early = (await drawing(page)).bar;
     // The first stem is drawn live, then completes; the loading bar fills along with the drawing.
@@ -97,22 +103,17 @@ test.describe("landing page", () => {
     const later = (await drawing(page)).bar;
     expect(early).toBeLessThan(later);
     expect(later).toBeLessThan(1);
+    expect(await mark.boundingBox()).toEqual(before);
     const result = await ended(page);
     expect(result.reason).toBe("complete");
     expect(result.elapsedMs).toBeGreaterThanOrEqual(SETTLED_MS);
     expect(result.elapsedMs).toBeLessThan(SETTLED_MS + START_BUDGET_MS);
     await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
-    expect(await mark.boundingBox()).toEqual(before);
-    // The bar is full exactly when the drawing is.
-    expect(await drawing(page)).toMatchObject({ complete: true, bar: 1 });
-    // The landing page does not move on: the same page keeps animating.
-    await flowing(page);
-    // While the leaf keeps flowing, the bar stays full and still.
-    const fill = page.locator(".mark-bar-fill");
-    await expect(fill).toHaveCSS("transform", "none");
-    await page.waitForTimeout(700);
-    await expect(fill).toHaveCSS("transform", "none");
-    expect((await drawing(page)).bar).toBe(1);
+    // The stage fades, and is then taken out of the page.
+    await expect(stage).toHaveCount(0);
+    await expect(page.locator("#site-content")).not.toHaveAttribute("inert", "");
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+    await expect(page.locator(".hero-line > span").first()).toHaveCSS("transform", "none");
     await expect(page).toHaveURL(/\/$/);
     const qa = await page.evaluate(() => window.__qa!);
     expect(qa.results).toHaveLength(1);
@@ -122,36 +123,36 @@ test.describe("landing page", () => {
     await info.attach("runtime-metrics", { body: JSON.stringify({ result, qa }), contentType: "application/json" });
   });
 
-  test("shows the whole leaf and nothing else: no wordmark, no colour artwork, the brand named once", async ({ page }) => {
+  test("the stage shows the whole leaf and nothing else: no wordmark, no colour artwork, one way out", async ({ page }) => {
     await page.goto("/");
-    await ended(page);
-    const lines = page.locator(".mark-lines");
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
+    const stage = page.locator("#kiasa-intro");
+    const lines = stage.locator(".mark-lines");
     // Every measured line of the leaf, each dew drop's ring and its glint.
     await expect(lines.locator("> path")).toHaveCount(STROKES.length + DEW.length);
     await expect(lines.locator("> circle")).toHaveCount(DEW.length);
     for (const stroke of [STROKES[0], STROKES[STROKES.length - 1]]) await expect(lines.locator(`> path[d="${stroke.d}"]`)).toHaveCount(1);
-    await expect(page.locator("svg.mark text, main img")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "KIASA" })).toHaveCount(1);
-    await expect(page.getByRole("heading")).toHaveCount(1);
-    await expect(page.getByRole("status")).toHaveCount(0);
-    // Nothing else is on the page: no links, buttons or copy, in development or production.
-    await expect(page.locator("main a, main button, main p")).toHaveCount(0);
-    await expect(page.locator("svg.mark")).toHaveAttribute("aria-hidden", "true");
+    await expect(stage.locator("svg.mark text, img, h1, h2, p, button")).toHaveCount(0);
+    await expect(stage.getByRole("status")).toHaveCount(0);
+    // Skip is the stage's only control.
+    await expect(stage.locator("a")).toHaveCount(1);
+    await expect(stage.getByRole("link", { name: "Skip intro" })).toBeVisible();
+    await expect(stage.locator("svg.mark")).toHaveAttribute("aria-hidden", "true");
     // About half the earlier size, and never too small for the veins.
-    const box = (await page.locator("svg.mark").boundingBox())!;
+    const box = (await stage.locator("svg.mark").boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(200);
     expect(box.width).toBeLessThanOrEqual(240);
     expect(box.width).toBe(box.height);
     // One small, clean loading bar under the leaf: a pill with a single solid fill and nothing else in it.
-    await expect(page.locator(".mark-bar")).toHaveCount(1);
+    await expect(stage.locator(".mark-bar")).toHaveCount(1);
     // The bar and its label are hidden from assistive technology together (checked below).
-    await expect(page.locator(".mark-loader > .mark-bar")).toHaveCount(1);
-    await expect(page.getByRole("progressbar")).toHaveCount(0);
-    await expect(page.locator(".mark-bar > *")).toHaveCount(1);
-    await expect(page.locator(".mark-bar-fill")).toHaveCSS("background-color", "rgb(184, 236, 147)");
-    await expect(page.locator(".mark-bar-fill")).toHaveCSS("background-image", "none");
-    await expect(page.locator(".mark-bar")).toHaveCSS("border-radius", "1.5px");
-    const bar = (await page.locator(".mark-bar").boundingBox())!;
+    await expect(stage.locator(".mark-loader > .mark-bar")).toHaveCount(1);
+    await expect(stage.getByRole("progressbar")).toHaveCount(0);
+    await expect(stage.locator(".mark-bar > *")).toHaveCount(1);
+    await expect(stage.locator(".mark-bar-fill")).toHaveCSS("background-color", "rgb(184, 236, 147)");
+    await expect(stage.locator(".mark-bar-fill")).toHaveCSS("background-image", "none");
+    await expect(stage.locator(".mark-bar")).toHaveCSS("border-radius", "1.5px");
+    const bar = (await stage.locator(".mark-bar").boundingBox())!;
     // Thin, and a whole-pixel size so its edges are sharp.
     expect(bar.height).toBe(3);
     expect(Number.isInteger(bar.width)).toBe(true);
@@ -159,16 +160,16 @@ test.describe("landing page", () => {
     expect(bar.y).toBeGreaterThan(box.y + box.height);
     expect(Math.abs(bar.x + bar.width / 2 - (box.x + box.width / 2))).toBeLessThanOrEqual(0.5);
     // A small "Loading..." label under the bar, centred on the word, decorative like the bar.
-    const label = page.locator(".mark-label");
+    const label = stage.locator(".mark-label");
     await expect(label).toHaveText("Loading...");
-    await expect(page.locator(".mark-loader")).toHaveAttribute("aria-hidden", "true");
+    await expect(stage.locator(".mark-loader")).toHaveAttribute("aria-hidden", "true");
     const word = (await label.boundingBox())!;
     expect(word.y).toBeGreaterThan(bar.y + bar.height);
     expect(word.height).toBeLessThanOrEqual(16);
     expect(Math.abs(word.x + word.width / 2 - (bar.x + bar.width / 2))).toBeLessThanOrEqual(2);
   });
 
-  test("before scripts arrive only the small light shows; if they never arrive the finished leaf does", async ({ page }) => {
+  test("before scripts arrive only the small light shows; if they never arrive the page is shown instead", async ({ page }) => {
     await page.route(SCRIPTS, route => route.abort());
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "waiting");
@@ -177,76 +178,104 @@ test.describe("landing page", () => {
     const result = await ended(page);
     expect(result.reason).toBe("initialization-error");
     expect(result.elapsedMs).toBeLessThan(START_BUDGET_MS + 500);
-    await expect.poll(async () => (await drawing(page)).shown).toBe(1);
-    expect(await drawing(page)).toMatchObject({ complete: true, seed: 0, bar: 1 });
+    // Nothing can remove the stage without scripts, so CSS fades it and stops rendering it.
+    await expect(page.locator("#kiasa-intro")).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+    await expect(page.locator("#site-content")).not.toHaveAttribute("inert", "");
   });
 
-  test("without JavaScript the finished leaf is the page", async ({ browser, baseURL }) => {
+  test("without JavaScript the homepage is simply there", async ({ browser, baseURL }) => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     await page.goto(baseURL!);
-    await expect(page.locator("svg.mark")).toBeVisible();
-    await expect(page.locator(".mark-lines > path").first()).toHaveAttribute("stroke-dasharray", "1 1");
-    await expect(page.locator(".mark-lines > path").first()).toHaveCSS("opacity", "1");
-    await expect(page.locator(".mark-lines")).toHaveCSS("opacity", "1");
-    await expect(page.locator(".mark-seed")).toHaveCSS("opacity", "0");
-    await expect(page.locator(".mark-bar-fill")).toHaveCSS("transform", "none");
-    await expect(page.getByRole("heading", { name: "KIASA" })).toHaveCount(1);
+    await expect(page.locator("#kiasa-intro")).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+    await expect(page.locator(".hero-line > span").first()).toHaveCSS("transform", "none");
+    await expect(page.locator(".story")).toHaveCount(8);
+    await expect(page.locator(".story").first()).toBeVisible();
+    await expect(page.locator("#site-content")).not.toHaveAttribute("inert", "");
     await context.close();
   });
 
-  test("a blocked inline script still shows the leaf, and it still flows", async ({ page }) => {
+  test("a blocked inline script means no entrance, and the page still works", async ({ page }) => {
     await rewriteBootstrap(page, () => "");
     await page.goto("/");
     expect(await page.evaluate(() => window.__kiasaIntro)).toBeUndefined();
-    expect((await drawing(page)).complete).toBe(true);
-    await flowing(page);
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 
-  test("Escape ends the entrance at once and the leaf is complete", async ({ page }) => {
+  test("Escape ends the entrance at once and the page takes over", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
     await page.keyboard.press("Escape");
     const result = await ended(page);
     expect(result.reason).toBe("skip");
     expect(result.elapsedMs).toBeLessThan(SETTLED_MS);
-    await expect.poll(async () => (await drawing(page)).complete).toBe(true);
-    await flowing(page);
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
     expect(await page.evaluate(() => window.__qa!.results.length)).toBe(1);
   });
 
-  test("reduced motion shows the finished leaf from first paint and keeps it still", async ({ page }) => {
+  test("the Skip link is keyboard reachable, and focus moves into the page", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
+    for (const key of ["Tab", "Tab", "Shift+Tab"]) {
+      await page.keyboard.press(key);
+      await expect(page.getByRole("link", { name: "Skip intro" })).toBeFocused();
+    }
+    await page.keyboard.press("Enter");
+    expect((await ended(page)).reason).toBe("skip");
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.locator("#main-content")).toBeFocused();
+    await expect(page.locator("#site-content")).not.toHaveAttribute("inert", "");
+  });
+
+  test("reduced motion opens the page at first paint, with no entrance", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     expect((await ended(page)).reason).toBe("reduced-motion");
     await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
-    await page.waitForTimeout(1200);
-    const still = await drawing(page);
-    expect(still).toMatchObject({ complete: true, shown: 1, seed: 0, green: 0, blue: 0, bar: 1 });
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 
-  test("switching to reduced motion stops the entrance, and later the loop; switching back resumes", async ({ page }) => {
+  test("switching to reduced motion during the entrance ends it without a fade", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect((await ended(page)).reason).toBe("reduced-motion");
-    await expect.poll(async () => (await drawing(page)).complete).toBe(true);
-    await page.waitForTimeout(800);
-    expect(await drawing(page)).toMatchObject({ green: 0, blue: 0 });
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await flowing(page);
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await expect.poll(async () => (await drawing(page)).green).toBe(0);
-    expect((await drawing(page)).complete).toBe(true);
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 
-  test("every homepage load draws the leaf again, with or without session storage", async ({ page }) => {
-    await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
+  test("the entrance plays once in a session; a reload opens the page at once, even before hydration", async ({ page }) => {
     await page.goto("/");
     expect((await ended(page)).reason).toBe("complete");
+    await page.route(SCRIPTS, route => route.abort());
+    await page.reload({ waitUntil: "domcontentloaded" });
+    expect((await ended(page)).reason).toBe("returning-visit");
+    await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
+    await expect(page.locator("#kiasa-intro")).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+  });
+
+  test("a skipped entrance is not replayed on reload", async ({ page }) => {
+    await page.goto("/");
+    await page.keyboard.press("Escape");
+    await ended(page);
     await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", /waiting|playing/);
-    expect(await page.evaluate(() => window.__kiasaIntro!.active)).toBe(true);
+    expect((await ended(page)).reason).toBe("returning-visit");
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
+  });
+
+  test("unavailable session storage fails open to the page", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
+    await page.goto("/");
+    expect((await ended(page)).reason).toBe("storage-unavailable");
+    await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeVisible();
   });
 
   test("an entrance overdue in a background tab settles the moment the visitor returns", async ({ page }) => {
@@ -265,47 +294,33 @@ test.describe("landing page", () => {
     await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
   });
 
-  test("dashboard deep links never opt in to the entrance", async ({ page }) => {
-    await page.goto("/dashboard");
-    expect(await page.evaluate(() => window.__kiasaIntro)).toBeUndefined();
-    await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
+  test("other pages never opt in to the entrance", async ({ page }) => {
+    for (const path of ["/what-we-do", "/dashboard"]) {
+      await page.goto(path);
+      expect(await page.evaluate(() => window.__kiasaIntro)).toBeUndefined();
+      await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
+      await expect(page.locator("#kiasa-intro")).toHaveCount(0);
+    }
   });
 });
 
-test.describe("once-per-session policy", () => {
+test.describe("every-visit policy", () => {
   // The same inline script the site ships, with only its policy argument switched.
   test.beforeEach(async ({ page }) => {
+    // The policy is the script's second argument; the same words also appear inside it.
     await rewriteBootstrap(page, script => {
-      expect(script).toContain('"every-visit"');
-      return script.replace('"every-visit"', '"once-per-session"');
+      expect(script).toContain(',"once-per-session",');
+      return script.replace(',"once-per-session",', ',"every-visit",');
     });
   });
 
-  test("a returning session starts with the finished leaf, even before hydration", async ({ page }) => {
-    await page.goto("/");
-    expect((await ended(page)).reason).toBe("complete");
-    await page.route(SCRIPTS, route => route.abort());
-    await page.reload({ waitUntil: "domcontentloaded" });
-    expect((await ended(page)).reason).toBe("returning-visit");
-    await expect(page.locator("html")).not.toHaveAttribute("data-kiasa-intro");
-    expect(await drawing(page)).toMatchObject({ complete: true, shown: 1, seed: 0 });
-  });
-
-  test("a returning session with scripts goes straight to the flowing leaf", async ({ page }) => {
-    await page.goto("/");
-    await page.keyboard.press("Escape");
-    await ended(page);
-    await page.reload();
-    expect((await ended(page)).reason).toBe("returning-visit");
-    expect((await drawing(page)).complete).toBe(true);
-    await flowing(page);
-  });
-
-  test("unavailable session storage fails open to the finished leaf", async ({ page }) => {
+  test("every homepage load draws the leaf again, with or without session storage", async ({ page }) => {
     await page.addInitScript(() => Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Blocked"); } }));
     await page.goto("/");
-    expect((await ended(page)).reason).toBe("storage-unavailable");
-    expect((await drawing(page)).complete).toBe(true);
+    expect((await ended(page)).reason).toBe("complete");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", /waiting|playing/);
+    expect(await page.evaluate(() => window.__kiasaIntro!.active)).toBe(true);
   });
 });
 
@@ -400,6 +415,31 @@ test.describe("StartupBoundary (development fixture)", () => {
     await expect(page.locator("#site-content")).not.toHaveAttribute("inert", "");
   });
 
+  test("while work is pending the mark keeps flowing, and holds still for as long as reduced motion is asked for", async ({ page }) => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/dev/intro/resource", async route => { await gate; await route.fulfill({ json: { ready: true } }); });
+    await page.goto("/?intro-test=loading");
+    await expect(page.locator("html")).toHaveAttribute("data-kiasa-intro", "playing");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect((await ended(page)).reason).toBe("reduced-motion");
+    await expect.poll(async () => (await drawing(page)).complete).toBe(true);
+    await page.waitForTimeout(800);
+    expect(await drawing(page)).toMatchObject({ green: 0, blue: 0, bar: 1 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await flowing(page);
+    // While the leaf keeps flowing, the bar stays full and still.
+    const fill = page.locator(".mark-bar-fill");
+    await expect(fill).toHaveCSS("transform", "none");
+    await page.waitForTimeout(700);
+    await expect(fill).toHaveCSS("transform", "none");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(async () => (await drawing(page)).green).toBe(0);
+    expect((await drawing(page)).complete).toBe(true);
+    release();
+    await expect(page.getByRole("heading", { name: "The request finished" })).toBeVisible();
+  });
+
   test("a ready page is covered only for the entrance; Skip is keyboard reachable and focus moves into the page", async ({ page }) => {
     await page.route("**/dev/intro/resource", route => route.fulfill({ json: { ready: true } }));
     await page.goto("/?intro-test=loading");
@@ -441,7 +481,8 @@ test("production hides the inspector and the request fixture", async ({ page }, 
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("slider")).toHaveCount(0);
   expect((await page.request.get("/dev/intro/resource")).status()).toBe(404);
+  // The fixture's address is the plain homepage there.
   await page.goto("/?intro-test=loading");
-  await expect(page.locator("#kiasa-intro, .dev-site")).toHaveCount(0);
-  await expect(page.locator("svg.mark")).toBeVisible();
+  await expect(page.locator(".dev-site")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: HEADLINE })).toBeAttached();
 });

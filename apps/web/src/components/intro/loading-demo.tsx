@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { StartupBoundary } from "./controller";
 
@@ -25,7 +26,7 @@ export function LoadingDemo() {
       <main id="main-content" className="dev-site" tabIndex={-1}>
         <h1>{status === "error" ? "The request failed" : "The request finished"}</h1>
         <p>This stand-in page was behind the mark while a real request was pending.</p>
-        <a href="/dev/intro">Back to the inspector</a>
+        <Link href="/dev/intro">Back to the inspector</Link>
       </main>
     </StartupBoundary>
     <output hidden data-completions={completions} data-skips={skips} />

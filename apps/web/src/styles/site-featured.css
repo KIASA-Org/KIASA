@@ -1,0 +1,100 @@
+/* ───────── Featured cards ───────── */
+.story-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(20px, 3.47vw, 50px); }
+.story { position: relative; isolation: isolate; aspect-ratio: 277 / 424; overflow: hidden; background: var(--paper); color: var(--paper-ink); }
+.story-text { padding: 24px 24px 0; }
+.story-title { margin-top: 14px; font-size: clamp(17px, 1.42vw, 20.5px); line-height: 1.2; font-weight: 520; letter-spacing: -0.012em; text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.25s; }
+.story:hover .story-title { text-decoration-color: currentColor; }
+
+/* The picture: the lower half of a light card, the whole of a photograph. */
+.story-art { position: absolute; inset: 46% 0 0; z-index: -1; overflow: hidden; background: var(--paper-shade); }
+.story-art > * { transition: transform 1.4s var(--ease); }
+.story:hover .story-art > * { transform: scale(1.045); }
+.plate { display: block; width: 100%; height: 100%; }
+.plate-defs { position: absolute; }
+.story-art img { object-fit: cover; }
+
+.story[data-surface="leaf"] { background: var(--leaf); }
+.story[data-surface="leaf"] .story-art, .story[data-surface="night"] .story-art { background: none; }
+.story[data-surface="night"] { background: #06120e; color: var(--ink); }
+.story[data-surface="night"] .story-art { inset: 30% 0 0; }
+.story[data-surface="photo"] { background: #06100c; color: var(--ink); }
+.story[data-surface="photo"] .story-art { inset: 0; }
+/* Night falls from the top of a photograph, so the title is always on a dark ground. */
+.story[data-surface="photo"] .story-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgb(3 8 7 / 0.9) 0, rgb(3 8 7 / 0.7) 30%, rgb(3 8 7 / 0) 64%); }
+
+/* The drawings' inks. */
+.plate-ink { stroke: var(--paper-ink); stroke-width: 1.3px; }
+.plate-fine { stroke: var(--paper-ink); stroke-width: 1px; stroke-opacity: 0.5; }
+.plate-solid { fill: var(--paper-ink); }
+.plate-ground { fill: var(--paper-shade); }
+.plate-leaf { fill: #a5e37a; }
+.plate-ring { stroke: #8ad85a; stroke-width: 6.5px; }
+.plate-drop circle { fill: #cfeeff; stroke: var(--paper-ink); stroke-width: 1.3px; }
+.plate-drop path { stroke: var(--paper-ink); stroke-width: 1.3px; }
+.plate[data-plate="veins"] .plate-ink { stroke-opacity: 0.22; }
+.plate[data-plate="veins"] .plate-drop circle { fill: none; stroke-opacity: 0.4; }
+.plate[data-plate="veins"] .plate-drop path { stroke-opacity: 0.4; }
+
+/* The whole card is the button; its plus sign waits in the corner. */
+.story-open { position: absolute; inset: 0; z-index: 1; display: grid; place-items: end; padding: 16px; }
+.site .story-open:focus-visible { outline-offset: -5px; }
+.story-plus { display: grid; place-items: center; width: 40px; height: 40px; background: var(--paper-ink); color: var(--paper); opacity: 0; transform: translateY(8px); transition: opacity 0.25s ease, transform 0.45s var(--ease), background-color 0.2s; }
+.story-plus svg { width: 20px; height: 20px; transition: transform 0.45s var(--ease); }
+.story:hover .story-plus, .story-open:focus-visible .story-plus { opacity: 1; transform: none; }
+.story:hover .story-plus svg { transform: rotate(90deg); }
+.story[data-surface="night"] .story-plus, .story[data-surface="photo"] .story-plus { background: var(--ink); color: var(--night); }
+@media (hover: none) { .story-plus { opacity: 1; transform: none; } }
+
+/* The cards arrive after the headline when the loading mark leaves. */
+.story-grid > li { transition: opacity 0.9s ease, transform 1.2s var(--ease); transition-delay: calc(0.3s + var(--place, 0) * 0.055s); }
+.story-grid > li:nth-child(2) { --place: 1; }
+.story-grid > li:nth-child(3) { --place: 2; }
+.story-grid > li:nth-child(4) { --place: 3; }
+.story-grid > li:nth-child(5) { --place: 2; }
+.story-grid > li:nth-child(6) { --place: 3; }
+.story-grid > li:nth-child(7) { --place: 4; }
+.story-grid > li:nth-child(8) { --place: 5; }
+html[data-kiasa-intro] .story-grid > li { opacity: 0; transform: translateY(44px); transition: none; }
+
+/* ───────── An opened card ───────── */
+html:has(.story-dialog[open]) { overflow: hidden; }
+.story-dialog { width: min(1040px, calc(100vw - 2 * var(--gutter))); max-width: none; max-height: calc(100svh - 48px); margin: auto; padding: 0; border: 0; overflow: auto; overscroll-behavior: contain; background: transparent; color: var(--ink);
+  opacity: 0; transform: translateY(18px); transition: opacity 0.25s ease, transform 0.4s var(--ease), overlay 0.4s allow-discrete, display 0.4s allow-discrete; }
+.story-dialog[open] { opacity: 1; transform: none; }
+.story-dialog::backdrop { background: rgb(3 8 7 / 0); transition: background-color 0.35s ease, overlay 0.4s allow-discrete, display 0.4s allow-discrete; }
+.story-dialog[open]::backdrop { background: rgb(3 8 7 / 0.8); }
+@starting-style {
+  .story-dialog[open] { opacity: 0; transform: translateY(28px); }
+  .story-dialog[open]::backdrop { background: rgb(3 8 7 / 0); }
+}
+.story-sheet { position: relative; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); min-height: min(560px, calc(100svh - 48px)); background: var(--night-raised); border: 1px solid var(--line); }
+.story-sheet-art { position: relative; overflow: hidden; background: var(--paper); }
+.story-sheet-art .plate { position: absolute; inset: auto 0 0; height: 62%; background: var(--paper-shade); }
+.story-sheet-art img { object-fit: cover; }
+.story-sheet[data-surface="leaf"] .story-sheet-art { background: var(--leaf); }
+.story-sheet[data-surface="night"] .story-sheet-art { background: #06120e; }
+.story-sheet[data-surface="leaf"] .plate, .story-sheet[data-surface="night"] .plate { background: none; }
+.story-sheet-text { display: flex; flex-direction: column; align-items: flex-start; padding: 64px 64px 52px 52px; }
+.story-sheet-text .eyebrow { color: var(--leaf); }
+.story-sheet-title { margin-top: 18px; font-size: clamp(26px, 2.5vw, 36px); line-height: 1.1; font-weight: 560; letter-spacing: -0.027em; }
+.story-sheet-summary { margin-top: 22px; font-size: 18px; line-height: 1.56; color: var(--ink-soft); }
+.story-sheet-detail { margin-top: 18px; padding-bottom: 40px; font-size: 14px; color: var(--ink-mute); }
+.story-sheet-text .cta { margin-top: auto; }
+.story-sheet-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; color: var(--ink-soft); transition: color 0.2s, transform 0.45s var(--ease); }
+.story-sheet-close:hover { color: var(--ink); transform: rotate(90deg); }
+
+@media (max-width: 1099px) {
+  /* A single row that scrolls sideways and runs off the edge of the screen. */
+  .story-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: min(74vw, 292px); gap: 16px; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); scrollbar-width: none; }
+  .story-grid::-webkit-scrollbar { display: none; }
+  .story-grid > li { scroll-snap-align: start; }
+  .story-title { font-size: 19px; }
+}
+@media (max-width: 799px) {
+  .story-sheet { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .story-sheet-art { height: 232px; }
+  .story-sheet-art .plate { height: 100%; }
+  .story-sheet-text { padding: 32px 24px 32px; }
+  .story-sheet-summary { font-size: 17px; }
+  .story-sheet-close { background: rgb(3 8 7 / 0.55); color: var(--ink); }
+}

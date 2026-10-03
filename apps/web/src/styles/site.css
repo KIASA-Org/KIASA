@@ -1,0 +1,51 @@
+/* The company site. The loading mark's own styles stay in app/globals.css. */
+
+/* ───────── Foundations ───────── */
+.site {
+  --gutter: clamp(20px, 5.556vw, 80px);
+  --header: 72px;
+  --section: clamp(96px, 13vw, 208px);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+.site ::selection { background: var(--leaf); color: var(--night); }
+.site :is(a, button, input, summary):focus-visible { outline: 2px solid var(--leaf); outline-offset: 3px; border-radius: 1px; }
+.site button { cursor: pointer; }
+.site :is(h1, h2, h3) { text-wrap: balance; }
+.site p { text-wrap: pretty; }
+
+.wrap { width: 100%; max-width: 1440px; margin-inline: auto; padding-inline: var(--gutter); }
+
+/* Small capitals above a title. */
+.eyebrow { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.heading { font-size: clamp(36px, 4.05vw, 58px); line-height: 1.04; font-weight: 500; letter-spacing: -0.032em; }
+
+/* The site's one call to action: bold words and a small square with an arrow. */
+.cta { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; line-height: 24px; font-weight: 650; letter-spacing: -0.005em; }
+.cta-chip { display: block; flex: none; width: 22px; height: 22px; overflow: hidden; background: var(--leaf); color: var(--night); transition: background-color 0.3s var(--ease); }
+/* Two arrows in a row: on hover the first leaves to the right as the second arrives from the left. */
+.cta-chip-track { display: flex; width: 200%; height: 100%; transform: translateX(-50%); transition: transform 0.45s var(--ease); }
+.cta-chip-track svg { width: 50%; height: 100%; flex: none; padding: 4px; stroke-width: 2.2; }
+.cta:hover .cta-chip, .cta:focus-visible .cta-chip { background: var(--ink); }
+.cta:hover .cta-chip-track, .cta:focus-visible .cta-chip-track { transform: none; }
+.cta-label { background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 0 1px; transition: background-size 0.45s var(--ease); padding-bottom: 1px; }
+.cta:hover .cta-label, .cta:focus-visible .cta-label { background-size: 100% 1px; }
+
+/* An underlined text link. */
+.textlink { font-weight: 650; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px; transition: color 0.2s, text-decoration-color 0.2s; }
+.textlink:hover { color: var(--leaf); }
+
+/* A small "Explore ›" link. */
+.more { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 20px; font-weight: 650; }
+.more svg { width: 16px; height: 16px; transition: transform 0.35s var(--ease); }
+a:hover > .more svg, .more:hover svg { transform: translateX(4px); }

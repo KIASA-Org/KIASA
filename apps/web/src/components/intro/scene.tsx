@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { LazyMotion, domMin, m, useTransform, type MotionValue } from "motion/react";
+import { INK, RING, glint, inkWidth } from "./drawing";
 import { DEW, ORIGIN, STROKES, VIEW, type DewDrop, type Stroke } from "./geometry";
 import {
   DEW_SPANS, LOOP_PULSES, LOOP_RIPPLES, PHASE, SETTLED, STROKE_SPANS,
@@ -16,15 +17,10 @@ type SceneProps = {
   flow: MotionValue<number>;
 };
 
-/** The drawing is one pale ink. Light green and blue only ever travel across it. */
-const INK = "#ECFFF3";
 /** Light on the leaf, like a glowing filament: an almost white tip, a vivid body, a deeper tail. */
 const LEAF = { tip: "#EEFFD9", body: "#98FF4D", tail: "#5FD42A" } as const;
 /** The same light once it reaches water. */
 const WATER = { tip: "#E4F8FF", body: "#45C8FF" } as const;
-/** Line weight: the artwork's measured weight, lifted so fine veins stay legible at this size. */
-const inkWidth = (stroke: Stroke) => Math.min(6, Math.max(3.4, 2.4 + 1.1 * stroke.width));
-const RING = 3.6;
 /** Travelling light is a comet, not a bar: stacked stretches that all end at the
  * head, each shorter and stronger than the last, so it brightens smoothly from a
  * long faint tail to its tip. [share of the line, colour, opacity, extra width] */
@@ -121,12 +117,6 @@ function Dew({ drop, clock, halo }: { drop: DewDrop; clock: Clock; halo: string 
     <m.path d={glint(drop)} strokeWidth={RING - 0.3} style={{ opacity: highlight }} />
     <Bead x={x} y={y} r={8.5} opacity={bead} halo={halo} />
   </>;
-}
-/** A short arc in the upper left of a drop, where the artwork's drops catch the light. */
-function glint(drop: DewDrop) {
-  const rho = drop.r * 0.58;
-  const at = (degrees: number) => `${(drop.x + rho * Math.cos(degrees * Math.PI / 180)).toFixed(1)} ${(drop.y + rho * Math.sin(degrees * Math.PI / 180)).toFixed(1)}`;
-  return `M${at(196)}A${rho.toFixed(1)} ${rho.toFixed(1)} 0 0 1 ${at(254)}`;
 }
 
 /** Light travelling along a line of the finished drawing. */

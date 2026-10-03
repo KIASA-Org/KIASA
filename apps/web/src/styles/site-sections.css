@@ -1,0 +1,141 @@
+/* Sections arrive as they enter the window, in browsers that can tie an animation
+   to scrolling. Elsewhere, and for reduced motion, they are simply there. */
+@keyframes reveal { from { opacity: 0; transform: translateY(32px); } }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: reveal linear both; animation-timeline: view(); animation-range: entry 2% entry 46%; }
+  }
+}
+
+/* ───────── A leader's words ───────── */
+.voice { margin-top: var(--section); }
+.voice-figure { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: 1fr auto auto 1fr; column-gap: 32px; }
+.voice-media { grid-column: 1 / span 5; grid-row: 1 / -1; position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--night-raised); }
+.voice-media img { object-fit: cover; }
+.voice-quote { grid-column: 7 / span 5; grid-row: 2; font-size: clamp(22px, 1.95vw, 28px); line-height: 1.32; font-weight: 500; letter-spacing: -0.014em; }
+/* The opening quotation mark hangs in the margin, so the words align. */
+.voice-quote p { text-indent: -0.44em; }
+.voice-by { grid-column: 7 / span 5; grid-row: 3; display: grid; gap: 2px; margin-top: 28px; font-size: 15px; line-height: 22px; }
+.voice-name { font-weight: 650; }
+.voice-role { color: var(--ink-mute); }
+
+/* ───────── Client spotlight ───────── */
+.spotlight { margin-top: var(--section); }
+.spotlight-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 32px; margin-top: clamp(36px, 4.4vw, 64px); }
+.film { grid-column: 1 / span 7; }
+.film-frame { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: var(--night-raised); }
+.film-frame img { object-fit: cover; transition: transform 1.6s var(--ease); }
+.film-frame:hover img { transform: scale(1.04); }
+.film-frame::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgb(3 8 7 / 0.8) 0, rgb(3 8 7 / 0) 48%); }
+.film-play { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; width: 88px; height: 88px; margin: auto; border-radius: 50%; background: var(--leaf); color: var(--night); transition: transform 0.5s var(--ease), background-color 0.25s; }
+.film-play svg { width: 34px; height: 34px; margin-left: 4px; }
+.film-frame:hover .film-play, .film-frame:focus-visible .film-play { transform: scale(1.08); background: var(--ink); }
+.film-caption { position: absolute; left: 28px; bottom: 26px; z-index: 1; display: grid; justify-items: start; gap: 6px; }
+.film-episode { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--leaf); }
+.film-name { padding-bottom: 8px; border-bottom: 2px solid var(--leaf); font-size: clamp(17px, 1.7vw, 24px); line-height: 1.2; font-weight: 650; letter-spacing: -0.016em; }
+.film-time { position: absolute; right: 28px; bottom: 28px; z-index: 1; font-size: 13px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.film-title { margin-top: 28px; font-size: 22px; line-height: 1.25; font-weight: 650; letter-spacing: -0.016em; }
+.film-text { max-width: 640px; margin-top: 12px; font-size: 17px; line-height: 1.55; color: var(--ink-soft); }
+.film .textlink { display: inline-block; margin-top: 20px; }
+
+.spotlight-list { grid-column: 10 / span 3; display: grid; align-content: start; gap: 34px; }
+.spotlight-item { display: grid; justify-items: start; gap: 12px; }
+.spotlight-item-title { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.32; font-weight: 650; letter-spacing: -0.012em; text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.25s; }
+.spotlight-item:hover .spotlight-item-title { text-decoration-color: currentColor; }
+
+/* ───────── Recognition ─────────
+   The heading holds the middle of the window while the cards travel up across it. */
+.recog { position: relative; margin-top: var(--section); }
+.recog-title { position: sticky; top: calc(50svh - 1.02em); z-index: 0; width: min(9.2em, calc(100% - 2 * var(--gutter))); margin-inline: auto; font-size: clamp(44px, 8vw, 116px); line-height: 1.02; font-weight: 500; letter-spacing: -0.042em; text-align: center; }
+.recog-cards { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 32px; row-gap: clamp(32px, 3.6vw, 52px); margin-top: 26vh; padding-bottom: 64vh; pointer-events: none; }
+.recog-card { pointer-events: auto; position: relative; isolation: isolate; display: flex; align-items: flex-end; aspect-ratio: 517 / 343; overflow: hidden; }
+/* A card to the left, one to the right and lower, one between them and lower still. */
+.recog-card:nth-child(1) { grid-area: 1 / 1 / auto / span 5; }
+.recog-card:nth-child(2) { grid-area: 2 / 7 / auto / span 5; }
+.recog-card:nth-child(3) { grid-area: 3 / 4 / auto / span 5; }
+.recog-card[data-tone="leaf"] { background: var(--leaf); color: var(--paper-ink); }
+.recog-card[data-tone="dew"] { background: var(--dew); color: #03202f; }
+.recog-card[data-tone="forest"] { background: var(--forest); color: var(--ink); }
+.recog-pattern { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; stroke: currentColor; stroke-opacity: 0.24; }
+.recog-pattern * { vector-effect: non-scaling-stroke; stroke-width: 1px; }
+.recog-text { width: 100%; padding: 26px 30px; }
+.recog-name { font-family: var(--serif); font-size: clamp(22px, 2vw, 29px); line-height: 1.12; font-weight: 400; letter-spacing: -0.012em; }
+/* The detail opens under the title when the card is pointed at or reached by keyboard. */
+.recog-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.6s var(--ease); }
+.recog-more > div { min-height: 0; overflow: hidden; }
+.recog-more p { max-width: 42ch; padding-top: 12px; font-size: 15px; line-height: 1.5; }
+.recog-more .more { margin: 14px 0 2px; }
+.recog-more :is(p, .more) { opacity: 0; transition: opacity 0.3s ease; }
+.recog-card:hover .recog-more, .recog-card:focus-within .recog-more { grid-template-rows: 1fr; }
+.recog-card:hover .recog-more :is(p, .more), .recog-card:focus-within .recog-more :is(p, .more) { opacity: 1; transition-delay: 0.14s; }
+@media (hover: none) {
+  .recog-pattern { stroke-opacity: 0.16; }
+  .recog-more { grid-template-rows: 1fr; }
+  .recog-more :is(p, .more) { opacity: 1; }
+}
+
+/* ───────── Careers ───────── */
+.careers { display: grid; grid-template-columns: 49% minmax(0, 1fr); align-items: start; }
+.careers-media { position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--night-raised); }
+.careers-media img { object-fit: cover; }
+.careers-text { display: flex; flex-direction: column; align-items: flex-start; margin-left: 34.1%; padding: 12px var(--gutter) 0 0; }
+.careers-title { margin-top: 18px; font-size: clamp(28px, 2.85vw, 41px); line-height: 1.12; font-weight: 500; letter-spacing: -0.03em; }
+.careers-body { margin-top: 20px; font-family: var(--serif); font-size: clamp(19px, 1.6vw, 23px); line-height: 1.36; }
+.careers .cta { margin-top: 28px; }
+
+/* ───────── News ───────── */
+.news { margin-top: var(--section); }
+.news-track { display: flex; gap: clamp(40px, 7.8vw, 112px); margin-top: clamp(40px, 5vw, 72px); padding-inline: max(var(--gutter), calc((100% - 1440px) / 2 + var(--gutter))); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: max(var(--gutter), calc((100% - 1440px) / 2 + var(--gutter))); scrollbar-width: none; }
+.news-track::-webkit-scrollbar { display: none; }
+.news-item { flex: 0 0 min(47%, 620px); scroll-snap-align: start; }
+.news-item a { display: block; }
+.news-item time { display: block; font-size: 14px; line-height: 20px; font-weight: 650; }
+.news-headline { display: block; margin-top: 18px; font-size: clamp(26px, 3.05vw, 44px); line-height: 1.14; font-weight: 500; letter-spacing: -0.028em; text-wrap: balance; text-decoration: underline transparent 1px; text-underline-offset: 0.14em; transition: text-decoration-color 0.25s; }
+.news-item a:hover .news-headline { text-decoration-color: currentColor; }
+.news-controls { display: flex; justify-content: space-between; align-items: center; margin-top: clamp(36px, 4vw, 56px); }
+.news-arrows { display: flex; gap: 14px; margin-left: auto; }
+.news-button { display: grid; place-items: center; width: 48px; height: 48px; background: var(--night-control); transition: background-color 0.2s, color 0.2s; }
+.news-button:hover { background: var(--leaf); color: var(--night); }
+.news-button svg { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: reduce) { .news-pause { display: none; } }
+
+/* ───────── Footer ───────── */
+.footer { margin-top: var(--section); padding-bottom: 56px; }
+.footer-brand { display: inline-grid; gap: 4px; }
+.footer-line { padding-left: 3px; font-size: 15px; line-height: 20px; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; }
+.footer-name { display: flex; align-items: center; gap: 10px; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: 0.07em; }
+.footer-mark { display: block; width: 64px; height: 64px; margin-left: -8px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 44px; font-size: 15px; line-height: 22px; }
+.footer-links a { text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.2s; }
+.footer-links a:hover { text-decoration-color: currentColor; }
+.footer-legal { margin-top: 26px; font-size: 13px; line-height: 20px; color: var(--ink-mute); }
+.footer-sample { max-width: 76ch; margin-top: 6px; font-size: 13px; line-height: 20px; color: var(--ink-mute); }
+
+@media (max-width: 899px) {
+  .voice-figure { grid-template-rows: none; row-gap: 0; }
+  .voice-media { grid-column: 1 / -1; grid-row: auto; }
+  .voice-quote { grid-column: 1 / -1; grid-row: auto; margin-top: 32px; padding-left: 0.44em; }
+  .voice-by { grid-column: 1 / -1; grid-row: auto; margin-top: 22px; padding-left: 0.6em; }
+
+  .film { grid-column: 1 / -1; }
+  .film-play { width: 64px; height: 64px; }
+  .film-play svg { width: 26px; height: 26px; }
+  .film-caption { left: 18px; bottom: 16px; }
+  .film-time { right: 18px; bottom: 18px; }
+  .film-title { margin-top: 22px; }
+  .spotlight-list { grid-column: 1 / -1; gap: 0; margin-top: 44px; border-top: 1px solid var(--line); }
+  .spotlight-item { padding: 22px 0; border-bottom: 1px solid var(--line); }
+
+  .recog-title { position: static; width: auto; padding-inline: var(--gutter); font-size: clamp(40px, 11.4vw, 72px); text-align: left; }
+  .recog-cards { row-gap: 16px; margin-top: 36px; padding-bottom: 0; }
+  .recog-card:nth-child(n) { grid-area: auto / 1 / auto / -1; }
+  .recog-card { aspect-ratio: auto; min-height: 240px; }
+  .recog-text { padding: 22px; }
+
+  .careers { grid-template-columns: minmax(0, 1fr); margin-top: var(--section); }
+  .careers-text { margin-left: 0; padding: 32px var(--gutter) 0; }
+
+  .news-item { flex-basis: 82%; }
+  .footer-name { font-size: 38px; }
+  .footer-mark { width: 54px; height: 54px; }
+}

@@ -1,15 +1,22 @@
-# KIASA — startup mark
+# KIASA — company site
 
-The landing page is one thing: the KIASA leaf as a white line drawing on a dark
-ground, with a thin loading bar and a small "Loading..." label (its dots appear
-one by one) beneath it. A small light appears, the leaf is
-drawn line by line while the bar fills, dew rolls along its veins, and then a
-glowing light-green line keeps running around the leaf, turning blue where it
-touches a dew drop. The bar stays full. No wordmark and no colour artwork are
-shown.
+The homepage of KIASA's company site, with the animated KIASA leaf in front of
+it on the first visit.
+
+- **The loading mark.** A small light appears, the leaf is drawn line by line
+  in white while a thin bar fills, dew rolls along its veins, and then the mark
+  fades away. It plays once per browser session.
+- **The homepage.** Planned on the structure of Accenture's homepage: header
+  with panels of links, a hero, eight featured cards, a leader's words, client
+  spotlight, recognition, careers, news, footer. All of its content is **sample
+  content** for the design review, kept in one file.
+- **Every other page** has its address and title and shows a short placeholder
+  until it is designed.
 
 Built with Next.js App Router, React, strict TypeScript, Tailwind CSS v4 and
-Motion. Nothing has been deployed.
+Motion. The plan, the list of pages and the photo credits are in
+[docs/site.md](docs/site.md); the loading mark is described in
+[docs/intro.md](docs/intro.md).
 
 ## Run locally
 
@@ -22,18 +29,22 @@ npm run dev
 
 Open http://localhost:3000. For a local production run: `npm run build`, then `npm start`.
 
-## Inspect
+The loading mark plays once per browser tab. To see it again, open the site in
+a new tab or a private window.
 
-In development, open http://localhost:3000/dev/intro. Scrub the timeline, jump
-to a named frame, or press **Play**. `/dev/intro?t=1.4` opens
-one exact frame. The timeline slider and buttons are a development tool only:
-they are not part of the landing page and return 404 in production.
+## Change the content
 
-**Test pending request** opens `/?intro-test=loading`, a fixture for
-`StartupBoundary`: the mark stands in front of a page while a real request is
-pending. It is also development only.
+| To change | Edit |
+| --- | --- |
+| Any text, link, client, figure or date on the homepage | `src/content/site.ts` |
+| The navigation and what its panels list | `navigation` in `src/content/site.ts` |
+| The photographs | `src/assets/media/` (credits in [docs/site.md](docs/site.md)) |
+| The line drawings on the cards | `src/components/site/plates.tsx` |
+| Colours and typefaces | the variables at the top of `src/app/globals.css`, and the fonts in `src/app/layout.tsx` |
+| The look of a section | `src/styles/site*.css` (one file per part of the page) |
+| The notice that the content is sample content | `SAMPLE_CONTENT` in `src/content/site.ts` |
 
-## Controls
+## Change the loading mark
 
 | To change | Edit |
 | --- | --- |
@@ -41,30 +52,25 @@ pending. It is also development only.
 | Loading bar width, thickness, colour, gap | `.mark-bar`, `.mark-bar-fill` and `.mark-group` in `src/app/globals.css` |
 | "Loading..." label text, size, colour, dot animation | `Bar` in `scene.tsx`; `.mark-label` and `.mark-dots` in `globals.css` |
 | Pace of the drawing | `TEMPO`, `PHASE`, `SPEED` in `src/components/intro/timing.ts` |
-| Speed and route of the running line | `CIRCUIT`, `CIRCUIT_SPEED`, `STEM_SPEED`, `VEIN_SPEED` in `timing.ts` |
-| Colours and line weights | `INK`, `LEAF`, `WATER`, `inkWidth` in `src/components/intro/scene.tsx` |
-| Shape and strength of the travelling light | `COMET`, `SPARK`, `PRESENCE` in `scene.tsx`; its glow is `.mark-flow` and `.mark-water` in `globals.css` |
-| Draw on every visit or once per session | `INTRO_FREQUENCY` in `src/components/intro/config.ts` |
+| Colours and line weights | `LEAF`, `WATER` in `src/components/intro/scene.tsx`; `INK`, `inkWidth` in `drawing.ts` |
+| Once per session, or on every visit | `INTRO_FREQUENCY` in `src/components/intro/config.ts` |
+| How long the mark takes to fade away | `LEAVE_MS` in `config.ts` and the transition on `#kiasa-intro` in `globals.css` |
 | Which lines exist | the tables in `scripts/trace-logo.mjs`, then re-run it |
-
-## The drawing comes from the logo
 
 `public/brand/kiasa-logo.png` is the supplied 1200 × 1200 logo, byte-identical
 to `../../assets/kiasa-logo.png`. The page does not load it. Instead
 `node scripts/trace-logo.mjs` measures it and writes
 `src/components/intro/geometry.ts`: the centreline of every pale vein, border
-and stem, the bud, and each dew drop. Add `--debug artifacts/trace` to get an
-overlay of the traced lines on the artwork. The same script cuts the favicon
-(`src/app/icon.png`).
+and stem, the bud, and each dew drop. The same script cuts the favicon
+(`src/app/icon.png`). The header and footer show the same drawing, still.
 
-## Using it in front of a real page
+## Development tools
 
-- `StartupMark` is the animated drawing as page content. The landing page uses it.
-- `StartupBoundary` puts the same drawing in front of a page: it plays once, and
-  keeps flowing only while `readiness` is genuinely `pending`. It takes
-  `onComplete` and `onSkip` callbacks and shows a Skip control.
-
-See [integration notes](docs/intro.md) for the lifecycle and fallbacks.
+In development, http://localhost:3000/dev/intro is an inspector for the loading
+mark: scrub its timeline, jump to a named frame, or press **Play**. Its
+**Test pending request** button opens `/?intro-test=loading`, where the mark
+stands in front of a page that is waiting for a real request. Neither exists in
+production.
 
 ## Verify
 

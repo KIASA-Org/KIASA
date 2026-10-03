@@ -1,14 +1,15 @@
 // Measures the production build and writes artifacts/performance-report.json:
-// entrance timing, frame pacing during the entrance and the loop (also with the
-// CPU throttled 4x), layout shifts, long tasks, script weight, and whether the
-// still frames agree (no JavaScript vs reduced motion).
+// entrance timing, frame pacing during the entrance and on the homepage after it
+// (also with the CPU throttled 4x), layout shifts, long tasks, script weight, and
+// whether the homepage looks the same with and without JavaScript.
 // Needs a production server: npm run build && npm start -- --port 3001
 import { chromium } from "@playwright/test";
 import sharp from "sharp";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const BASE = process.env.KIASA_URL ?? "http://127.0.0.1:3001";
-const LOOP_MS = 6000;
+/** How long the homepage is watched once the entrance is over. */
+const PAGE_MS = 6000;
 
 /** p95 of a list of frame intervals in milliseconds. */
 const p95 = values => values.slice().sort((a, b) => a - b)[Math.floor(values.length * 0.95)] ?? null;
@@ -20,7 +21,7 @@ for (const [name, viewport, throttle] of [["desktop", { width: 1440, height: 900
   const page = await browser.newPage({ viewport, deviceScaleFactor: viewport.width < 500 ? 3 : 1 });
   if (throttle > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: throttle });
   await page.addInitScript(() => {
-    const metrics = window.metrics = { entrance: [], loop: [], shifts: [], longTasks: [] };
+    const metrics = window.metrics = { entrance: [], page: [], shifts: [], longTasks: [] };
     for (const type of ["layout-shift", "longtask"]) new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
         if (type === "longtask") metrics.longTasks.push({ start: Math.round(entry.startTime), duration: Math.round(entry.duration) });
@@ -32,7 +33,7 @@ for (const [name, viewport, throttle] of [["desktop", { width: 1440, height: 900
       const intro = window.__kiasaIntro;
       // Only frames in which the animation is actually running.
       if (previous && document.documentElement.dataset.kiasaIntro === "playing") metrics.entrance.push(now - previous);
-      else if (previous && intro?.result) metrics.loop.push(now - previous);
+      else if (previous && intro?.result) metrics.page.push(now - previous);
       previous = now;
       requestAnimationFrame(frame);
     });
@@ -42,7 +43,7 @@ for (const [name, viewport, throttle] of [["desktop", { width: 1440, height: 900
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
   await page.goto(`${BASE}/`);
   await page.waitForFunction(() => !!window.__kiasaIntro?.result);
-  await page.waitForTimeout(LOOP_MS);
+  await page.waitForTimeout(PAGE_MS);
   const metrics = await page.evaluate(() => ({
     ...window.metrics,
     result: window.__kiasaIntro.result,
@@ -53,8 +54,8 @@ for (const [name, viewport, throttle] of [["desktop", { width: 1440, height: 900
     result: metrics.result,
     entranceFrames: metrics.entrance.length,
     entranceFrameP95Ms: p95(metrics.entrance),
-    loopFrames: metrics.loop.length,
-    loopFrameP95Ms: p95(metrics.loop),
+    pageFrames: metrics.page.length,
+    pageFrameP95Ms: p95(metrics.page),
     layoutShift: metrics.shifts.reduce((a, b) => a + b, 0),
     longTasks: metrics.longTasks,
     scriptBytes: metrics.resources.filter(entry => entry.name.endsWith(".js")).reduce((total, entry) => total + entry.bytes, 0),
@@ -65,9 +66,9 @@ for (const [name, viewport, throttle] of [["desktop", { width: 1440, height: 900
   await page.close();
 }
 
-// The finished, still drawing must be the same picture however it is reached.
+// The first screen of the homepage, held still, must be the same picture with and without scripts.
 const still = async options => {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", ...options });
   const page = await context.newPage();
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1500);
@@ -76,15 +77,15 @@ const still = async options => {
   return shot;
 };
 const withoutScripts = await still({ javaScriptEnabled: false });
-const reducedMotion = await still({ reducedMotion: "reduce" });
+const withScripts = await still({});
 let changed = 0, largest = 0;
 for (let i = 0; i < withoutScripts.length; i++) {
-  const difference = Math.abs(withoutScripts[i] - reducedMotion[i]);
+  const difference = Math.abs(withoutScripts[i] - withScripts[i]);
   if (difference) changed++;
   largest = Math.max(largest, difference);
 }
 await browser.close();
 
-const report = { stillFrames: { compared: "no JavaScript vs reduced motion", changedChannels: changed, largestDifference: largest, totalChannels: withoutScripts.length }, runs };
+const report = { stillFrames: { compared: "homepage at rest (reduced motion): no JavaScript vs JavaScript", changedChannels: changed, largestDifference: largest, totalChannels: withoutScripts.length }, runs };
 await writeFile("artifacts/performance-report.json", JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
