@@ -25,10 +25,9 @@ wordmark and colour artwork are not shown.
 
 The travelling light is drawn as a comet rather than a flat bar of colour
 (`RAMP` in `scene.tsx`): eight stretches of the same line, all ending at the
-head, each shorter than the last and each faint, coloured from one ramp. That
-gives a long deep-teal tail, a jade body, a pale mint tip and a small spark at
-the very front, with a close glow from CSS, and no visible step where one
-stretch gives way to the next. The border line is strongest, stems a little less, fine
+head, each shorter than the last and each faint, all one jade. That gives a
+long faint tail brightening to the tip, a small spark at the very front, with a
+close glow from CSS, and no visible step where one stretch gives way to the next. The border line is strongest, stems a little less, fine
 veins quieter (`PRESENCE`). Light on stems and veins gathers speed as it leaves
 the heart. It reaches a drop still green and turns blue as it wraps it.
 

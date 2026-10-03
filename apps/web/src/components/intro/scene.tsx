@@ -17,16 +17,16 @@ type SceneProps = {
   flow: MotionValue<number>;
 };
 
-/** Light on the leaf, like a glow moving under water: a pale mint tip, a jade body, a deep teal tail. */
-const LEAF = { tip: "#DCFFF0", body: "#7BE0B0", tail: "#2E8F7A" } as const;
+/** Light on the leaf, like a glow moving under water: one jade, from a faint tail to a bright tip. */
+const LEAF = { tip: "#7BE0B0", body: "#7BE0B0", tail: "#7BE0B0" } as const;
 /** The same light once it reaches water. */
 const WATER = { tip: "#E4F8FF", body: "#45C8FF" } as const;
 /** Travelling light is a comet, not a bar: stacked stretches that all end at the
  * head, each shorter than the last, so it brightens smoothly from a long faint
- * tail to its tip. The colour of each stretch is taken from one ramp, tail to
- * tip, and the stretches are many and each faint, so where one ends and the next
- * begins no step of colour or brightness can be seen. [share of the line, where
- * on the ramp (0 tail, 1 tip), opacity, extra width] */
+ * tail to its tip. All of it is one colour; only its strength changes, and the
+ * stretches are many and each faint, so where one ends and the next begins no
+ * step of brightness can be seen. [share of the line, where on the ramp (0 tail,
+ * 1 tip), opacity, extra width] */
 const RAMP: readonly (readonly [length: number, at: number, opacity: number, extra: number])[] = [
   [0.56, 0, 0.18, 3.2],
   [0.46, 0.15, 0.18, 3.1],
