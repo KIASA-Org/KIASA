@@ -107,27 +107,38 @@ test.describe("homepage", () => {
     await expect.poll(position).toBeGreaterThan(100);
   });
 
-  test("the hero's swaying leaf and its lights can be paused", async ({ page }) => {
+  test("the hero's moving lights can be paused", async ({ page }) => {
     await open(page);
     const light = page.locator(".hero-lights path").first();
-    const sway = page.locator(".hero-sway");
     await expect(light).toHaveCSS("animation-play-state", "running");
-    await expect(sway).toHaveCSS("animation-play-state", "running");
     const toggle = page.getByRole("button", { name: "Pause background motion" });
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
     await expect(light).toHaveCSS("animation-play-state", "paused");
-    await expect(sway).toHaveCSS("animation-play-state", "paused");
     await toggle.click();
     await expect(light).toHaveCSS("animation-play-state", "running");
-    await expect(sway).toHaveCSS("animation-play-state", "running");
+  });
+
+  test("the veins ripple gently, and hold still while paused", async ({ page }) => {
+    await open(page);
+    const vein = page.locator(".hero-veins path").nth(13);
+    const still = await vein.getAttribute("d");
+    await expect.poll(() => vein.getAttribute("d")).not.toBe(still);
+    await page.getByRole("button", { name: "Pause background motion" }).click();
+    await page.waitForTimeout(100);
+    const held = await vein.getAttribute("d");
+    await page.waitForTimeout(400);
+    expect(await vein.getAttribute("d")).toBe(held);
   });
 
   test("with reduced motion nothing moves by itself, and the controls for it are gone", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page);
-    for (const lights of await page.locator(".hero-lights").all()) await expect(lights).toBeHidden();
-    await expect(page.locator(".hero-sway")).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".hero-lights")).toBeHidden();
+    const vein = page.locator(".hero-veins path").nth(13);
+    const still = await vein.getAttribute("d");
+    await page.waitForTimeout(400);
+    expect(await vein.getAttribute("d")).toBe(still);
     await expect(page.getByRole("button", { name: "Pause background motion" })).toBeHidden();
     await expect(page.getByRole("button", { name: "Pause the news" })).toBeHidden();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
