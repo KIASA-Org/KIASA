@@ -5,8 +5,10 @@ import type { DewDrop, Stroke } from "./geometry";
 
 /** The drawing is one pale ink. Light green and blue only ever travel across it. */
 export const INK = "#ECFFF3";
-/** Line weight: the artwork's measured weight, lifted so fine veins stay legible at this size. */
-export const inkWidth = (stroke: Stroke) => Math.min(6, Math.max(3.4, 2.4 + 1.1 * stroke.width));
+/** Line weight: the artwork's measured weight, lifted so fine veins stay legible
+ * at this size. The borders of the leaves are lifted a little further, so each
+ * leaf's outline reads at a glance without the drawing turning heavy. */
+export const inkWidth = (stroke: Stroke) => Math.min(6.6, Math.max(3.8, 2.8 + 1.1 * stroke.width)) + (stroke.role === "margin" ? 0.6 : 0);
 /** The outline of a dew drop. */
 export const RING = 3.6;
 

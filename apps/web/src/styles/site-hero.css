@@ -30,9 +30,10 @@
 
 /* With pathLength="1" a length of 1px is the whole vein. */
 .hero-lights path { stroke-dasharray: calc(var(--share) * 1px) 3px; stroke-dashoffset: calc(var(--share) * 1px); animation: hero-run var(--run) linear var(--from) infinite; }
-.hero-lights [data-part="tail"] { stroke: #5fd42a; stroke-opacity: 0.3; stroke-width: 2.4px; }
-.hero-lights [data-part="body"] { stroke: var(--leaf-bright); stroke-opacity: 0.8; stroke-width: 2px; }
-.hero-lights [data-part="tip"] { stroke: #eeffd9; stroke-width: 2.6px; }
+/* The loading mark's light: deep teal tail, jade body, pale mint tip. */
+.hero-lights [data-part="tail"] { stroke: #2e8f7a; stroke-opacity: 0.35; stroke-width: 2.4px; }
+.hero-lights [data-part="body"] { stroke: #7be0b0; stroke-opacity: 0.75; stroke-width: 2px; }
+.hero-lights [data-part="tip"] { stroke: #dcfff0; stroke-opacity: 0.85; stroke-width: 2.4px; }
 /* The head runs from the start of the vein to a quarter past its end, so the tail leaves as well. */
 @keyframes hero-run { to { stroke-dashoffset: calc((var(--share) - 1.25) * 1px); } }
 
