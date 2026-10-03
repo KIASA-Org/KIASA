@@ -100,7 +100,7 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 
 | File | What it is |
 | --- | --- |
-| `src/app/page.tsx` | The homepage, wrapped in `StartupBoundary` so the loading mark stands in front of it on the first visit of a session. |
+| `src/app/page.tsx` | The homepage, wrapped in `StartupBoundary` so the loading mark stands in front of it on every load. |
 | `src/app/[...slug]/page.tsx`, `src/app/not-found.tsx` | The placeholder pages and the 404 page. |
 | `src/content/site.ts`, `src/content/pages.ts` | The sample content, and the list of pages built from it (also what Search looks through). |
 | `src/components/site/shell.tsx` | Header, content, footer: what every page shares. |

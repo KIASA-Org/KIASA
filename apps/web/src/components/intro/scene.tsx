@@ -17,22 +17,29 @@ type SceneProps = {
   flow: MotionValue<number>;
 };
 
-/** Light on the leaf, like a glowing filament: an almost white tip, a vivid body, a deeper tail. */
-const LEAF = { tip: "#EEFFD9", body: "#98FF4D", tail: "#5FD42A" } as const;
+/** Light on the leaf, like a glow moving under water: a pale mint tip, a jade body, a deep teal tail. */
+const LEAF = { tip: "#DCFFF0", body: "#7BE0B0", tail: "#2E8F7A" } as const;
 /** The same light once it reaches water. */
 const WATER = { tip: "#E4F8FF", body: "#45C8FF" } as const;
 /** Travelling light is a comet, not a bar: stacked stretches that all end at the
- * head, each shorter and stronger than the last, so it brightens smoothly from a
- * long faint tail to its tip. [share of the line, colour, opacity, extra width] */
-const COMET: readonly (readonly [length: number, colour: string, opacity: number, extra: number])[] = [
-  [0.56, LEAF.tail, 0.24, 3.2],
-  [0.38, LEAF.body, 0.5, 3],
-  [0.22, LEAF.body, 0.95, 2.6],
-  [0.045, LEAF.tip, 0.9, 0.6],
+ * head, each shorter than the last, so it brightens smoothly from a long faint
+ * tail to its tip. The colour of each stretch is taken from one ramp, tail to
+ * tip, and the stretches are many and each faint, so where one ends and the next
+ * begins no step of colour or brightness can be seen. [share of the line, where
+ * on the ramp (0 tail, 1 tip), opacity, extra width] */
+const RAMP: readonly (readonly [length: number, at: number, opacity: number, extra: number])[] = [
+  [0.56, 0, 0.18, 3.2],
+  [0.46, 0.15, 0.18, 3.1],
+  [0.37, 0.3, 0.2, 3],
+  [0.29, 0.45, 0.22, 2.9],
+  [0.22, 0.6, 0.26, 2.7],
+  [0.15, 0.75, 0.3, 2.4],
+  [0.09, 0.88, 0.36, 1.8],
+  [0.045, 1, 0.55, 0.8],
 ];
-/** A spark at the very tip: a dash so short that, with round caps, it is a dot wider than the line. */
-const SPARK = { length: 0.004, extra: 4.4 } as const;
-const TAIL = COMET[0][0];
+/** A spark at the very tip: a dash so short that, with round caps, it is a dot a little wider than the line. */
+const SPARK = { length: 0.004, extra: 3.2, opacity: 0.7 } as const;
+const TAIL = RAMP[0][0];
 /** How strongly each kind of line carries light, so the three read as one hierarchy. */
 const PRESENCE: Record<Stroke["role"], number> = { margin: 1, midrib: 0.88, vein: 0.66 };
 /** Where a hidden light is parked, so its attributes stop changing while it is out. */
@@ -46,6 +53,9 @@ function blend(from: string, to: string, amount: number) {
   const a = channels(from), b = channels(to);
   return `rgb(${a.map((value, i) => Math.round(value + (b[i] - value) * amount)).join(", ")})`;
 }
+/** The comet's colour at `at` along its ramp: tail to body over the first two thirds, body to tip over the last. */
+const ramp = (at: number) => (at < 0.66 ? blend(LEAF.tail, LEAF.body, at / 0.66) : blend(LEAF.body, LEAF.tip, (at - 0.66) / 0.34));
+const COMET = RAMP.map(([length, at, opacity, extra]) => [length, ramp(at), opacity, extra] as const);
 
 /** Position at fraction `f` along evenly spaced x,y samples. */
 function pointAt(points: readonly number[], f: number): [number, number] {
@@ -144,7 +154,7 @@ function LineLight({ stroke, clock, flow }: { stroke: Stroke } & SceneProps) {
   return <m.g style={{ opacity }}>
     {COMET.map(([length, colour, strength, extra]) =>
       <Stretch key={length} d={stroke.d} head={head} length={length} reverse={pulse.reverse} stroke={colour} strokeOpacity={strength} strokeWidth={width + extra * presence} />)}
-    <Stretch d={stroke.d} head={head} length={SPARK.length} reverse={pulse.reverse} stroke={LEAF.tip} strokeWidth={width + SPARK.extra * presence} />
+    <Stretch d={stroke.d} head={head} length={SPARK.length} reverse={pulse.reverse} stroke={LEAF.tip} strokeOpacity={SPARK.opacity} strokeWidth={width + SPARK.extra * presence} />
   </m.g>;
 }
 

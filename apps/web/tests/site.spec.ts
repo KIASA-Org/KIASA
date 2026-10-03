@@ -1,15 +1,18 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SESSION_KEY } from "../src/components/intro/config";
 import { plannedPages, searchPages } from "../src/content/pages";
 import { careers, footer, hero, navigation, news, popularSearches, recognition, regions, spotlight, stories } from "../src/content/site";
 
 const HEADLINE = hero.headline.join(" ");
 
-/** Opens a page as a returning visitor, so the entrance does not stand in front
- * of it, and waits until its controls have been hydrated and will answer. */
+/** Opens a page, skips the entrance that stands in front of the homepage on
+ * every load (as a visitor may, with Escape), and waits until the page's
+ * controls have been hydrated and will answer. */
 async function open(page: Page, path = "/") {
-  await page.addInitScript(key => { try { sessionStorage.setItem(key, "seen"); } catch { /* storage blocked */ } }, SESSION_KEY);
   const response = await page.goto(path);
+  if (await page.evaluate(() => !!window.__kiasaIntro?.active && !window.__kiasaIntro.result)) {
+    await page.keyboard.press("Escape");
+    await page.locator("#kiasa-intro").waitFor({ state: "detached" });
+  }
   // React marks the elements it has taken over; before that a click does nothing.
   await page.waitForFunction(() => {
     const header = document.querySelector(".masthead");

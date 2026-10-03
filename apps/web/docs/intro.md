@@ -5,7 +5,8 @@ All source and asset paths below are relative to `apps/web`.
 The homepage opens with the KIASA leaf as a white line drawing, about 240 px
 wide, on a near-black ground, with a thin loading bar and a small "Loading..."
 label beneath it. The leaf is drawn once; then the mark fades away and the
-company page is there. It plays on the first visit of a browser session only.
+company page is there. It plays on every load of the homepage, so a refresh
+starts again from the first light.
 
 ## What plays
 
@@ -23,10 +24,11 @@ The white drawing never changes; colour only ever travels across it. The logo's
 wordmark and colour artwork are not shown.
 
 The travelling light is drawn as a comet rather than a flat bar of colour
-(`COMET` in `scene.tsx`): several stretches of the same line, all ending at the
-head, each shorter and stronger than the last. That gives a long faint tail, a
-vivid green body, an almost white tip and a small spark at the very front, with
-a close glow from CSS. The border line is strongest, stems a little less, fine
+(`RAMP` in `scene.tsx`): eight stretches of the same line, all ending at the
+head, each shorter than the last and each faint, coloured from one ramp. That
+gives a long deep-teal tail, a jade body, a pale mint tip and a small spark at
+the very front, with a close glow from CSS, and no visible step where one
+stretch gives way to the next. The border line is strongest, stems a little less, fine
 veins quieter (`PRESENCE`). Light on stems and veins gathers speed as it leaves
 the heart. It reaches a drop still green and turns blue as it wraps it.
 
