@@ -122,6 +122,25 @@ test.describe("homepage", () => {
     await expect(light).toHaveCSS("animation-play-state", "running");
   });
 
+  test("the leaf is shaded like a curved blade: a bright ridge, greener outer lines, a shaded flank", async ({ page }) => {
+    await open(page);
+    const look = (index: number) => page.locator(".hero-veins path").nth(index).evaluate(node => {
+      const style = getComputedStyle(node);
+      const [r, g, b] = style.stroke.match(/\d+/g)!.map(Number);
+      return { alpha: Number(style.strokeOpacity), r, g, b };
+    });
+    const [litEdge, midrib, shadedEdge] = await Promise.all([look(0), look(13), look(26)]);
+    // Light: the ridge catches the most, the lit edge less, the edge turned away the least.
+    expect(midrib.alpha).toBeGreaterThan(litEdge.alpha);
+    expect(litEdge.alpha).toBeGreaterThan(shadedEdge.alpha);
+    // Colour: pale ink along the ridge, leaf green at the edges, deepest green in the shade.
+    expect(midrib.r).toBeGreaterThan(litEdge.r + 40);
+    expect(litEdge.g).toBeGreaterThan(litEdge.r);
+    expect(shadedEdge.g).toBeLessThan(litEdge.g);
+    // The blade has a body under its veins.
+    await expect(page.locator(".hero-blade")).toHaveAttribute("fill", "url(#hero-blade-light)");
+  });
+
   test("the veins ripple gently, and hold still while paused", async ({ page }) => {
     await open(page);
     const vein = page.locator(".hero-veins path").nth(13);
