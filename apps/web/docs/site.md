@@ -15,7 +15,7 @@ drawing are KIASA's own.
 | Accenture's homepage | KIASA's homepage | Notes |
 | --- | --- | --- |
 | Header: logo, four items (three open a panel of links), search, country | Header: leaf and name, **What we do**, **What we think**, **Who we are**, **Careers**, search, region | Same layout and the same panel structure: a title, then groups of links. On phones the navigation becomes one menu. |
-| Hero: a two-line headline in capitals with the second line set in; a short statement and one link beside it; a moving dark background with a pause button | **Where change takes root**; "Grown, not bolted on"; **See what we do**; the veins of a leaf with small green lights travelling along them | The full stop of the headline is a drop of dew. The lights turn the drops on their veins blue as they pass, as in the loading mark. |
+| Hero: a two-line headline in capitals with the second line set in; a short statement and one link beside it; a moving dark background with a pause button | **Where change takes root**; "Grown, not bolted on"; **See what we do**; the whole KIASA leaf, large and faint, swaying gently as if in a light wind, with the loading mark's green light running around it | The full stop of the headline is a drop of dew. The light turns the drops blue as it passes, as in the loading mark. The sway is CSS: the plant turns a little about its heart and each leaf answers on its own time. |
 | Eight cards in two rows: announcement, perspectives, research reports | Eight cards: one announcement, two perspectives, four research reports, one case study | A card opens a panel with its summary and a link, as Accenture's cards expand. |
 | A quotation from the chief executive beside a portrait | A quotation from the managing partner beside a photograph | A photograph of a leaf stands in until there is a portrait. |
 | Client spotlight: a film, and four client stories with "Explore" | Client spotlight: the film series "Grown with KIASA", and four client stories | |
@@ -105,7 +105,7 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 | `src/content/site.ts`, `src/content/pages.ts` | The sample content, and the list of pages built from it (also what Search looks through). |
 | `src/components/site/shell.tsx` | Header, content, footer: what every page shares. |
 | `src/components/site/header.tsx` | The header and its panels: navigation, search, region, and the menu on phones. |
-| `src/components/site/hero.tsx`, `hero-field.tsx`, `motion-toggle.tsx` | The hero, its background of veins and lights (plain SVG moved by CSS), and the pause button. |
+| `src/components/site/hero.tsx`, `hero-field.tsx`, `motion-toggle.tsx` | The hero, the swaying leaf and running light behind it (the mark's own drawing and timing, as plain SVG moved by CSS), and the pause button. |
 | `src/components/site/featured.tsx`, `story-grid.tsx`, `plates.tsx` | The eight cards, the dialog a card opens, and the line drawings. |
 | `src/components/site/voice.tsx`, `spotlight.tsx`, `recognition.tsx`, `careers.tsx`, `news.tsx`, `news-rail.tsx`, `footer.tsx` | The remaining sections. |
 | `src/components/site/brand.tsx`, `icons.tsx`, `cta.tsx` | The leaf and the lockup, the icons, the arrow link. |
