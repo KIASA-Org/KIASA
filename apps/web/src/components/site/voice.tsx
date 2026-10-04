@@ -12,7 +12,7 @@ export function Voice() {
       <blockquote className="voice-quote reveal"><p>“{voice.quote}”</p></blockquote>
       <figcaption className="voice-by reveal">
         <span className="voice-name">{voice.name}</span>
-        <span className="voice-role">{voice.role}</span>
+        {voice.role && <span className="voice-role">{voice.role}</span>}
       </figcaption>
     </figure>
   </section>;

@@ -268,10 +268,11 @@ export const stories: Story[] = [
 
 export const voice = {
   quote: "A system is finished when the people who run it no longer need us. We plan for that day from the first week.",
-  name: "Elena Marsh",
-  role: "Managing Partner, KIASA",
+  name: "Chris Lim",
+  /** Shown under the name when set. */
+  role: undefined as string | undefined,
   /** Describes the portrait beside the quotation; replace both together. */
-  imageAlt: "A black-and-white portrait of KIASA's managing partner.",
+  imageAlt: "A black-and-white portrait of Chris Lim.",
 };
 
 export const spotlight = {
