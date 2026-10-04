@@ -25,12 +25,18 @@ const WATCHED = new Set<IntroReason>(["complete", "skip", "expired", "initializa
 // The pre-paint bootstrap is the source of truth for whether the entrance is in front of the page.
 const subscribe = (notify: () => void) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const onEnd = () => {
-    notify();
-    // CSS fades the stage out; once that is over it can leave the page.
-    timer = setTimeout(notify, LEAVE_MS);
+  // CSS fades the stage out; once that is over it can leave the page.
+  const afterFade = () => {
+    clearTimeout(timer);
+    const boot = window.__kiasaIntro;
+    const left = boot?.result ? boot.startedAt + boot.result.elapsedMs + LEAVE_MS - performance.now() : LEAVE_MS;
+    timer = setTimeout(notify, Math.max(0, left) + 16);
   };
+  const onEnd = () => { notify(); afterFade(); };
   window.addEventListener(INTRO_EVENT, onEnd);
+  // A skip can land before the page is hydrated and listening: the entrance has
+  // already ended, so let the stage finish its fade and leave all the same.
+  if (window.__kiasaIntro?.result) afterFade();
   return () => {
     window.removeEventListener(INTRO_EVENT, onEnd);
     clearTimeout(timer);

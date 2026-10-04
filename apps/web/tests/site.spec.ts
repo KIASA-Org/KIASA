@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
-import { designedPages, plannedPages, searchPages } from "../src/content/pages";
-import { canopy } from "../src/content/canopy";
+import type { HeroBlock, JobsBlock } from "../src/content/blocks";
+import { findDoc, pageDocs } from "../src/content/docs";
+import { plannedPages, searchPages } from "../src/content/pages";
 import { careers, footer, hero, navigation, news, popularSearches, recognition, regions, spotlight, stories } from "../src/content/site";
 
 const HEADLINE = hero.headline.join(" ");
@@ -72,25 +73,21 @@ test.describe("homepage", () => {
     expect(errors).toEqual([]);
   });
 
-  test("a card opens its summary in a dialog; Escape closes it and focus returns to the card", async ({ page }) => {
+  test("a card shows its summary when pointed at, and opens its page when clicked", async ({ page, isMobile }) => {
     await open(page);
     const story = stories[1];
-    const card = page.getByRole("button", { name: `Expand: ${story.title}` });
+    const card = page.locator(".story").filter({ hasText: story.title }).first();
+    await expect(card).toHaveAttribute("href", story.href);
+    const summary = card.locator(".story-summary");
+    if (!isMobile) {
+      await expect(summary).toHaveCSS("opacity", "0");
+      await card.hover();
+      await expect(summary).toHaveCSS("opacity", "1");
+      await expect(card.locator(".story-expand")).toHaveCSS("opacity", "1");
+    }
     await card.click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: story.title })).toBeVisible();
-    await expect(dialog).toContainText(story.summary);
-    await expect(dialog.getByRole("link", { name: story.cta })).toHaveAttribute("href", story.href);
-    // The page behind does not scroll while the dialog is open.
-    await expect(page.locator("html")).toHaveCSS("overflow-y", "hidden");
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(card).toBeFocused();
-    // The Close button works as well.
-    await card.click();
-    await dialog.getByRole("button", { name: "Close" }).click();
-    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(new RegExp(`${story.href}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(findDoc(story.href)!.blocks.find((block): block is HeroBlock => block.type === "hero")!.title);
   });
 
   test("the news row can be paused and stepped with its arrows", async ({ page }) => {
@@ -276,20 +273,26 @@ test.describe("header", () => {
   });
 });
 
+const canopy = findDoc("/canopy")!;
+const canopyHero = canopy.blocks[0] as HeroBlock;
+
 test.describe("KIASA Canopy", () => {
-  test("the practice page: its own header, the promise over the photograph, and a way to talk", async ({ page }) => {
+  test("the practice page: its own header, the promise over the photograph, every section, and a way to talk", async ({ page }) => {
     const errors = collectErrors(page);
     const response = await page.goto(canopy.href);
     expect(response?.status()).toBe(200);
-    await expect(page).toHaveTitle(canopy.name);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopy.hero.headline.join(""));
-    const nav = page.getByRole("navigation", { name: "KIASA Canopy" });
-    for (const link of canopy.navigation) await expect(nav.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
+    await expect(page).toHaveTitle(canopy.title);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopyHero.title);
+    const nav = page.getByRole("navigation", { name: canopy.practice!.name });
+    for (const link of canopy.practice!.nav) await expect(nav.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
     await expect(page.getByRole("banner").getByRole("link", { name: "KIASA home" })).toHaveAttribute("href", "/");
-    const photo = page.getByRole("img", { name: canopy.hero.imageAlt });
+    const photo = page.locator(".b-hero img").first();
+    expect(await photo.getAttribute("alt")).toMatch(/bridge/i);
     await expect(photo).toBeVisible();
     expect(await photo.evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
-    await expect(page.getByRole("link", { name: canopy.hero.cta.label })).toHaveAttribute("href", canopy.hero.cta.href);
+    await expect(page.locator(".b-hero").getByRole("link", { name: canopyHero.cta!.label })).toHaveAttribute("href", canopyHero.cta!.href);
+    // Every section of the model's practice page is there.
+    await expect(page.locator("main .block")).toHaveCount(canopy.blocks.length - 1);
     // No loading mark here: only the homepage opens with it.
     expect(await page.evaluate(() => window.__kiasaIntro)).toBeUndefined();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -298,18 +301,17 @@ test.describe("KIASA Canopy", () => {
 
   test("the announcement card on the homepage opens it", async ({ page }) => {
     await open(page);
-    await page.locator(".story-open").first().click();
-    await page.getByRole("dialog").getByRole("link", { name: "Discover KIASA Canopy" }).click();
+    await page.locator(".story").first().click();
     await expect(page).toHaveURL(new RegExp(`${canopy.href}$`));
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopy.hero.headline.join(""));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopyHero.title);
   });
 });
 
-test.describe("pages still to be designed", () => {
+test.describe("every page", () => {
   test("every link on the homepage has a page behind it", async ({ page, request }, info) => {
     await open(page);
     const hrefs = await page.locator("a[href^='/']").evaluateAll(links => [...new Set(links.map(link => link.getAttribute("href")!))]);
-    const planned = new Set(["/", ...designedPages.map(page => page.href), ...plannedPages.map(planned => planned.href)]);
+    const planned = new Set(["/", ...plannedPages.map(planned => planned.href)]);
     expect(hrefs.length).toBeGreaterThan(60);
     expect(hrefs.filter(href => !planned.has(href))).toEqual([]);
     // The built site answers for every one of them. The development server renders
@@ -319,23 +321,75 @@ test.describe("pages still to be designed", () => {
     expect(answers.filter(answer => answer.status !== 200)).toEqual([]);
   });
 
-  test("a section's page lists what is in it, and a page inside it names where it belongs", async ({ page }) => {
+  test("every page the site links to is designed: content of its own, nothing still to come", () => {
+    const designed = new Set(pageDocs.map(doc => doc.href));
+    expect(plannedPages.filter(page => !designed.has(page.href)).map(page => page.href)).toEqual([]);
+    for (const doc of pageDocs) {
+      expect(doc.blocks[0].type, doc.href).toBe("hero");
+      expect(doc.blocks.length, doc.href).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  test("a section's page lists what is in it, and a page inside it is a full page", async ({ page }) => {
     const section = navigation[0];
     await open(page, section.href);
-    await expect(page.getByRole("heading", { level: 1, name: section.label })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "This page is still growing" })).toBeVisible();
+    await expect(page.locator(".planned")).toHaveCount(0);
     for (const group of section.groups!) {
       await expect(page.getByRole("navigation", { name: group.label }).getByRole("link")).toHaveCount(group.links.length);
     }
     const target = section.groups![0].links[3];
-    await page.getByRole("navigation", { name: section.groups![0].label }).getByRole("link", { name: target.label }).click();
+    await page.getByRole("navigation", { name: section.groups![0].label }).getByRole("link", { name: new RegExp(`^${target.label}`) }).click();
     await expect(page).toHaveURL(new RegExp(`${target.href}$`));
-    await expect(page.getByRole("heading", { level: 1, name: target.label })).toBeVisible();
-    await expect(page.locator(".planned-kind")).toHaveText(section.groups![0].label);
-    await expect(page).toHaveTitle(`${target.label} | KIASA`);
-    await page.getByRole("link", { name: "Back to the homepage" }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(HEADLINE);
+    const doc = findDoc(target.href)!;
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText((doc.blocks[0] as HeroBlock).title);
+    await expect(page).toHaveTitle(`${doc.title} | KIASA`);
+    expect(await page.locator("main .block").count()).toBeGreaterThanOrEqual(6);
+  });
+
+  test("the sitemap lists every page", async ({ page }) => {
+    await open(page, "/sitemap");
+    const hrefs = new Set(await page.locator("main a[href^='/']").evaluateAll(links => links.map(link => link.getAttribute("href"))));
+    expect(plannedPages.filter(planned => !hrefs.has(planned.href)).map(planned => planned.href)).toEqual([]);
+  });
+
+  test("open roles narrow by words, area and studio, and a role opens in place", async ({ page }) => {
+    await open(page, "/careers/search-for-jobs");
+    const block = findDoc("/careers/search-for-jobs")!.blocks.find((entry): entry is JobsBlock => entry.type === "jobs")!;
+    const rows = page.locator(".b-job");
+    await expect(rows).toHaveCount(block.jobs.length);
+    const area = block.jobs[0].area;
+    await page.locator(".b-select select").first().selectOption(area);
+    await expect(rows).toHaveCount(block.jobs.filter(job => job.area === area).length);
+    await page.getByRole("searchbox", { name: "Search roles" }).fill("zzzz-no-such-role");
+    await expect(rows).toHaveCount(0);
+    await expect(page.getByText("No roles match yet")).toBeVisible();
+    await page.getByRole("searchbox", { name: "Search roles" }).fill("");
+    await rows.first().locator("summary").click();
+    await expect(rows.first().getByRole("link", { name: "Apply" })).toBeVisible();
+  });
+
+  test("the contact form asks for what it needs, and says plainly that nothing is sent yet", async ({ page }) => {
+    await open(page, "/contact");
+    const form = page.locator("form.b-form");
+    await form.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Thank you" })).toHaveCount(0);
+    await form.getByLabel("First name").fill("Ada");
+    await form.getByLabel("Last name").fill("Byron");
+    await form.getByLabel("Work email").fill("ada@example.com");
+    await form.getByLabel("Tell us what you are working on").fill("A platform to run.");
+    await form.getByRole("checkbox").check();
+    await form.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Thank you" })).toContainText("nothing was sent");
+  });
+
+  test("an accordion row opens and closes", async ({ page }) => {
+    await open(page, "/what-we-do/capabilities/cybersecurity");
+    const folds = page.locator("details.b-fold");
+    if (await folds.count() === 0) test.skip(true, "This page has no accordion");
+    const second = folds.nth(1);
+    await expect(second).not.toHaveAttribute("open", "");
+    await second.locator("summary").click();
+    await expect(second).toHaveAttribute("open", "");
   });
 
   test("an address that is not in the plan is a 404 with a way home", async ({ page }) => {

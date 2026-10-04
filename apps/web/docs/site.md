@@ -2,9 +2,9 @@
 
 All paths below are relative to `apps/web`.
 
-This is the first design of the company site: the homepage, complete, with
-sample content. Every other page has its address, title and place in the
-navigation, and shows a short "still growing" page until it is designed.
+This is the first full design of the company site: the homepage and every
+page it links to, 76 in all, each modelled on the matching page of the model
+site and filled with sample content.
 
 ## The model
 
@@ -46,23 +46,35 @@ drawing are KIASA's own.
 
 ## The pages
 
-Two pages are designed: the homepage, and **KIASA Canopy** at `/canopy`
-(`src/app/canopy/page.tsx`, `src/components/site/canopy.tsx`, copy in
-`src/content/canopy.ts`). Canopy follows the model's practice pages, such as
-Accenture Construct: the practice's own header (the leaf, a rule, "KIASA
-Canopy", then Home, Who we are, Contact us), a photograph across the whole
-width with the promise over its sky, and what the practice does set low on the
-right with "Talk to us". The homepage's announcement card opens it. The rest of
-the model's practice page (the problem, data, what we do differently, work in
-action, the lifecycle, industries, a closing call) is still to come.
+Every page the site links to is designed, 75 of them plus the homepage, each
+in the form of the model's page of the same kind and filled with sample
+content.
 
-The others are listed in
-`src/content/pages.ts`, which collects every address the site links to
-(74 of them): the navigation's pages, the stories, the news items and the
-footer's pages. `src/app/[...slug]/page.tsx` renders each of them as a
-placeholder with its title, its section and a short description; a section's
-own page (for example `/what-we-do`) lists everything in it. Any other address
-is a 404 (`src/app/not-found.tsx`).
+**Pages are data.** A page is a `PageDoc` (`src/content/blocks.ts`): its
+address, title, section, one-line summary, and a list of blocks, the first of
+them a hero. One renderer (`src/components/site/blocks/`) draws every block in
+the model's section patterns and KIASA's visual language, so a page is written,
+not built. The contract lists 22 blocks: four heroes (photo, split, plain,
+article), intro, stats, features, the homepage's cards, media cards, accordion,
+split, quote, closing call, prose (with an "In brief" panel), people, links,
+open roles with search and filters, forms (contact, preferences, cookies),
+wordmarks, steps, studios, news rows, contacts, facts and film. Light tones
+(`paper`, `leaf`) break the night as the model's white sections do.
+
+The content is in `src/content/docs/`, one file per area. The catch-all route
+`src/app/[...slug]/page.tsx` draws a page from its record and pre-renders all
+of them; any address not in the plan is a 404 (`src/app/not-found.tsx`).
+`src/content/pages.ts` still collects every address the site links to, for
+search and the link checks.
+
+**KIASA Canopy** (`/canopy`) is a practice page like Accenture Construct: its
+own header (the leaf, a rule, "KIASA Canopy", then Home, Who we are, Contact
+us) and the model's eight sections, from the bridge across the first screen to
+"Get a clear view of what's next". The homepage's announcement card opens it.
+
+**Cards** behave as on the model: the whole card is a link to its page;
+pointed at or focused it grows a little, its picture gives way, and its summary
+and "Expand" come up in its place.
 
 | Section | Pages |
 | --- | --- |
@@ -73,10 +85,17 @@ is a 404 (`src/app/not-found.tsx`).
 | Careers (10) | Its own page, search for jobs, career areas, early careers, working here, benefits, learning and growth, careers blog, hiring journey, interview tips |
 | Client stories (6) | The listing, the film series and four case studies |
 | Footer (7) | Contact, sitemap, privacy, terms, cookies, accessibility, preferences |
+| Practice (1) | KIASA Canopy |
+
+Company facts the pages share, so they agree: founded in London in 2012, owned
+through an employee ownership trust, 420 people in eight studios (Lisbon,
+Amsterdam, London and Nairobi; Toronto and Austin; Singapore and Melbourne).
+Lisbon is the first engineering studio and Melbourne, opened July 2026, the
+second. Emissions in 2025: 1,840 tonnes CO2e, 4.4 tonnes per person.
 
 ## Sample content
 
-Everything a visitor reads is in one file, `src/content/site.ts`: the
+The homepage's words are in `src/content/site.ts`: the
 navigation, the hero, the eight cards, the quotation, the client stories, the
 recognition cards, the careers text, the news and the footer.
 
@@ -86,7 +105,7 @@ Okafor), the product name Canopy, the figures, the awards and the dates are
 invented so the design can be judged with realistic copy. None of it is a
 statement about KIASA. Before the site is public:
 
-1. Replace the content in `src/content/site.ts`.
+1. Replace the content in `src/content/site.ts` and `src/content/docs/`.
 2. Replace the photographs (see below).
 3. Set `SAMPLE_CONTENT` to `false` in that file. This removes the line in the
    footer that says the content is sample content.
@@ -96,7 +115,14 @@ statement about KIASA. Before the site is public:
 The portrait beside the quotation, `portrait.jpg`, and the bridge on the
 Canopy page, `canopy-bridge.jpg`, were supplied by KIASA. The other five
 photographs in `src/assets/media/` are placeholders from Unsplash,
-free to use under the Unsplash License. Replace them with KIASA's own
+free to use under the Unsplash License.
+
+The inner pages use 68 more photographs in `src/assets/stock/`, chosen from the
+Lorem Picsum collection: every one is an Unsplash photograph, free to use under
+the Unsplash License. `src/content/photos.ts` is their registry: a key, a
+description used as the alternative text, the photographer and the Unsplash
+source of each. Pages name a photograph by its key. People in them are not KIASA
+staff, and no invented person is ever shown with a photograph. Replace them with KIASA's own
 photography when there is some; the people in `studio.jpg` are not KIASA staff.
 
 | File | Used for | Photographer | Unsplash photo |
@@ -114,19 +140,23 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 | File | What it is |
 | --- | --- |
 | `src/app/page.tsx` | The homepage, wrapped in `StartupBoundary` so the loading mark stands in front of it on every load. |
-| `src/app/[...slug]/page.tsx`, `src/app/not-found.tsx` | The placeholder pages and the 404 page. |
+| `src/app/[...slug]/page.tsx`, `src/app/not-found.tsx` | Every inner page, drawn from its record, and the 404 page. |
+| `src/content/blocks.ts`, `src/content/docs/*.ts` | The page contract, and every page's content, one file per area. |
+| `src/content/photos.ts`, `src/assets/stock/` | The stock photographs and their credits. |
+| `src/components/site/blocks/*.tsx`, `src/styles/site-blocks.css` | The renderer: one component per block, the practice header, and their styles. |
 | `src/content/site.ts`, `src/content/pages.ts` | The sample content, and the list of pages built from it (also what Search looks through). |
 | `src/components/site/shell.tsx` | Header, content, footer: what every page shares. |
 | `src/components/site/header.tsx` | The header and its panels: navigation, search, region, and the menu on phones. |
 | `src/components/site/hero.tsx`, `hero-field.tsx`, `motion-toggle.tsx` | The hero, its background of veins and lights (plain SVG; the lights move by CSS, the veins ripple by a few lines of script), and the pause button. |
-| `src/components/site/featured.tsx`, `story-grid.tsx`, `plates.tsx` | The eight cards, the dialog a card opens, and the line drawings. |
+| `src/components/site/featured.tsx`, `story-grid.tsx`, `plates.tsx` | The eight cards (each a link to its page), and the nine line drawings used as patterns. |
 | `src/components/site/voice.tsx`, `spotlight.tsx`, `recognition.tsx`, `careers.tsx`, `news.tsx`, `news-rail.tsx`, `footer.tsx` | The remaining sections. |
 | `src/components/site/brand.tsx`, `icons.tsx`, `cta.tsx` | The leaf and the lockup, the icons, the arrow link. |
 | `src/styles/site*.css` | The site's styles, one file per part. Colours and typefaces are variables in `src/app/globals.css`. |
 
 Most of the page is rendered on the server and needs no script. Script is used
-only where something has to respond: the header's panels and search, the dialog
-a card opens, the news row, and the pause button. Without JavaScript the whole
+only where something has to respond: the header's panels and search, the news
+row, the pause button, the open roles' search and filters, and the forms (which
+are not connected yet, and say so when sent). Without JavaScript the whole
 page is still readable.
 
 Motion follows three rules. It stops for visitors who ask for reduced motion.
@@ -135,10 +165,9 @@ moves the layout: the measured layout shift is zero.
 
 ## What comes next
 
-1. Decide the real content: what KIASA offers, for whom, with which proof.
-2. Design the inner pages, starting with **What we do**, one capability page,
-   one case study and **Contact**.
-3. Replace the sample content and the photographs.
-4. Before going public: a contact form that reaches someone, a cookie notice if
-   analytics are added, a sitemap and social sharing images, and checks in
-   Safari, Firefox and on real phones.
+1. Decide the real content: what KIASA offers, for whom, with which proof, and
+   replace the sample pages area by area in `src/content/docs/`.
+2. Replace the photographs with KIASA's own.
+3. Before going public: connect the forms to someone who reads them, a cookie
+   notice if analytics are added, social sharing images, and checks in Safari,
+   Firefox and on real phones.
