@@ -113,7 +113,7 @@ statement about KIASA. Before the site is public:
 ## Photographs
 
 The portrait beside the quotation, `portrait.jpg`, and the bridge on the
-Canopy page, `canopy-bridge.jpg`, were supplied by KIASA. The other five
+Canopy page, `stock/canopy-bridge.jpg`, were supplied by KIASA. The other five
 photographs in `src/assets/media/` are placeholders from Unsplash,
 free to use under the Unsplash License.
 
@@ -128,7 +128,7 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 | File | Used for | Photographer | Unsplash photo |
 | --- | --- | --- | --- |
 | `portrait.jpg` | Beside the quotation | Supplied by KIASA | — |
-| `canopy-bridge.jpg` | KIASA Canopy hero | Supplied by KIASA | — |
+| `stock/canopy-bridge.jpg` | KIASA Canopy hero | Supplied by KIASA | — |
 | `river-road.jpg` | The film in Client spotlight | Ben den Engelsen | `photo-1596779845727-d88eb78a1b08` |
 | `studio.jpg` | Careers | Drew Dempsey | `photo-1678282931256-370578a0d036` |
 | `blue-leaf.jpg` | Card: The maintenance dividend | Amin Alizadeh | `photo-1673554227888-f33f40a90055` |
