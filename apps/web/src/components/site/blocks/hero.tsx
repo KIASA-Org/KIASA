@@ -1,6 +1,7 @@
 import type { HeroBlock } from "@/content/blocks";
 import { LeafMark } from "../brand";
 import { Plate } from "../plates";
+import { DewReveal } from "./reveal";
 import { Cta, Photo } from "./shared";
 
 function Title({ block, className }: { block: HeroBlock; className: string }) {
@@ -13,6 +14,11 @@ function Title({ block, className }: { block: HeroBlock; className: string }) {
 function PhotoHero({ block }: { block: HeroBlock }) {
   return <section className="b-hero" data-variant="photo">
     {block.image && <Photo photo={block.image} sizes="100vw" priority className="b-hero-photo" />}
+    {block.image && <>
+      {/* Night until the drops take over, so the photograph never shows before them. */}
+      <div className="b-hero-cover" aria-hidden="true" />
+      <DewReveal />
+    </>}
     <div className="b-hero-inner wrap wrap-wide">
       <div className="b-hero-top">
         {block.eyebrow && <p className="eyebrow b-hero-eyebrow">{block.eyebrow}</p>}

@@ -72,6 +72,15 @@ own header (the leaf, a rule, "KIASA Canopy", then Home, Who we are, Contact
 us) and the model's eight sections, from the bridge across the first screen to
 "Get a clear view of what's next". The homepage's announcement card opens it.
 
+**Photo heroes arrive as dew.** Like the glyph reveal on the model's practice
+pages, a full-width hero's photograph first appears as a field of dew drops read
+from the photograph itself (a speck in its shadows, a ring in its mid-tones, a
+full drop with its glint where it is brightest; a few catch green and one the
+dew's blue), then the drops clear, the brightest first, in about two seconds
+(`src/components/site/blocks/reveal.tsx`). A night cover keeps the photograph
+hidden until the drops take over; without script it simply fades, and for
+reduced motion there is no reveal.
+
 **Cards** behave as on the model: the whole card is a link to its page;
 pointed at or focused it grows a little, its picture gives way, and its summary
 and "Expand" come up in its place.

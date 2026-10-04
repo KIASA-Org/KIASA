@@ -299,6 +299,23 @@ test.describe("KIASA Canopy", () => {
     expect(errors).toEqual([]);
   });
 
+  test("the photograph arrives as a field of dew drops, then clears; with reduced motion it is simply there", async ({ page, browser }) => {
+    await page.goto(canopy.href);
+    const reveal = page.locator(".b-hero-reveal");
+    await expect(reveal).toHaveAttribute("data-state", "playing");
+    // The night cover has handed over to the drops.
+    await expect(page.locator(".b-hero-cover")).toBeHidden();
+    await expect(reveal).toHaveAttribute("data-state", "done", { timeout: 6000 });
+    await expect(reveal).toBeHidden();
+    const calm = await browser.newContext({ reducedMotion: "reduce" });
+    const still = await calm.newPage();
+    await still.goto(canopy.href);
+    await expect(still.locator(".b-hero-cover")).toBeHidden();
+    await expect(still.locator(".b-hero-reveal")).toBeHidden();
+    await expect(still.locator(".b-hero-reveal")).not.toHaveAttribute("data-state", /./);
+    await calm.close();
+  });
+
   test("the announcement card on the homepage opens it", async ({ page }) => {
     await open(page);
     await page.locator(".story").first().click();
