@@ -1,7 +1,6 @@
 /* ───────── Featured cards ───────── */
-/* The cards run wider than the rest of the page, as on the model: at a 1920px
-   window a row is 1664px, four cards of 368 × 565 with 64px between them. */
-.featured.wrap { max-width: calc(1664px + 2 * var(--gutter)); }
+/* In the wide column (.wrap-wide): at a 1920px window a row is 1664px, four
+   cards of 368 × 565 with 64px between them, as on the model. */
 .story-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(20px, 3.4vw, 64px); }
 .story { position: relative; isolation: isolate; aspect-ratio: 368 / 565; overflow: hidden; background: var(--paper); color: var(--paper-ink); }
 .story-text { padding: clamp(24px, 2vw, 38px) clamp(22px, 1.7vw, 32px) 0; }

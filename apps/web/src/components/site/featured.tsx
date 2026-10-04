@@ -19,7 +19,7 @@ function Art({ art, detail = false }: { art: StoryArt; detail?: boolean }) {
 
 /** The eight cards under the hero: what KIASA has announced, published and delivered. */
 export function Featured() {
-  return <section className="featured wrap" aria-labelledby="featured-title">
+  return <section className="featured wrap wrap-wide" aria-labelledby="featured-title">
     <h2 id="featured-title" className="sr-only">Featured</h2>
     <PlateDefs />
     <StoryGrid items={stories.map(story => {

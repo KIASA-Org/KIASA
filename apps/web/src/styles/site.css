@@ -24,6 +24,10 @@
 .site p { text-wrap: pretty; }
 
 .wrap { width: 100%; max-width: 1440px; margin-inline: auto; padding-inline: var(--gutter); }
+/* The wide column, as on the model: the header, the hero and the featured cards
+   share it, so at a 1920px window the logo, the headline and the first card all
+   start 120px from the edge and the row of cards is 1664px. */
+.wrap-wide { max-width: calc(1664px + 2 * var(--gutter)); }
 
 /* Small capitals above a title. */
 .eyebrow { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }

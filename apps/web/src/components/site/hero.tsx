@@ -10,7 +10,7 @@ export function Hero() {
   const [first, second] = hero.headline;
   return <section className="hero" aria-labelledby="hero-title">
     <HeroField />
-    <div className="hero-inner wrap">
+    <div className="hero-inner wrap wrap-wide">
       <h1 id="hero-title" className="hero-title">
         <span className="hero-line"><span>{first}</span></span>{" "}
         <span className="hero-line"><span>{second}<i className="hero-dew" aria-hidden="true" /></span></span>
@@ -22,6 +22,6 @@ export function Hero() {
         <Link href={hero.cta.href} prefetch={false} className="cta"><CtaContent>{hero.cta.label}</CtaContent></Link>
       </div>
     </div>
-    <div className="wrap"><MotionToggle /></div>
+    <div className="wrap wrap-wide"><MotionToggle /></div>
   </section>;
 }

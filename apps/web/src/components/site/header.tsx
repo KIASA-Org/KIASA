@@ -57,7 +57,7 @@ export function SiteHeader() {
 
   return <>
     <header ref={root} className="masthead" data-solid={scrolled || open ? "" : undefined} onBlur={onBlur}>
-      <div className="masthead-bar wrap">
+      <div className="masthead-bar wrap wrap-wide">
         <Link href="/" className="masthead-brand" aria-label="KIASA home" onClick={close}><Lockup /></Link>
 
         <nav className="masthead-nav" aria-label="Primary">
@@ -108,7 +108,7 @@ function Go({ href, onNavigate, className, children }: { href: string; onNavigat
 function Mega({ item, open, onNavigate }: { item: NavItem; open: boolean; onNavigate: () => void }) {
   const groups = item.groups!;
   return <div id={`panel-${item.id}`} className="mega" data-open={open ? "" : undefined} data-groups={groups.length}>
-    <div className="wrap">
+    <div className="wrap wrap-wide">
       <Go href={item.href} onNavigate={onNavigate} className="mega-title cta">
         <CtaContent>{item.label}</CtaContent>
       </Go>
@@ -132,7 +132,7 @@ function SearchPanel({ open, onNavigate }: { open: boolean; onNavigate: () => vo
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
 
   return <div id="panel-search" className="mega search" data-open={open ? "" : undefined}>
-    <div className="wrap">
+    <div className="wrap wrap-wide">
       <form className="search-field" role="search" onSubmit={event => event.preventDefault()}>
         <Search />
         <input ref={input} type="search" name="q" value={query} onChange={event => setQuery(event.target.value)}
