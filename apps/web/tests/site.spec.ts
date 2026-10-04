@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { plannedPages, searchPages } from "../src/content/pages";
+import { designedPages, plannedPages, searchPages } from "../src/content/pages";
+import { canopy } from "../src/content/canopy";
 import { careers, footer, hero, navigation, news, popularSearches, recognition, regions, spotlight, stories } from "../src/content/site";
 
 const HEADLINE = hero.headline.join(" ");
@@ -275,11 +276,40 @@ test.describe("header", () => {
   });
 });
 
+test.describe("KIASA Canopy", () => {
+  test("the practice page: its own header, the promise over the photograph, and a way to talk", async ({ page }) => {
+    const errors = collectErrors(page);
+    const response = await page.goto(canopy.href);
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveTitle(canopy.name);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopy.hero.headline.join(""));
+    const nav = page.getByRole("navigation", { name: "KIASA Canopy" });
+    for (const link of canopy.navigation) await expect(nav.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
+    await expect(page.getByRole("banner").getByRole("link", { name: "KIASA home" })).toHaveAttribute("href", "/");
+    const photo = page.getByRole("img", { name: canopy.hero.imageAlt });
+    await expect(photo).toBeVisible();
+    expect(await photo.evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
+    await expect(page.getByRole("link", { name: canopy.hero.cta.label })).toHaveAttribute("href", canopy.hero.cta.href);
+    // No loading mark here: only the homepage opens with it.
+    expect(await page.evaluate(() => window.__kiasaIntro)).toBeUndefined();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("the announcement card on the homepage opens it", async ({ page }) => {
+    await open(page);
+    await page.locator(".story-open").first().click();
+    await page.getByRole("dialog").getByRole("link", { name: "Discover KIASA Canopy" }).click();
+    await expect(page).toHaveURL(new RegExp(`${canopy.href}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(canopy.hero.headline.join(""));
+  });
+});
+
 test.describe("pages still to be designed", () => {
   test("every link on the homepage has a page behind it", async ({ page, request }, info) => {
     await open(page);
     const hrefs = await page.locator("a[href^='/']").evaluateAll(links => [...new Set(links.map(link => link.getAttribute("href")!))]);
-    const planned = new Set(["/", ...plannedPages.map(planned => planned.href)]);
+    const planned = new Set(["/", ...designedPages.map(page => page.href), ...plannedPages.map(planned => planned.href)]);
     expect(hrefs.length).toBeGreaterThan(60);
     expect(hrefs.filter(href => !planned.has(href))).toEqual([]);
     // The built site answers for every one of them. The development server renders
