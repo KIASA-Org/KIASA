@@ -46,7 +46,17 @@ drawing are KIASA's own.
 
 ## The pages
 
-Only the homepage is designed. The others are listed in
+Two pages are designed: the homepage, and **KIASA Canopy** at `/canopy`
+(`src/app/canopy/page.tsx`, `src/components/site/canopy.tsx`, copy in
+`src/content/canopy.ts`). Canopy follows the model's practice pages, such as
+Accenture Construct: the practice's own header (the leaf, a rule, "KIASA
+Canopy", then Home, Who we are, Contact us), a photograph across the whole
+width with the promise over its sky, and what the practice does set low on the
+right with "Talk to us". The homepage's announcement card opens it. The rest of
+the model's practice page (the problem, data, what we do differently, work in
+action, the lifecycle, industries, a closing call) is still to come.
+
+The others are listed in
 `src/content/pages.ts`, which collects every address the site links to
 (74 of them): the navigation's pages, the stories, the news items and the
 footer's pages. `src/app/[...slug]/page.tsx` renders each of them as a
@@ -83,14 +93,16 @@ statement about KIASA. Before the site is public:
 
 ## Photographs
 
-The portrait beside the quotation, `portrait.jpg`, was supplied by KIASA. The
-other five photographs in `src/assets/media/` are placeholders from Unsplash,
+The portrait beside the quotation, `portrait.jpg`, and the bridge on the
+Canopy page, `canopy-bridge.jpg`, were supplied by KIASA. The other five
+photographs in `src/assets/media/` are placeholders from Unsplash,
 free to use under the Unsplash License. Replace them with KIASA's own
 photography when there is some; the people in `studio.jpg` are not KIASA staff.
 
 | File | Used for | Photographer | Unsplash photo |
 | --- | --- | --- | --- |
 | `portrait.jpg` | Beside the quotation | Supplied by KIASA | — |
+| `canopy-bridge.jpg` | KIASA Canopy hero | Supplied by KIASA | — |
 | `river-road.jpg` | The film in Client spotlight | Ben den Engelsen | `photo-1596779845727-d88eb78a1b08` |
 | `studio.jpg` | Careers | Drew Dempsey | `photo-1678282931256-370578a0d036` |
 | `blue-leaf.jpg` | Card: The maintenance dividend | Amin Alizadeh | `photo-1673554227888-f33f40a90055` |

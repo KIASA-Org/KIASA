@@ -1,0 +1,53 @@
+/* ───────── KIASA Canopy, a practice page ───────── */
+/* Modelled on the model's practice pages: the practice's own header, then a
+   photograph across the whole width with the promise over its sky and what the
+   practice does set low on the right. */
+
+.canopy-header { height: var(--header); background: var(--night); border-bottom: 1px solid var(--line); }
+.canopy-bar { height: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; column-gap: 24px; }
+.canopy-lockup { justify-self: start; display: inline-flex; align-items: center; gap: 14px; }
+.canopy-mark { display: block; width: 38px; height: 38px; margin-left: -4px; }
+.canopy-divider { width: 1px; height: 34px; background: var(--line-strong); }
+.canopy-word { font-size: 17px; line-height: 1; font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
+.canopy-word > span { font-weight: 450; color: var(--leaf); }
+.canopy-nav ul { display: flex; align-items: center; gap: 4px; }
+.canopy-link { display: inline-flex; align-items: center; height: 40px; padding: 0 12px; font-size: 16px; line-height: 20px; font-weight: 480; white-space: nowrap; }
+.canopy-link > span { position: relative; padding: 4px 0; }
+.canopy-link > span::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: left; transition: transform 0.4s var(--ease); }
+.canopy-link:hover > span::after { transform: scaleX(1); }
+
+/* The photograph fills the first screen. Night is laid over it, deepest where
+   words stand: across the sky behind the headline, and low on the right behind
+   the statement, so the stone hands and the bridge stay the brightest thing. */
+.canopy-hero { position: relative; isolation: isolate; display: flex; min-height: clamp(560px, calc(100svh - var(--header)), 880px); overflow: hidden; background: var(--night); }
+.canopy-hero-photo { z-index: -2; object-fit: cover; object-position: 50% 40%; }
+.canopy-hero::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(3 8 7 / 0.62) 0, rgb(3 8 7 / 0.3) 34%, rgb(3 8 7 / 0.18) 56%, rgb(3 8 7 / 0.7) 100%),
+    linear-gradient(90deg, rgb(3 8 7 / 0.45) 0, rgb(3 8 7 / 0.08) 46%, rgb(3 8 7 / 0.55) 100%),
+    rgb(8 30 26 / 0.22); }
+.canopy-hero-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 30%); grid-template-rows: auto 1fr; column-gap: 48px; padding-block: clamp(56px, 6.4vw, 96px) clamp(48px, 5vw, 80px); }
+.canopy-title { grid-column: 1 / -1; font-size: clamp(42px, 4.5vw, 86px); line-height: 1.08; font-weight: 560; letter-spacing: -0.032em; text-wrap: balance; text-shadow: 0 2px 28px rgb(3 8 7 / 0.35); }
+.canopy-title > span { display: block; }
+.canopy-aside { grid-column: 2; grid-row: 2; align-self: end; margin-top: 64px; }
+.canopy-rule { display: block; width: 44px; height: 4px; margin-bottom: 30px; background: var(--leaf); }
+.canopy-aside p { font-size: clamp(16px, 1.12vw, 21px); line-height: 1.55; text-shadow: 0 1px 18px rgb(3 8 7 / 0.5); }
+.canopy-aside p + p { margin-top: 1.1em; }
+.canopy-aside .cta { margin-top: 32px; font-size: clamp(16px, 1.05vw, 20px); }
+
+/* The practice's page arrives without the loading mark, as every page but the homepage does. */
+
+@media (max-width: 899px) {
+  .canopy-hero { min-height: 0; }
+  .canopy-hero-photo { object-position: 46% 40%; }
+  .canopy-hero::after { background: linear-gradient(180deg, rgb(3 8 7 / 0.62) 0, rgb(3 8 7 / 0.32) 36%, rgb(3 8 7 / 0.55) 60%, rgb(3 8 7 / 0.9) 100%), rgb(8 30 26 / 0.22); }
+  .canopy-hero-inner { grid-template-columns: minmax(0, 1fr); padding-block: 48px 44px; }
+  .canopy-aside { grid-column: 1; margin-top: clamp(140px, 40vw, 260px); max-width: 560px; }
+}
+@media (max-width: 719px) {
+  /* The three links move under the name, so neither has to shrink. */
+  .canopy-header { height: auto; }
+  .canopy-bar { grid-template-columns: minmax(0, 1fr); row-gap: 4px; padding-block: 14px 6px; }
+  .canopy-nav ul { margin-left: -12px; }
+  .canopy-link { height: 36px; font-size: 15px; }
+}
