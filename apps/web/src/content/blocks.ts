@@ -158,7 +158,7 @@ export type QuoteBlock = Base & {
   type: "quote";
   text: string;
   name: string;
-  role: string;
+  role?: string;
   image?: PhotoKey;
 };
 

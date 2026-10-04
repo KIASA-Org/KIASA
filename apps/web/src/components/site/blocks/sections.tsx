@@ -129,7 +129,7 @@ export function Quote({ block }: { block: QuoteBlock }) {
         ? <div className="b-quote-media"><Photo photo={block.image} sizes="(max-width: 899px) 92vw, 42vw" /></div>
         : <div className="b-quote-mark" aria-hidden="true"><LeafMark weight={1.3} /></div>}
       <blockquote className="b-quote-text"><p>“{block.text}”</p></blockquote>
-      <figcaption className="b-quote-by"><span className="b-quote-name">{block.name}</span><span className="b-quote-role">{block.role}</span></figcaption>
+      <figcaption className="b-quote-by"><span className="b-quote-name">{block.name}</span>{block.role && <span className="b-quote-role">{block.role}</span>}</figcaption>
     </figure>
   </Section>;
 }
