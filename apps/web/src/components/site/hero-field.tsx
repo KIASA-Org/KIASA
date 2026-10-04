@@ -6,7 +6,10 @@ import { useEffect, useRef } from "react";
  * parallel veins sweep from a base below the hero to a tip beyond the top right
  * corner; a few carry a small green light, and where a light passes a dew drop
  * the drop turns blue for a moment. The same language as the loading mark, drawn
- * as plain SVG. The lights are moved by CSS; the veins ripple gently out of their
+ * as plain SVG. The blade is shaded as if light falls on it from the upper left:
+ * the midrib catches the light, the lines near it are pale, the outer lines a
+ * deeper green, and the side turned away falls into shadow, so the leaf reads as
+ * a curved surface rather than a flat drawing. The lights are moved by CSS; the veins ripple gently out of their
  * shape, as a leaf does in a light wind, by a few lines of script that stop for
  * reduced motion, pause with the hero's button and sleep while the hero is off screen.
  */
@@ -37,6 +40,33 @@ const WAVES: readonly (readonly [height: number, along: number, period: number, 
 ];
 
 const round = (value: number) => Math.round(value * 10) / 10;
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+/** The light on the leaf. The colours are the site's pale ink, a natural leaf
+ * green for the outer lines, and a deep green the shaded side falls into. */
+const INK = "#ECFFF3", GREEN = "#8FD6A4", SHADE = "#2F6E55";
+const channels = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+function blend(from: string, to: string, amount: number) {
+  const a = channels(from), b = channels(to), t = clamp01(amount);
+  return `#${a.map((value, i) => Math.round(value + (b[i] - value) * t).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** How vein `u` (−1 the lit edge, 0 the midrib, 1 the shaded edge) is lit. The
+ * blade is a shallow dome with a raised midrib, lit from the upper left: the
+ * ridge catches the most light, the lit flank stays bright, the far flank turns
+ * away into shadow. Its colour runs from pale ink at the centre to leaf green at
+ * the edges, then darkens with the shadow; weight and strength follow the light. */
+function shade(u: number) {
+  const out = Math.abs(u);
+  const ridge = Math.exp(-((u / 0.1) ** 2));
+  const light = clamp01(0.55 - 0.22 * u * out ** 0.6 + 0.38 * ridge - 0.2 * out);
+  const hue = blend(INK, GREEN, out ** 0.9);
+  return {
+    ink: blend(SHADE, hue, 0.35 + 0.65 * light),
+    alpha: Math.round((0.13 + 0.34 * light + (out === 1 ? 0.06 : 0)) * 1000) / 1000,
+    weight: Math.round((0.95 + 0.45 * light) * 100) / 100,
+  };
+}
 const lerp = (a: Point, b: Point, t: number): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
 /** A point on vein `u` (−1 and 1 are the blade's two edges, 0 its midrib) at `t` along it, and the vein's normal there. */
@@ -78,15 +108,29 @@ const veins = Array.from({ length: VEINS }, (_, index) => {
   const frames = STEPS.map(t => veinFrame(u, t));
   const points = frames.map((frame): Point => [frame.x, frame.y]);
   const role = index === 0 || index === VEINS - 1 ? "edge" : index === (VEINS - 1) / 2 ? "midrib" : "vein";
-  return { u, frames, d: smooth(points), role };
+  return { u, frames, points, d: smooth(points), role, ...shade(u) };
 });
 
-/** The vein's path with the wind on it at `time`. */
+/** The vein's points with the wind on them at `time`. */
 function windswept(vein: (typeof veins)[number], time: number) {
-  return smooth(vein.frames.map((frame, step): Point => {
+  return vein.frames.map((frame, step): Point => {
     const away = lift(vein.u, STEPS[step], time);
     return [frame.x + frame.nx * away, frame.y + frame.ny * away];
-  }));
+  });
+}
+
+/** The blade's body: out along one edge and back along the other. */
+const bladeOutline = (first: readonly Point[], last: readonly Point[]) => `${smooth(first)}${smooth([...last].reverse()).replace(/^M/, "L")}Z`;
+const BLADE = bladeOutline(veins[0].points, veins[VEINS - 1].points);
+/** The body's shading runs across the blade, from its lit edge to its shaded one. */
+const ACROSS = { from: veinPoint(-1, 0.5), to: veinPoint(1, 0.5) };
+
+/** How much a gust tilts vein `u` toward the light at `time`: the ripple's
+ * slope across the blade, so a crest brightens on one flank and dims on the
+ * other, and a soft sheen travels over the leaf with the wind. */
+function tilt(u: number, time: number) {
+  const across = 0.06;
+  return (lift(u - across, 0.52, time) - lift(u + across, 0.52, time)) / 16;
 }
 
 /** How far along a vein's visible stretch (0–1, by length) the point at `t` lies. */
@@ -133,6 +177,8 @@ function useWind(ref: React.RefObject<SVGSVGElement | null>) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     // Every path drawn along a vein: its line and the stretches of its light.
     const paths = veins.map((_, index) => Array.from(svg.querySelectorAll<SVGPathElement>(`[data-vein="${index}"]`)));
+    const lines = veins.map((_, index) => svg.querySelector<SVGPathElement>(`.hero-veins [data-vein="${index}"]`)!);
+    const blade = svg.querySelector<SVGPathElement>(".hero-blade")!;
     const rings = Array.from(svg.querySelectorAll<SVGGElement>("[data-drop]"));
     let frame = 0, seen = true;
     const running = () => seen && !reduce.matches && !hero?.hasAttribute("data-paused");
@@ -140,10 +186,14 @@ function useWind(ref: React.RefObject<SVGSVGElement | null>) {
       frame = 0;
       if (!running()) return;
       const time = now / 1000;
+      const swept = veins.map(vein => windswept(vein, time));
       veins.forEach((vein, index) => {
-        const d = windswept(vein, time);
+        const d = smooth(swept[index]);
         for (const path of paths[index]) path.setAttribute("d", d);
+        // The sheen: a line tilted toward the light brightens a little, one tilted away dims.
+        lines[index].style.opacity = (1 + Math.max(-0.22, Math.min(0.22, tilt(vein.u, time)))).toFixed(3);
       });
+      blade.setAttribute("d", bladeOutline(swept[0], swept[VEINS - 1]));
       rings.forEach((ring, index) => {
         const { vein, t, frame: at } = drops[index];
         const away = lift(veins[vein].u, t, time);
@@ -156,6 +206,8 @@ function useWind(ref: React.RefObject<SVGSVGElement | null>) {
         // With motion reduced the drawing returns to its still shape; paused, it holds where it is.
         if (reduce.matches) {
           veins.forEach((vein, index) => { for (const path of paths[index]) path.setAttribute("d", vein.d); });
+          for (const line of lines) line.style.removeProperty("opacity");
+          blade.setAttribute("d", BLADE);
           for (const ring of rings) ring.removeAttribute("transform");
         }
         return;
@@ -182,8 +234,20 @@ export function HeroField() {
   useWind(svg);
   return <div className="hero-field" aria-hidden="true">
     <svg ref={svg} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="xMaxYMin slice" fill="none" focusable="false">
+      <defs>
+        {/* The blade's body: a faint glow on the lit flank, a touch along the ridge, nothing on the shaded side. */}
+        <linearGradient id="hero-blade-light" gradientUnits="userSpaceOnUse" x1={round(ACROSS.from[0])} y1={round(ACROSS.from[1])} x2={round(ACROSS.to[0])} y2={round(ACROSS.to[1])}>
+          <stop offset="0" stopColor={GREEN} stopOpacity="0.07" />
+          <stop offset="0.38" stopColor={GREEN} stopOpacity="0.04" />
+          <stop offset="0.5" stopColor={blend(INK, GREEN, 0.45)} stopOpacity="0.075" />
+          <stop offset="0.62" stopColor={SHADE} stopOpacity="0.02" />
+          <stop offset="1" stopColor={SHADE} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path className="hero-blade" d={BLADE} fill="url(#hero-blade-light)" />
       <g className="hero-veins">
-        {veins.map((vein, index) => <path key={vein.u} d={vein.d} data-role={vein.role} data-vein={index} />)}
+        {veins.map((vein, index) => <path key={vein.u} d={vein.d} data-role={vein.role} data-vein={index}
+          style={{ "--vein-ink": vein.ink, "--vein-alpha": vein.alpha, "--vein-weight": `${vein.weight}px` } as React.CSSProperties} />)}
       </g>
       <g className="hero-lights" strokeLinecap="round">
         {LIGHTS.map(([vein, seconds, elapsed]) => <g key={vein} style={{ "--run": `${seconds}s`, "--from": `${-elapsed}s` } as React.CSSProperties}>
