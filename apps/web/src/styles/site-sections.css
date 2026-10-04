@@ -11,7 +11,9 @@
 .voice { margin-top: var(--section); }
 .voice-figure { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: 1fr auto auto 1fr; column-gap: 32px; }
 .voice-media { grid-column: 1 / span 5; grid-row: 1 / -1; position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--night-raised); }
-.voice-media img { object-fit: cover; }
+/* The portrait is drawn in a little closer than it was taken, so the person fills
+   more of the frame; the zoom centres on the face and keeps the shoulders. */
+.voice-media img { object-fit: cover; transform: scale(1.22); transform-origin: 50% 22%; }
 .voice-quote { grid-column: 7 / span 5; grid-row: 2; font-size: clamp(22px, 1.95vw, 28px); line-height: 1.32; font-weight: 500; letter-spacing: -0.014em; }
 /* The opening quotation mark hangs in the margin, so the words align. */
 .voice-quote p { text-indent: -0.44em; }
