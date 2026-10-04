@@ -14,7 +14,7 @@ function Art({ art, detail = false }: { art: StoryArt; detail?: boolean }) {
   const photo = PHOTOS[art];
   if (!photo) return null;
   return <Image src={photo} alt="" fill placeholder="blur"
-    sizes={detail ? "(max-width: 799px) 92vw, 480px" : "(max-width: 1099px) 300px, (max-width: 1599px) 21vw, 320px"} />;
+    sizes={detail ? "(max-width: 799px) 92vw, 480px" : "(max-width: 1099px) 300px, (max-width: 1919px) 20vw, 380px"} />;
 }
 
 /** The eight cards under the hero: what KIASA has announced, published and delivered. */
