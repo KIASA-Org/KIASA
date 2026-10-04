@@ -270,8 +270,8 @@ export const voice = {
   quote: "A system is finished when the people who run it no longer need us. We plan for that day from the first week.",
   name: "Elena Marsh",
   role: "Managing Partner, KIASA",
-  /** Describes the placeholder photograph; replace both together. */
-  imageAlt: "A single drop of dew resting on a dark green leaf.",
+  /** Describes the portrait beside the quotation; replace both together. */
+  imageAlt: "A black-and-white portrait of KIASA's managing partner.",
 };
 
 export const spotlight = {

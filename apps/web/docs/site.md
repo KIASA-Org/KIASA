@@ -83,13 +83,14 @@ statement about KIASA. Before the site is public:
 
 ## Photographs
 
-Six placeholder photographs are in `src/assets/media/`. They are from Unsplash
-and free to use under the Unsplash License. Replace them with KIASA's own
+The portrait beside the quotation, `portrait.jpg`, was supplied by KIASA. The
+other five photographs in `src/assets/media/` are placeholders from Unsplash,
+free to use under the Unsplash License. Replace them with KIASA's own
 photography when there is some; the people in `studio.jpg` are not KIASA staff.
 
 | File | Used for | Photographer | Unsplash photo |
 | --- | --- | --- | --- |
-| `dew-leaf.jpg` | Beside the quotation | Dr. Sourabh Panari | `photo-1626024134995-6e2cad4cedc5` |
+| `portrait.jpg` | Beside the quotation | Supplied by KIASA | — |
 | `river-road.jpg` | The film in Client spotlight | Ben den Engelsen | `photo-1596779845727-d88eb78a1b08` |
 | `studio.jpg` | Careers | Drew Dempsey | `photo-1678282931256-370578a0d036` |
 | `blue-leaf.jpg` | Card: The maintenance dividend | Amin Alizadeh | `photo-1673554227888-f33f40a90055` |
