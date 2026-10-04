@@ -163,7 +163,86 @@ function Veins() {
   </Frame>;
 }
 
-const PLATES = { strata: Strata, rings: Rings, matrix: Matrix, pulse: Pulse, veins: Veins };
+/** A map of a hill: contour lines around two summits, one line traced in green. */
+function Contours() {
+  const hills = [
+    { centre: [262, 128] as Point, loops: 13, step: 17, stretch: 1.25, seed: 0.4 },
+    { centre: [86, 262] as Point, loops: 6, step: 15, stretch: 0.9, seed: 2.2 },
+  ];
+  const loops = hills.flatMap((hill, h) => Array.from({ length: hill.loops }, (_, i) => {
+    const radius = 10 + i * hill.step;
+    const points: Point[] = Array.from({ length: 30 }, (_, step) => {
+      const angle = (step / 30) * Math.PI * 2;
+      const wobble = 1 + 0.07 * Math.sin(3 * angle + hill.seed + i * 0.35) + 0.04 * Math.sin(5 * angle + hill.seed * 2 + i * 0.2);
+      return [hill.centre[0] + radius * hill.stretch * wobble * Math.cos(angle), hill.centre[1] + radius * wobble * Math.sin(angle) * 0.82];
+    });
+    return { key: `${h}-${i}`, d: curve(points, true), lit: h === 0 && i === 7 };
+  }));
+  return <Frame name="contours">
+    {loops.map(loop => <path key={loop.key} d={loop.d} className={loop.lit ? "plate-ring" : "plate-ink"} />)}
+    <path d="M262 128l-4 7h8z" className="plate-solid" />
+    <Drop x={318} y={92} r={11} />
+  </Frame>;
+}
+
+/** A tree, branching the way a decision does: each fork a choice, a few tips in leaf. */
+function Branches() {
+  const lines: { d: string; depth: number }[] = [];
+  const tips: Point[] = [];
+  const grow = (from: Point, angle: number, length: number, depth: number, seed: number) => {
+    const to: Point = [from[0] + length * Math.cos(angle), from[1] + length * Math.sin(angle)];
+    const bend: Point = [(from[0] + to[0]) / 2 + 6 * Math.sin(seed * 3.1), (from[1] + to[1]) / 2 + 4 * Math.cos(seed * 2.3)];
+    lines.push({ d: curve([from, bend, to]), depth });
+    if (depth === 6) { tips.push(to); return; }
+    const spread = 0.34 + 0.05 * Math.sin(seed * 5.7);
+    grow(to, angle - spread, length * 0.76, depth + 1, seed * 1.7 + 0.3);
+    grow(to, angle + spread * 0.92, length * 0.72, depth + 1, seed * 1.3 + 0.9);
+  };
+  grow([200, HEIGHT + 6], -Math.PI / 2, 82, 0, 0.7);
+  const leafed = tips.filter((_, i) => i % 9 === 4);
+  const dew = tips[Math.floor(tips.length * 0.7)];
+  return <Frame name="branches">
+    {lines.map(line => <path key={line.d} d={line.d} className="plate-ink" strokeWidth={round(2.6 - line.depth * 0.3)} />)}
+    {leafed.map(([x, y]) => <path key={`${x}-${y}`} d={`M${round(x)} ${round(y)}c-9 -3 -14 -12 -14 -22c10 2 16 10 14 22z`} className="plate-leaf plate-ink" />)}
+    <Drop x={round(dew[0] + 14)} y={round(dew[1] - 4)} r={10} />
+  </Frame>;
+}
+
+/** Parallel waves, like a signal or the sea: one runs in green, a drop rides its crest. */
+function Waves() {
+  const count = 12;
+  const waves = Array.from({ length: count }, (_, i) => {
+    const points: Point[] = Array.from({ length: 25 }, (_, step) => {
+      const x = -20 + step * 18;
+      return [x, 52 + i * 22 + 13 * Math.sin(x * 0.024 + i * 0.42) + 5 * Math.sin(x * 0.061 + i * 0.9)];
+    });
+    return { i, d: curve(points) };
+  });
+  return <Frame name="waves">
+    {waves.map(wave => <path key={wave.i} d={wave.d} className={wave.i === 5 ? "plate-ring" : "plate-ink"} />)}
+    <Drop x={248} y={142} r={12} />
+  </Frame>;
+}
+
+/** Things kept in motion: arcs around a centre, each carrying a small body. */
+function Orbit() {
+  const centre: Point = [200, 184];
+  const arcs = Array.from({ length: 7 }, (_, i) => {
+    const rx = 38 + i * 30, ry = rx * 0.52;
+    const body = (i * 1.3 + 0.6) % (Math.PI * 2);
+    return { i, rx, ry, body: [centre[0] + rx * Math.cos(body), centre[1] + ry * Math.sin(body)] as Point };
+  });
+  return <Frame name="orbit">
+    <g transform={`rotate(-14 ${centre[0]} ${centre[1]})`}>
+      {arcs.map(arc => <ellipse key={arc.i} cx={centre[0]} cy={centre[1]} rx={arc.rx} ry={arc.ry} className={arc.i === 3 ? "plate-ring" : "plate-ink"} />)}
+      {arcs.filter(arc => arc.i !== 4).map(arc => <circle key={arc.i} cx={round(arc.body[0])} cy={round(arc.body[1])} r={arc.i % 2 ? 4 : 6} className={arc.i === 2 ? "plate-leaf plate-ink" : "plate-solid"} />)}
+      <Drop x={round(arcs[4].body[0])} y={round(arcs[4].body[1])} r={11} />
+    </g>
+    <circle cx={centre[0]} cy={centre[1]} r="14" className="plate-leaf plate-ink" />
+  </Frame>;
+}
+
+const PLATES = { strata: Strata, rings: Rings, matrix: Matrix, pulse: Pulse, veins: Veins, contours: Contours, branches: Branches, waves: Waves, orbit: Orbit };
 export type PlateName = keyof typeof PLATES;
 export const isPlate = (name: string): name is PlateName => name in PLATES;
 

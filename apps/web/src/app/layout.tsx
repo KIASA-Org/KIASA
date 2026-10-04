@@ -9,7 +9,7 @@ import "@/styles/site-hero.css";
 import "@/styles/site-featured.css";
 import "@/styles/site-sections.css";
 import "@/styles/site-pages.css";
-import "@/styles/site-canopy.css";
+import "@/styles/site-blocks.css";
 
 // Self-hosted at build time: the browser makes no request to Google.
 const grotesk = Schibsted_Grotesk({ subsets: ["latin"], display: "swap", variable: "--font-grotesk" });

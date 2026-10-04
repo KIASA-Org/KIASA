@@ -69,8 +69,8 @@ function bootstrap(key: string, frequency: IntroFrequency, startBudgetMs: number
       if (shell) { shell.inert = false; shell.removeAttribute("aria-hidden"); }
       // Skip is about to disappear: keyboard users continue from the page itself.
       if (document.activeElement?.closest("#kiasa-intro")) document.getElementById("main-content")?.focus({ preventScroll: true });
-      document.removeEventListener("click", onClick);
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", onClick, true);
+      window.removeEventListener("keydown", onKey, true);
       document.removeEventListener("visibilitychange", onReturn);
       window.removeEventListener("pageshow", onReturn);
       media.removeEventListener("change", onMotion);
@@ -121,8 +121,11 @@ function bootstrap(key: string, frequency: IntroFrequency, startBudgetMs: number
   root.dataset.kiasaIntro = "waiting";
   observer.observe(root, { childList: true, subtree: true });
   lock();
-  document.addEventListener("click", onClick);
-  document.addEventListener("keydown", onKey);
+  // On the window, before anything else hears them: while React hydrates it holds
+  // back key presses and clicks on parts of the page it has not reached yet, and
+  // replays them only to its own handlers. Skip must work from the first moment.
+  window.addEventListener("click", onClick, true);
+  window.addEventListener("keydown", onKey, true);
   document.addEventListener("visibilitychange", onReturn);
   window.addEventListener("pageshow", onReturn);
   media.addEventListener("change", onMotion);

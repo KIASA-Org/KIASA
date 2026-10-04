@@ -10,8 +10,11 @@ it on the first visit.
   with panels of links, a hero, eight featured cards, a leader's words, client
   spotlight, recognition, careers, news, footer. All of its content is **sample
   content** for the design review, kept in one file.
-- **Every other page** has its address and title and shows a short placeholder
-  until it is designed.
+- **Every other page**, 75 of them, is designed on the matching page of the
+  model site and filled with sample content: capabilities, industries, research,
+  case studies, news, careers with open roles, about, contact, legal, and the
+  KIASA Canopy practice page. Pages are data in `src/content/docs/`, drawn by
+  one renderer.
 
 Built with Next.js App Router, React, strict TypeScript, Tailwind CSS v4 and
 Motion. The plan, the list of pages and the photo credits are in

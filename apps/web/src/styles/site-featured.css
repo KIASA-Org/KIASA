@@ -2,11 +2,26 @@
 /* In the wide column (.wrap-wide): at a 1920px window a row is 1664px, four
    cards of 368 × 565 with 64px between them, as on the model. */
 .story-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(20px, 3.4vw, 64px); }
-.story { position: relative; isolation: isolate; aspect-ratio: 368 / 565; overflow: hidden; background: var(--paper); color: var(--paper-ink); }
-.story-text { padding: clamp(24px, 2vw, 38px) clamp(22px, 1.7vw, 32px) 0; }
+/* A card is a link. Pointed at or focused it grows a little, as on the model,
+   its picture gives way, and its summary and "Expand" come up in its place. */
+.story-grid > li { position: relative; }
+.story { position: relative; isolation: isolate; display: flex; flex-direction: column; aspect-ratio: 368 / 565; overflow: hidden; background: var(--paper); color: var(--paper-ink); transition: transform 0.55s var(--ease), box-shadow 0.55s var(--ease); }
+.story:hover, .story:focus-visible { z-index: 2; transform: scale(1.04); box-shadow: 0 18px 48px rgb(0 0 0 / 0.45); }
+.site .story:focus-visible { outline-offset: 4px; }
+.story-text { display: flex; flex-direction: column; min-height: 0; padding: clamp(24px, 2vw, 38px) clamp(22px, 1.7vw, 32px) 0; }
 .story .eyebrow { font-size: clamp(12px, 0.95vw, 18px); line-height: 1.3; letter-spacing: 0.04em; }
 .story-title { margin-top: clamp(14px, 1.45vw, 28px); font-size: clamp(17px, 1.47vw, 28px); line-height: 1.16; font-weight: 520; letter-spacing: -0.015em; text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.25s; }
-.story:hover .story-title { text-decoration-color: currentColor; }
+.story-summary { margin-top: clamp(18px, 1.9vw, 36px); padding-left: clamp(0px, 1vw, 20px); font-size: clamp(14px, 1.02vw, 19px); line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden;
+  opacity: 0; transform: translateY(14px); transition: opacity 0.35s ease, transform 0.55s var(--ease); }
+.story-expand { display: inline-flex; align-items: center; gap: 6px; align-self: flex-end; margin: auto clamp(22px, 1.7vw, 32px) clamp(20px, 1.9vw, 36px) 0; padding-top: 16px; font-size: clamp(16px, 1.15vw, 22px); font-weight: 600;
+  opacity: 0; transform: translateY(10px); transition: opacity 0.35s ease, transform 0.55s var(--ease); }
+.story-expand svg { width: 1em; height: 1em; transition: transform 0.4s var(--ease); }
+.story:hover .story-summary, .story:focus-visible .story-summary, .story:hover .story-expand, .story:focus-visible .story-expand { opacity: 1; transform: none; transition-delay: 0.08s; }
+.story:hover .story-expand svg { transform: translateX(3px); }
+/* The picture gives way to the card's own colour; a photograph darkens instead, so its words stay on night. */
+.story-art { transition: opacity 0.45s ease; }
+.story:hover .story-art, .story:focus-visible .story-art { opacity: 0; }
+.story[data-surface="photo"]:hover .story-art, .story[data-surface="photo"]:focus-visible .story-art { opacity: 0.28; }
 
 /* The picture: the lower half of a light card, the whole of a photograph. */
 .story-art { position: absolute; inset: 46% 0 0; z-index: -1; overflow: hidden; background: var(--paper-shade); }
@@ -38,15 +53,8 @@
 .plate[data-plate="veins"] .plate-drop circle { fill: none; stroke-opacity: 0.4; }
 .plate[data-plate="veins"] .plate-drop path { stroke-opacity: 0.4; }
 
-/* The whole card is the button; its plus sign waits in the corner. */
-.story-open { position: absolute; inset: 0; z-index: 1; display: grid; place-items: end; padding: 16px; }
-.site .story-open:focus-visible { outline-offset: -5px; }
-.story-plus { display: grid; place-items: center; width: 40px; height: 40px; background: var(--paper-ink); color: var(--paper); opacity: 0; transform: translateY(8px); transition: opacity 0.25s ease, transform 0.45s var(--ease), background-color 0.2s; }
-.story-plus svg { width: 20px; height: 20px; transition: transform 0.45s var(--ease); }
-.story:hover .story-plus, .story-open:focus-visible .story-plus { opacity: 1; transform: none; }
-.story:hover .story-plus svg { transform: rotate(90deg); }
-.story[data-surface="night"] .story-plus, .story[data-surface="photo"] .story-plus { background: var(--ink); color: var(--night); }
-@media (hover: none) { .story-plus { opacity: 1; transform: none; } }
+/* Without a pointer there is no hover: a tap opens the page, and the card shows its "Expand" from the start. */
+@media (hover: none) { .story-expand { opacity: 1; transform: none; } }
 
 /* The cards arrive after the headline when the loading mark leaves. */
 .story-grid > li { transition: opacity 0.9s ease, transform 1.2s var(--ease); transition-delay: calc(0.3s + var(--place, 0) * 0.055s); }
@@ -59,33 +67,6 @@
 .story-grid > li:nth-child(8) { --place: 5; }
 html[data-kiasa-intro] .story-grid > li { opacity: 0; transform: translateY(44px); transition: none; }
 
-/* ───────── An opened card ───────── */
-html:has(.story-dialog[open]) { overflow: hidden; }
-.story-dialog { width: min(1040px, calc(100vw - 2 * var(--gutter))); max-width: none; max-height: calc(100svh - 48px); margin: auto; padding: 0; border: 0; overflow: auto; overscroll-behavior: contain; background: transparent; color: var(--ink);
-  opacity: 0; transform: translateY(18px); transition: opacity 0.25s ease, transform 0.4s var(--ease), overlay 0.4s allow-discrete, display 0.4s allow-discrete; }
-.story-dialog[open] { opacity: 1; transform: none; }
-.story-dialog::backdrop { background: rgb(3 8 7 / 0); transition: background-color 0.35s ease, overlay 0.4s allow-discrete, display 0.4s allow-discrete; }
-.story-dialog[open]::backdrop { background: rgb(3 8 7 / 0.8); }
-@starting-style {
-  .story-dialog[open] { opacity: 0; transform: translateY(28px); }
-  .story-dialog[open]::backdrop { background: rgb(3 8 7 / 0); }
-}
-.story-sheet { position: relative; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); min-height: min(560px, calc(100svh - 48px)); background: var(--night-raised); border: 1px solid var(--line); }
-.story-sheet-art { position: relative; overflow: hidden; background: var(--paper); }
-.story-sheet-art .plate { position: absolute; inset: auto 0 0; height: 62%; background: var(--paper-shade); }
-.story-sheet-art img { object-fit: cover; }
-.story-sheet[data-surface="leaf"] .story-sheet-art { background: var(--leaf); }
-.story-sheet[data-surface="night"] .story-sheet-art { background: #06120e; }
-.story-sheet[data-surface="leaf"] .plate, .story-sheet[data-surface="night"] .plate { background: none; }
-.story-sheet-text { display: flex; flex-direction: column; align-items: flex-start; padding: 64px 64px 52px 52px; }
-.story-sheet-text .eyebrow { color: var(--leaf); }
-.story-sheet-title { margin-top: 18px; font-size: clamp(26px, 2.5vw, 36px); line-height: 1.1; font-weight: 560; letter-spacing: -0.027em; }
-.story-sheet-summary { margin-top: 22px; font-size: 18px; line-height: 1.56; color: var(--ink-soft); }
-.story-sheet-detail { margin-top: 18px; padding-bottom: 40px; font-size: 14px; color: var(--ink-mute); }
-.story-sheet-text .cta { margin-top: auto; }
-.story-sheet-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; color: var(--ink-soft); transition: color 0.2s, transform 0.45s var(--ease); }
-.story-sheet-close:hover { color: var(--ink); transform: rotate(90deg); }
-
 @media (max-width: 1099px) {
   /* A single row that scrolls sideways and runs off the edge of the screen. */
   .story-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: min(74vw, 292px); gap: 16px; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); scrollbar-width: none; }
@@ -94,11 +75,4 @@ html:has(.story-dialog[open]) { overflow: hidden; }
   .story .eyebrow { font-size: 12px; letter-spacing: 0.06em; }
   .story-title { font-size: 19px; }
 }
-@media (max-width: 799px) {
-  .story-sheet { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-  .story-sheet-art { height: 232px; }
-  .story-sheet-art .plate { height: 100%; }
-  .story-sheet-text { padding: 32px 24px 32px; }
-  .story-sheet-summary { font-size: 17px; }
-  .story-sheet-close { background: rgb(3 8 7 / 0.55); color: var(--ink); }
-}
+

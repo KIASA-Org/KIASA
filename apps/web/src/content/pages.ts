@@ -1,4 +1,3 @@
-import { canopy } from "./canopy";
 import { footer, navigation, news, spotlight, stories } from "./site";
 
 /** A page the site links to. Only the homepage is designed so far; every other
@@ -8,13 +7,6 @@ export type PlannedPage = { href: string; title: string; section: string; summar
 const DAY = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
 /** "2026-09-29" → "September 29, 2026", the same on the server and in every browser. */
 export const formatDay = (iso: string) => DAY.format(new Date(`${iso}T00:00:00Z`));
-
-/** Pages already designed, with routes of their own. They are left out of the
- * placeholder pages, but search and the site's link checks know them. */
-export const designedPages: PlannedPage[] = [
-  { href: canopy.href, title: canopy.name, section: "Announcement", summary: canopy.description },
-];
-const designed = new Set(designedPages.map(page => page.href));
 
 function collect(): PlannedPage[] {
   const pages: PlannedPage[] = [];
@@ -40,7 +32,7 @@ function collect(): PlannedPage[] {
   };
   for (const link of footer.links) pages.push({ href: link.href, title: link.label, section: "KIASA", summary: plain[link.href] ?? "" });
   // The same page is linked from several places; the first description wins.
-  return pages.filter((page, index) => !designed.has(page.href) && pages.findIndex(other => other.href === page.href) === index);
+  return pages.filter((page, index) => pages.findIndex(other => other.href === page.href) === index);
 }
 
 export const plannedPages = collect();
@@ -50,7 +42,7 @@ export const findPage = (path: string) => plannedPages.find(page => page.href ==
 export function searchPages(query: string, limit = 7): PlannedPage[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  return [...designedPages, ...plannedPages].filter(page => {
+  return plannedPages.filter(page => {
     const text = `${page.title} ${page.section}`.toLowerCase();
     return words.every(word => text.includes(word));
   }).slice(0, limit);
