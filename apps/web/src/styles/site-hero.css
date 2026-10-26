@@ -1,6 +1,9 @@
 /* ───────── Hero ───────── */
 .hero { position: relative; isolation: isolate; padding-top: calc(var(--header) + clamp(36px, 5.6vw, 84px)); padding-bottom: clamp(40px, 4.6vw, 68px); }
 .hero-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(264px, 23.6%); column-gap: clamp(32px, 5vw, 72px); align-items: start; }
+/* With the turning plant the headline and its statement move down, leaving the
+   plant the room above them to itself (hero-plant.tsx keeps it there). */
+.hero[data-background="plant"] { padding-top: calc(var(--header) + clamp(280px, 28vw, 540px)); }
 
 .hero-title { font-size: clamp(64px, 7.4vw, 114px); line-height: 0.94; font-weight: 700; letter-spacing: -0.034em; text-transform: uppercase; }
 /* Each line is a window its words rise into when the entrance ends. */
@@ -20,7 +23,13 @@
 .hero-motion:hover { color: var(--ink); }
 .hero-motion svg { width: 18px; height: 18px; }
 
-/* The veins behind it all. They run on under the first row of cards and fade out. */
+/* The plant behind it all (hero-plant.tsx): the leaf in points of light, turning
+   slowly. It fades in once drawn, after the loading mark has gone, and fades out
+   toward the hero's foot. */
+.hero-plant { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; opacity: 0; mask-image: linear-gradient(180deg, #000 84%, transparent 100%); transition: opacity 1.6s ease; }
+.hero-plant[data-grown] { opacity: 1; }
+
+/* Or the veins behind it all (hero-field.tsx). They run on under the first row of cards and fade out. */
 .hero-field { position: absolute; inset: 0 0 -260px; z-index: -1; overflow: hidden; pointer-events: none; }
 .hero-field svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Darker toward the headline and the foot, so type always sits on a quiet ground. */
@@ -50,7 +59,7 @@
   20%, 100% { stroke: var(--ink); stroke-opacity: 0.3; }
 }
 .hero[data-paused] .hero-lights path, .hero[data-paused] .hero-drops * { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .hero-lights { display: none; } .hero-motion { display: none; } }
+@media (prefers-reduced-motion: reduce) { .hero-lights { display: none; } .hero-motion { display: none; } .hero-plant { transition: none; } }
 
 /* The page arrives when the loading mark leaves: the headline rises line by line,
    the statement follows. On a visit without the mark nothing moves. */
@@ -64,6 +73,7 @@ html[data-kiasa-intro] .hero-aside > * { opacity: 0; transform: translateY(18px)
 
 @media (max-width: 1023px) {
   .hero { padding-top: calc(var(--header) + 44px); }
+  .hero[data-background="plant"] { padding-top: calc(var(--header) + clamp(170px, 44vw, 320px)); }
   .hero-inner { grid-template-columns: minmax(0, 1fr); row-gap: 36px; }
   .hero-title { font-size: clamp(34px, 11vw, 96px); }
   .hero-line + .hero-line { padding-left: 0.9em; }

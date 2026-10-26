@@ -15,7 +15,7 @@ drawing are KIASA's own.
 | Accenture's homepage | KIASA's homepage | Notes |
 | --- | --- | --- |
 | Header: logo, four items (three open a panel of links), search, country | Header: leaf and name, **What we do**, **What we think**, **Who we are**, **Careers**, search, region | Same layout and the same panel structure: a title, then groups of links. On phones the navigation becomes one menu. |
-| Hero: a two-line headline in capitals with the second line set in; a short statement and one link beside it; a moving dark background with a pause button | **Where change takes root**; "Grown, not bolted on"; **See what we do**; the veins of a leaf, shaded like a curved blade (a bright ridge, greener outer lines, a flank in shadow) and rippling gently as in a light wind, with small green lights travelling along them | The full stop of the headline is a drop of dew. The lights turn the drops on their veins blue as they pass, as in the loading mark. |
+| Hero: a two-line headline in capitals with the second line set in; a short statement and one link beside it; behind them a plant drawn in points of light, turning slowly, and a pause button | **Where change takes root**; "Grown, not bolted on"; **See what we do**; the KIASA plant in points of light, turning slowly on a low mound of soil, seen from a little above. The headline and its statement sit below the plant, so no text covers it. | The full stop of the headline is a drop of dew. The logo shows the plant from straight above, so the plant is built that way: the drawing laid flat, with only height added (each leaf rises from the heart, arches and dips toward its tip; the bud stands up as a sprout, curled a little like a young leaf). The camera looks down on it as it turns, like a plant on a turntable, so it is always the leaves' upper faces that show and the drawing never has to show a back; from straight above, the points are exactly the drawing. The leaves are filled with a deep emerald that glows toward luminous jade at their borders, and a slow glow passes out from the heart along them; their lines stay in the pale ink. The sprout is the brightest thing, in a fresh green with a soft glow. Each dew drop holds still where the logo has it, as dew does, sitting on top of its leaf, flat where it rests and a little smaller than the ring the logo draws: it is drawn first into depth, so nothing behind it shows through. It has no light or colour of its own: through it the leaf's glow shows; toward its soft edge, where the leaf still shows faintly through, it gives back a slight blue of sky; and it gives back the sun, a small warm-white glint on the side toward the light. The sun holds still while the plant turns, so the glints travel over the drops. `hero.background` in `site.ts` brings back the earlier background: the veins of a leaf, shaded like a curved blade and rippling in a light wind, with small green lights travelling along them. |
 | Eight cards in two rows: announcement, perspectives, research reports | Eight cards: one announcement, two perspectives, four research reports, one case study | A card opens a panel with its summary and a link, as Accenture's cards expand. |
 | A quotation from the chief executive beside a portrait | A quotation from the managing partner beside a photograph | A photograph of a leaf stands in until there is a portrait. |
 | Client spotlight: a film, and four client stories with "Explore" | Client spotlight: the film series "Grown with KIASA", and four client stories | |
@@ -156,7 +156,7 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 | `src/content/site.ts`, `src/content/pages.ts` | The sample content, and the list of pages built from it (also what Search looks through). |
 | `src/components/site/shell.tsx` | Header, content, footer: what every page shares. |
 | `src/components/site/header.tsx` | The header and its panels: navigation, search, region, and the menu on phones. |
-| `src/components/site/hero.tsx`, `hero-field.tsx`, `motion-toggle.tsx` | The hero, its background of veins and lights (plain SVG; the lights move by CSS, the veins ripple by a few lines of script), and the pause button. |
+| `src/components/site/hero.tsx`, `hero-plant.tsx`, `plant-cloud.ts`, `hero-field.tsx`, `motion-toggle.tsx` | The hero; its turning plant (the points built from the logo's drawing, laid flat and given height, in `plant-cloud.ts`; drawn with WebGL in two passes a frame, the drops first into depth so they hide what is behind them, one turn in 40 seconds, after the loading mark has gone; without WebGL the hero is simply dark); the earlier background of veins and lights (plain SVG), shown instead when `hero.background` is `"veins"`; and the pause button. |
 | `src/components/site/featured.tsx`, `story-grid.tsx`, `plates.tsx` | The eight cards (each a link to its page), and the nine line drawings used as patterns. |
 | `src/components/site/voice.tsx`, `spotlight.tsx`, `recognition.tsx`, `careers.tsx`, `news.tsx`, `news-rail.tsx`, `footer.tsx` | The remaining sections. |
 | `src/components/site/brand.tsx`, `icons.tsx`, `cta.tsx` | The leaf and the lockup, the icons, the arrow link. |
@@ -164,9 +164,9 @@ photography when there is some; the people in `studio.jpg` are not KIASA staff.
 
 Most of the page is rendered on the server and needs no script. Script is used
 only where something has to respond: the header's panels and search, the news
-row, the pause button, the open roles' search and filters, and the forms (which
-are not connected yet, and say so when sent). Without JavaScript the whole
-page is still readable.
+row, the hero's turning plant and its pause button, the open roles' search and
+filters, and the forms (which are not connected yet, and say so when sent).
+Without JavaScript the whole page is still readable.
 
 Motion follows three rules. It stops for visitors who ask for reduced motion.
 Anything that moves by itself for more than a moment can be paused. Nothing

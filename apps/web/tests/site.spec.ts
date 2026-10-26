@@ -108,7 +108,26 @@ test.describe("homepage", () => {
     await expect.poll(position).toBeGreaterThan(100);
   });
 
+  test("the leaf turns in points of light, and holds still while paused", async ({ page }) => {
+    test.skip(hero.background !== "plant", "The hero shows the veins");
+    await open(page);
+    const plant = page.locator(".hero-plant[data-grown]");
+    await expect(plant).toHaveCSS("opacity", "1");
+    const first = await plant.screenshot();
+    await expect.poll(async () => first.equals(await plant.screenshot())).toBe(false);
+    const toggle = page.getByRole("button", { name: "Pause background motion" });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(100);
+    const held = await plant.screenshot();
+    await page.waitForTimeout(400);
+    expect((await plant.screenshot()).equals(held)).toBe(true);
+    await toggle.click();
+    await expect.poll(async () => held.equals(await plant.screenshot())).toBe(false);
+  });
+
   test("the hero's moving lights can be paused", async ({ page }) => {
+    test.skip(hero.background !== "veins", "The hero shows the turning plant");
     await open(page);
     const light = page.locator(".hero-lights path").first();
     await expect(light).toHaveCSS("animation-play-state", "running");
@@ -121,6 +140,7 @@ test.describe("homepage", () => {
   });
 
   test("the leaf is shaded like a curved blade: a bright ridge, greener outer lines, a shaded flank", async ({ page }) => {
+    test.skip(hero.background !== "veins", "The hero shows the turning plant");
     await open(page);
     const look = (index: number) => page.locator(".hero-veins path").nth(index).evaluate(node => {
       const style = getComputedStyle(node);
@@ -140,6 +160,7 @@ test.describe("homepage", () => {
   });
 
   test("the veins ripple gently, and hold still while paused", async ({ page }) => {
+    test.skip(hero.background !== "veins", "The hero shows the turning plant");
     await open(page);
     const vein = page.locator(".hero-veins path").nth(13);
     const still = await vein.getAttribute("d");
@@ -155,10 +176,13 @@ test.describe("homepage", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page);
     await expect(page.locator(".hero-lights")).toBeHidden();
-    const vein = page.locator(".hero-veins path").nth(13);
-    const still = await vein.getAttribute("d");
+    // The plant as pictured, or the shape of one of the veins.
+    const background = () => hero.background === "plant"
+      ? page.locator(".hero-plant[data-grown]").screenshot()
+      : page.locator(".hero-veins path").nth(13).getAttribute("d");
+    const still = await background();
     await page.waitForTimeout(400);
-    expect(await vein.getAttribute("d")).toBe(still);
+    expect(await background()).toEqual(still);
     await expect(page.getByRole("button", { name: "Pause background motion" })).toBeHidden();
     await expect(page.getByRole("button", { name: "Pause the news" })).toBeHidden();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

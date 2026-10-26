@@ -2,14 +2,16 @@ import Link from "next/link";
 import { hero } from "@/content/site";
 import { CtaContent } from "./cta";
 import { HeroField } from "./hero-field";
+import { HeroPlant } from "./hero-plant";
 import { MotionToggle } from "./motion-toggle";
 
 /** The opening: a two-line headline with the second line set in, a short
- * statement and one call to action beside it, over the veins of a leaf. */
+ * statement and one call to action beside it, over the leaf turning in points
+ * of light (or the veins of a leaf; see `hero.background`). */
 export function Hero() {
   const [first, second] = hero.headline;
-  return <section className="hero" aria-labelledby="hero-title">
-    <HeroField />
+  return <section className="hero" aria-labelledby="hero-title" data-background={hero.background}>
+    {hero.background === "plant" ? <HeroPlant /> : <HeroField />}
     <div className="hero-inner wrap wrap-wide">
       <h1 id="hero-title" className="hero-title">
         <span className="hero-line"><span>{first}</span></span>{" "}
