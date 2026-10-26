@@ -154,6 +154,9 @@ export const hero = {
   kicker: "Grown, not bolted on",
   body: "Most technology programs fail quietly, after the launch. KIASA designs, builds and runs digital systems alongside the people who will own them, so the change is still working years later.",
   cta: { label: "See what we do", href: "/what-we-do" },
+  /** What moves behind the headline: the leaf turning in points of light
+   * (hero-plant.tsx), or the veins of a giant leaf rippling (hero-field.tsx). */
+  background: "plant" as "plant" | "veins",
 };
 
 export type StoryKind = "Announcement" | "Perspective" | "Research report" | "Case study";
