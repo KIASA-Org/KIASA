@@ -436,6 +436,50 @@ own, changeable under Plans).
   word on the team's private channel tells every page when the leaderboard has
   moved.
 
+### Meetings (voice and video)
+
+KIASA's own calls, in its own window (`/meet/<id>`), for the people of a chat.
+Only admins organize: the camera button in a group or one-to-one chat's bar
+starts a meeting now (everyone in the chat gets its card, their chat alert, and
+a ringing on an open chat) or schedules one (its card waits in the chat, with
+Start now and Call off for admins). Members ask to join from the card or the
+ringing; an admin in the meeting admits them or turns them away (a box at the
+top right, with a soft ping, and the people panel's "Waiting to join"). Someone
+let in may leave and come back without asking again. Only the site's server
+records who is let in (`meeting_admissions`), after checking an admin, and the
+browsers in a meeting connect only to admins and people let in.
+
+- **In the meeting**: a waiting screen (how you look, microphone and camera,
+  who is in), then everyone's faces sharing the window, the speaker outlined in
+  leaf, mute, camera off, screen sharing (shown large, the faces beside it),
+  raised hands, the people in it and those not yet in, and for admins, Record
+  and End for everyone.
+- **Calls go straight between browsers** (WebRTC, one connection per pair):
+  best for up to about six people on video. Browsers find each other on the
+  meeting's private live channel (`meet:<id>`, members of its chat only); each
+  waits until it has found its own addresses and sends them inside its offer or
+  answer, and every message goes in order, sent again when the live connection
+  says it came too fast. The voice comes first: its sending is marked high
+  priority (the pictures give way while a new connection is still finding how
+  much it can carry), each side asks for Opus at up to 64 kbit/s with lost
+  pieces made up, and the microphone is tuned for speech. A few strict networks let no direct call through: set
+  a relay (TURN) in Vercel as `MEETING_TURN_URLS` (comma-separated),
+  `MEETING_TURN_USERNAME` and `MEETING_TURN_CREDENTIAL`, and calls use it.
+- **Recording stays on the admin's computer**: the meeting as shown, with
+  everyone's voices, is written as a WebM video to a file the admin chooses
+  (Chrome and Edge; other browsers download it at the end). Nothing is uploaded;
+  everyone in the meeting sees that it is being recorded. Chrome keeps the file
+  in a ".crswap" beside it until the recording stops; the file appears then.
+- **By the database** (`supabase/migrations/20261027120000_meetings.sql`): only
+  the site's server writes meetings, after checking an admin; a chat's members
+  read its meetings and join its channel; no one else.
+
+To test it on this computer: after the chat's steps, `npx supabase migration up
+--local`, serve the site against the local copy on port 3002, and run `npm run
+meet:local:e2e` (three browsers with Chrome's made-up camera and microphone
+calling each other; screen sharing, recording, ending, scheduling, and the
+database's rules).
+
 ### Top managers and badges
 
 On the admin page, each approved person has a **Role**: Member or Top manager.
@@ -454,6 +498,94 @@ the local copy (`npx supabase migration up --local`), `npm run jobs:local:seed`
 (a made-up month: four more members beside Ana and Ben, thirty days of links
 and applications, interviews, jobs won, pay, plans, résumés), serve the site
 against the local copy on port 3002, and run `npm run jobs:local:e2e`.
+
+### Teams, and who may message whom
+
+The admin makes teams on **Admin → Teams** (`/admin/teams`): a name and one of
+nine colours, which make the team's shield (its first letter on its colour).
+The admin gives a team to a top manager, who leads it and wears its shield with
+a gold rim, and puts each approved person in one team (there, or in the Team
+column on the Users page). Everyone in a team wears its shield on their photo,
+live, everywhere (`supabase/migrations/20261027180000_teams.sql`).
+
+In Chat, the database decides who may message whom
+(`supabase/migrations/20261027210000_team_chats.sql`; the page shows the same
+rule from `src/lib/teams/rules.ts` before anyone tries):
+
+- KIASA's admins message anyone, and anyone may message them.
+- People in one team message each other freely, its manager included.
+- Anyone else needs the admin's approval: another team's people, people in no
+  team yet, and one top manager and another. Choosing such a person opens a
+  warning saying why, and **Ask the admin**; the request arrives as a card in
+  the admins' **Contact requests** chat, to approve or decline there. Both
+  people hear of it in their chat with KIASA. An old one-to-one chat across
+  teams can still be read, but its box to write in asks the admin instead.
+- A team's manager makes groups for their team (New chat → New group), of its
+  people only, and adds its people to them. They and the admin rename a group
+  and change its photo (the group's info → the pencil). Someone who leaves the
+  team leaves its groups, and the group is told.
+- The admin finds every group and one-to-one chat they are not in under
+  ☰ → **All chats**, and reads them live, unseen: they are not among its
+  members, nothing is marked read, there is no "typing…", and they cannot
+  write, react or pin there. Renaming a group they are not in tells its members
+  "The group is now called …", without the admin's name. The sign-up terms say
+  that KIASA's admins may review chats and join meetings.
+- Everyone sees every group under **Other groups** in their chat list, by its
+  name, photo, team and how many are in it, never what is said there or who
+  (`supabase/migrations/20261027230000_group_directory.sql`). The admin has
+  every group in their list instead, under **Every group · read unseen**, to
+  open and read. Both lists follow live as groups are made, renamed or
+  changed (a word on the private channel `kiasa:groups`,
+  `supabase/migrations/20261028170000_group_signals.sql`).
+- Beside the conversation, as in Discord, a **Members** list: everyone by
+  team (KIASA's admins first, each team with its shield and its manager on
+  top, then those in no team), how many in each, online people first and the
+  others dimmed; in a group, only its members. It is a column of its own on
+  wide screens, and opens over the conversation (the people button) on
+  narrower ones.
+
+To test it on this computer, after the chat's steps: `npx supabase migration
+up --local`, `npm run chat:local:seed` (it makes Dia and Eli too), serve the
+site against the local copy on port 3002, and run `npm run teams:local:e2e`
+(Sales led by Ben with Ana, Platform led by Eli with Dia: warnings, a request
+approved, a team group renamed with a photo, the admin reading unseen, the
+database's refusals, and leaving a team). `npm run chat:local:e2e` puts Ana
+and Ben in one team first, so they may message each other.
+
+### Simulated members
+
+**Admin → Simulated** (`/admin/simulated`) makes accounts that fill KIASA while it
+is built and tested (`supabase/migrations/20261028090000_simulated_members.sql`).
+**Add them** makes up to 100 at a time, each with a made-up name and an address
+at members.kiasa.tech that no one owns; each asks for an account as anyone
+does, and its request reaches the admins' chat. On the page the admin approves
+them, puts them in teams, renames them, changes their photos, and sets their
+working hours, days and pace (120–150% of their plan by default), one by one or
+for everyone chosen; pauses, resumes and deletes them. Their hours follow the
+team's time zone; they show online while at work. They never write, and no one
+can message them one to one; a team's manager (or the admin) can put them in a
+group (`supabase/migrations/20261028150000_sims_in_groups.sql`). There, those
+who do not see them see neither them nor their number, and no notice names them.
+
+Only KIASA's admins, and the **testers** an admin ticks at the foot of the page,
+see them. To everyone else they do not exist: not beside the chat, not in a
+team's count, badge or photo, not in Jobs' team, leaderboard or a link's count
+(the database's rules, `visible()`, and the server's `hiddenFromViewer`).
+
+At work (`supabase/migrations/20261028120000_sims_work.sql`): every five
+minutes (Supabase's scheduler, pg_cron, job `kiasa-sims-work`), each one at
+work now goes through its daily plan (its latest daily plan, set on the Plans
+page or for many at once with **Set plan**; otherwise the team's goal of 100)
+at a pace for the day within its range, spread over its hours, a little ahead
+or behind by the quarter hour. It applies only to the day's real job links it
+has not applied to yet: with too few links it stops there, and with none it
+does nothing. Interviews and offers are never made up. Their applications
+count hour by hour in Jobs (Live, the leaderboard) for those who see them. The
+page shows each one's day ("16 of 29"), and **Work a round now** runs a round
+at once.
+
+To test it on this computer: run the file on the local copy, serve the site
+against it on port 3002, and run `npm run sims:local:e2e`.
 
 ## Connecting accounts
 
@@ -476,7 +608,16 @@ Once, in this order:
    `supabase/migrations/20261026234500_chat_reopen.sql` (a deleted chat back
    in the list when opened again), then
    `supabase/migrations/20261026235000_jobs.sql` (KIASA Jobs), then
-   `supabase/migrations/20261027090000_top_managers.sql` (top managers).
+   `supabase/migrations/20261027090000_top_managers.sql` (top managers), then
+   `supabase/migrations/20261027120000_meetings.sql` (meetings), then
+   `supabase/migrations/20261027150000_meeting_admissions.sql` (letting people in), then
+   `supabase/migrations/20261027180000_teams.sql` (teams and their shields), then
+   `supabase/migrations/20261027210000_team_chats.sql` (who may message whom, team groups, the admin reading unseen), then
+   `supabase/migrations/20261027230000_group_directory.sql` (every group by name and size), then
+   `supabase/migrations/20261028090000_simulated_members.sql` (simulated members and testers), then
+   `supabase/migrations/20261028120000_sims_work.sql` (their daily work, every five minutes), then
+   `supabase/migrations/20261028150000_sims_in_groups.sql` (simulated members in groups), then
+   `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

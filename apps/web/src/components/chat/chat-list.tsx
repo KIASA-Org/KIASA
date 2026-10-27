@@ -2,29 +2,42 @@
 
 import { useCallback, useState, type MouseEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ChatMe, ChatMember, ChatPerson, ChatSummary } from "@/lib/chat/types";
+import { photoUrl } from "@/lib/accounts/viewer";
+import type { ChatMe, ChatMember, ChatPerson, ChatSummary, GroupEntry } from "@/lib/chat/types";
+import type { Reach } from "@/lib/teams/rules";
 import { Avatar } from "../site/avatar";
-import { Archive, ArrowLeft, BellOff, Bookmark, Check, Gear, Menu as MenuIcon, Pencil, People, Pin, Search, Ticks } from "../site/icons";
+import { Archive, ArrowLeft, BellOff, Bookmark, Check, Eye, Gear, Menu as MenuIcon, Pencil, People, Pin, Search, Ticks } from "../site/icons";
+import { useRanks } from "../site/ranks";
 import { chatTitle, findable, initialsOf, shortWhen, useInBrowser } from "./chat-format";
 import { Menu, useLongPress, type MenuItem, type MenuPlace } from "./chat-menu";
 import { ChatPicker } from "./chat-picker";
 import { AlertsPrompt, EditProfile, SettingsPanel } from "./chat-settings";
 import type { ChatDraft } from "./chat-state";
 
-type View = "chats" | "archived" | "settings" | "profile";
+type View = "chats" | "archived" | "all" | "settings" | "profile";
 type OpenMenu = { at: MenuPlace; items: MenuItem[]; label: string };
 
 /** The chat list: every chat this person is in, pinned ones first, then the
  * newest, each with its last message, when, and how many are unread. A search
  * narrows it; new chats start here. Archived chats sit apart, under one row.
  * The ☰ menu leads to Saved Messages, contacts, the archive and Settings, which
- * open in the list's place. */
-export function ChatList({ me, chats, members, people, online, active, live, supabase, realtime, photoOf, chatMenu, onOpen, onMade, onPerson, onSaved }: {
+ * open in the list's place. An admin also finds every other chat there, to
+ * read unseen ("All chats"); a team's manager makes groups for their team. */
+export function ChatList({ me, chats, members, people, online, active, live, supabase, realtime, photoOf, groupPhoto, chatMenu, lead, reach, watched, onWatch, directory,
+  onOpen, onMade, onPerson, onAsk, onSaved }: {
   me: ChatMe; chats: ChatSummary[]; members: Record<string, ChatMember[]>; people: ChatPerson[]; online: Set<string>;
   active: string | null; live: "connecting" | "live" | "paused"; supabase: SupabaseClient; realtime: { url: string; key: string };
-  photoOf: (person: string | null | undefined) => string | null; chatMenu: (chat: ChatSummary) => MenuItem[];
-  onOpen: (chatId: string) => void; onMade: (chatId: string, draft?: ChatDraft) => void; onPerson: (person: string) => void; onSaved: () => void;
+  photoOf: (person: string | null | undefined) => string | null; groupPhoto: (chat: ChatSummary) => string | null; chatMenu: (chat: ChatSummary) => MenuItem[];
+  /** The team this person leads, if they manage one. */
+  lead: string | null; reach: (person: string) => Reach;
+  watched: ChatSummary[] | null; onWatch: () => void;
+  /** Every group, by name and size: those this person is not in are listed under their chats. */
+  directory: GroupEntry[];
+  onOpen: (chatId: string) => void; onMade: (chatId: string, draft?: ChatDraft) => void; onPerson: (person: string) => void; onAsk: (person: string) => void; onSaved: () => void;
 }) {
+  const ranks = useRanks();
+  // A team's manager makes groups of their own team's people only.
+  const team = lead ? people.filter(person => ranks.placed?.[person.id] === lead).map(person => person.id) : undefined;
   const [query, setQuery] = useState("");
   const [picking, setPicking] = useState<"direct" | "group" | "contacts" | null>(null);
   const [view, setView] = useState<View>("chats");
@@ -40,15 +53,22 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
   </aside>;
 
   const archived = chats.filter(chat => chat.archived);
-  const inView = view === "archived" ? archived : chats.filter(chat => !chat.archived);
+  const inView = view === "archived" ? archived : view === "all" ? watched ?? [] : chats.filter(chat => !chat.archived);
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = inView.filter(chat => words.every(word => chatTitle(chat, members[chat.id] ?? [], me).toLowerCase().includes(word)));
   // Searching finds people too, as in Telegram: anyone one may write to whose
   // chat is not among the results (one deleted from the list, or none yet).
-  const found = view === "chats" && words.length ? people.filter(person => person.id !== me.id && findable(person, words)
+  const found = view === "chats" && words.length ? people.filter(person => person.id !== me.id && !person.hours && findable(person, words)
     && !shown.some(chat => chat.kind === "direct" && (members[chat.id] ?? []).some(member => member.user_id === person.id))) : [];
   const directWith = (person: string) => chats.find(chat => chat.kind === "direct" && (members[chat.id] ?? []).some(member => member.user_id === person))?.id;
   const archivedUnread = archived.reduce((sum, chat) => sum + chat.unread, 0);
+  // For an admin: every group they are not in, in the list itself, to read unseen.
+  const everyGroup = view === "chats" && me.admin ? (watched ?? []).filter(chat => chat.kind === "group"
+    && words.every(word => chatTitle(chat, members[chat.id] ?? [], me).toLowerCase().includes(word))) : [];
+  // Groups one is not in, by name and size only (an admin reads them under All chats).
+  const otherGroups = view === "chats" && !me.admin ? directory.filter(group => !chats.some(chat => chat.id === group.id)
+    && words.every(word => (group.title ?? "").toLowerCase().includes(word))) : [];
+  const teamName = (id: string | null) => ranks.teams?.find(team => team.id === id)?.name;
 
   const mainMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -57,12 +77,13 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
         { label: "Saved Messages", icon: <Bookmark />, onSelect: onSaved },
         { label: "Contacts", icon: <People />, onSelect: () => setPicking("contacts") },
         ...(archived.length ? [{ label: `Archived chats (${archived.length})`, icon: <Archive />, onSelect: () => setView("archived") }] : []),
+        ...(me.admin ? [{ label: "All chats", icon: <Eye />, onSelect: () => { onWatch(); setView("all"); } }] : []),
         { label: "Settings", icon: <Gear />, onSelect: () => setView("settings") },
       ],
     });
   };
   const newChat = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!me.admin) { setPicking("direct"); return; }
+    if (!me.admin && !lead) { setPicking("direct"); return; }
     const box = event.currentTarget.getBoundingClientRect();
     setMenu({
       at: { x: box.right, y: box.top - 8, end: true }, label: "New chat", items: [
@@ -74,10 +95,10 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
 
   return <aside className="chat-list" aria-label="Chats">
     <div className="chat-list-head">
-      {view === "archived"
+      {view === "archived" || view === "all"
         ? <div className="chat-list-top">
           <button type="button" className="chat-icon" aria-label="Back to chats" onClick={() => setView("chats")}><ArrowLeft /></button>
-          <p className="chat-panel-title">Archived chats</p>
+          <p className="chat-panel-title">{view === "all" ? "All chats" : "Archived chats"}</p>
         </div>
         : <div className="chat-list-top">
           <button type="button" className="chat-icon" aria-label="Menu" aria-haspopup="menu" onClick={mainMenu}><MenuIcon /></button>
@@ -87,17 +108,19 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
           </label>
         </div>}
       {view === "chats" && <AlertsPrompt />}
+      {view === "all" && <p className="chat-unseen-note"><Eye />Every group and chat you are not in. You read them unseen: no one in them can tell, and nothing you do here reaches them.</p>}
       {/* Said only while the chat is not live, as Telegram does. */}
       <p className="chat-live" role="status" data-state={live} title={live === "paused" ? "Checking every 30 seconds" : undefined}>
         <span aria-hidden="true" />{live === "live" ? "Live" : live === "connecting" ? "Connecting…" : "Reconnecting…"}
       </p>
     </div>
     {/* A new chat: straight to choosing someone, or for admins, a message or a group. */}
-    {view === "chats" && <button type="button" className="chat-new" aria-label={me.admin ? "New chat" : "New message"} title={me.admin ? "New chat" : "New message"}
-      aria-haspopup={me.admin ? "menu" : undefined} onClick={newChat}><Pencil /></button>}
+    {view === "chats" && <button type="button" className="chat-new" aria-label={me.admin || lead ? "New chat" : "New message"} title={me.admin || lead ? "New chat" : "New message"}
+      aria-haspopup={me.admin || lead ? "menu" : undefined} onClick={newChat}><Pencil /></button>}
 
     {picking && <ChatPicker mode={picking === "contacts" ? "direct" : picking} heading={picking === "contacts" ? "Contacts" : undefined}
-      me={me} people={people} supabase={supabase} directWith={directWith} onClose={() => setPicking(null)}
+      me={me} people={people} supabase={supabase} directWith={directWith} reach={reach} onAsk={person => { setPicking(null); onAsk(person); }}
+      only={picking === "group" && !me.admin ? team : undefined} teamId={picking === "group" && !me.admin ? lead : null} onClose={() => setPicking(null)}
       onDone={(chatId, draft) => { setPicking(null); onMade(chatId, draft); }} />}
 
     <div className="chat-rows">
@@ -115,10 +138,32 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
           </button>
         </li>}
         {shown.map(chat => <Row key={chat.id} me={me} chat={chat} members={members[chat.id] ?? []} online={online} active={chat.id === active}
-          photoOf={photoOf} onOpen={onOpen} onMenu={at => setMenu({ at, items: chatMenu(chat), label: `Chat with ${chatTitle(chat, members[chat.id] ?? [], me)}` })} />)}
+          photoOf={photoOf} groupPhoto={groupPhoto(chat)} onOpen={onOpen}
+          onMenu={view === "all" ? () => {} : at => setMenu({ at, items: chatMenu(chat), label: `Chat with ${chatTitle(chat, members[chat.id] ?? [], me)}` })} />)}
       </ul>
-      {!shown.length && !found.length && <p className="chat-list-empty">{words.length ? `No ${view === "archived" ? "archived chat" : "chat or person"} called “${query.trim()}”.`
-        : view === "archived" ? "No archived chats." : "No chats yet. Start one with the pencil below."}</p>}
+      {!shown.length && !found.length && !everyGroup.length && !otherGroups.length && <p className="chat-list-empty">{words.length ? `No ${view === "archived" ? "archived chat" : "chat or person"} called “${query.trim()}”.`
+        : view === "archived" ? "No archived chats." : view === "all" ? (watched ? "No other chats yet." : "Loading…") : "No chats yet. Start one with the pencil below."}</p>}
+      {everyGroup.length > 0 && <>
+        <p className="chat-section chat-section-unseen" id="chat-every-group"><Eye />Every group · read unseen</p>
+        <ul aria-labelledby="chat-every-group">
+          {everyGroup.map(chat => <Row key={chat.id} me={me} chat={chat} members={members[chat.id] ?? []} online={online} active={chat.id === active}
+            photoOf={photoOf} groupPhoto={groupPhoto(chat)} onOpen={onOpen} onMenu={() => {}} />)}
+        </ul>
+      </>}
+      {otherGroups.length > 0 && <>
+        <p className="chat-section" id="chat-groups-title">Other groups</p>
+        <ul className="chat-found" aria-labelledby="chat-groups-title">
+          {otherGroups.map(group => <li key={group.id}>
+            <div className="chat-row chat-row-static" title="Only its members read it">
+              <Avatar initials={initialsOf(group.title ?? "Group")} photo={group.photo ? photoUrl(realtime.url, group.photo) : null} className="chat-avatar" kind="group" />
+              <span className="chat-row-text">
+                <span className="chat-row-top"><span className="chat-row-title">{group.title}</span></span>
+                <span className="chat-row-bottom"><span className="chat-row-preview">{group.members} {group.members === 1 ? "member" : "members"}{teamName(group.team_id) ? ` · ${teamName(group.team_id)}` : ""}</span></span>
+              </span>
+            </div>
+          </li>)}
+        </ul>
+      </>}
       {found.length > 0 && <>
         <p className="chat-section" id="chat-found-title">People</p>
         <ul className="chat-found" aria-labelledby="chat-found-title">
@@ -141,9 +186,9 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
 }
 
 /** One chat in the list. A right-click, or a long press, opens its menu. */
-function Row({ me, chat, members, online, active, photoOf, onOpen, onMenu }: {
+function Row({ me, chat, members, online, active, photoOf, groupPhoto, onOpen, onMenu }: {
   me: ChatMe; chat: ChatSummary; members: ChatMember[]; online: Set<string>; active: boolean;
-  photoOf: (person: string | null | undefined) => string | null; onOpen: (chatId: string) => void; onMenu: (at: MenuPlace) => void;
+  photoOf: (person: string | null | undefined) => string | null; groupPhoto: string | null; onOpen: (chatId: string) => void; onMenu: (at: MenuPlace) => void;
 }) {
   const inBrowser = useInBrowser();
   const press = useLongPress(onMenu);
@@ -161,7 +206,7 @@ function Row({ me, chat, members, online, active, photoOf, onOpen, onMenu }: {
       onContextMenu={event => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }); }} {...press}>
       {chat.kind === "saved"
         ? <span className="chat-avatar" data-kind="saved" aria-hidden="true"><Bookmark /></span>
-        : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind} who={other?.user_id}>
+        : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={other ? photoOf(other.user_id) : groupPhoto} className="chat-avatar" kind={chat.kind} who={other?.user_id}>
           {other && online.has(other.user_id) && <span className="chat-online" />}
         </Avatar>}
       <span className="chat-row-text">

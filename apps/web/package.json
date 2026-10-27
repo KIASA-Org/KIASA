@@ -14,7 +14,10 @@
     "chat:local:seed": "node scripts/chat-local/seed.cjs",
     "chat:local:e2e": "node scripts/chat-local/e2e.cjs",
     "jobs:local:seed": "node scripts/jobs-local/seed.cjs",
-    "jobs:local:e2e": "node scripts/jobs-local/e2e.cjs"
+    "jobs:local:e2e": "node scripts/jobs-local/e2e.cjs",
+    "meet:local:e2e": "node scripts/meet-local/e2e.cjs",
+    "teams:local:e2e": "node scripts/teams-local/e2e.cjs",
+    "sims:local:e2e": "node scripts/sims-local/e2e.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

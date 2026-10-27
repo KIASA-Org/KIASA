@@ -1,24 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { PostgrestError, RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
 import { photoUrl } from "@/lib/accounts/viewer";
-import { splitChatList, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatRow, type ChatSummary, type Message } from "@/lib/chat/types";
-import { Archive, Bell, BellOff, Check, Eraser, Leave, NewTab, Pin, Trash, Unread } from "../site/icons";
+import { splitChatList, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatRow, type ChatSummary, type ContactRequest, type GroupEntry, type Message } from "@/lib/chat/types";
+import { atWork } from "@/lib/sims/hours";
+import { reachOf, teamLedBy, whyAsk } from "@/lib/teams/rules";
+import { Archive, Bell, BellOff, Check, Eraser, Leave, NewTab, People, Pin, Trash, Unread } from "../site/icons";
+import { useRanks } from "../site/ranks";
 import { showTabBadge } from "../site/tab-badge";
+import { AskToMessage } from "./chat-ask";
 import { alertNewMessage, alertsWorker, messageAlert, useAlerts } from "./chat-alerts";
 import { Confirm } from "./chat-dialog";
 import { keepPreview } from "./chat-file";
 import { ForwardPicker } from "./chat-forward";
+import { Ringing } from "./chat-meeting";
 import { chatTitle, gist } from "./chat-format";
 import { ChatList } from "./chat-list";
+import { MembersPanel } from "./chat-members";
 import type { MenuItem } from "./chat-menu";
 import { chatReducer, directDraft, type ChatDraft, type ChatView } from "./chat-state";
 import { putFile, setUpload, uploadOf } from "./chat-upload";
 import { Conversation } from "./conversation";
 
 type Realtime = { url: string; key: string };
+/** The minute it is now, in the browser (0 while the page is drawn on the server), told again every half minute. */
+const minuteNow = {
+  subscribe: (changed: () => void) => { const timer = window.setInterval(changed, 30_000); return () => window.clearInterval(timer); },
+  read: () => Math.floor(Date.now() / 60_000),
+};
 type Typing = Record<string, Record<string, { name: string; until: number }>>;
 /** What the confirm dialog asks, and what it does once confirmed. */
 type Asking = { title: string; text: string; also?: { label: string; checked: boolean }; confirm: string; run: (everyone: boolean) => Promise<string | null> };
@@ -33,6 +44,8 @@ export type MessageActions = {
   bringIn: (message: Message) => Promise<boolean>;
   chatMenu: (chat: ChatSummary) => MenuItem[];
   canPin: (chat: ChatSummary) => boolean;
+  /** Asking the admin to let one message someone. */
+  ask: (person: string) => void;
   /** A file into a chat, with a caption: shown at once, with how far it has gone up. */
   sendFile: (chatId: string, file: File, options: { caption: string; replyTo: string | null; preview: string | null }) => void;
   /** Stopping a file on its way (or taking away one that failed), and sending one again. */
@@ -67,13 +80,16 @@ const reason = (error: PostgrestError | null) =>
  * muted, archived, marked unread, cleared and deleted; and there are Saved
  * Messages, a profile and "last seen". The database decides what each person
  * may do; this page asks it, and shows the answer at once. */
-export function ChatApp({ me, initialChats, initialMembers, people, realtime, initialChat }: {
+export function ChatApp({ me, initialChats, initialMembers, people, realtime, initialChat, initialRequests = [], initialDirectory = [], initialWatched = null }: {
   me: ChatMe; initialChats: ChatSummary[]; initialMembers: ChatMember[]; people: ChatPerson[]; realtime: Realtime; initialChat?: string | null;
+  initialRequests?: ContactRequest[]; initialDirectory?: GroupEntry[];
+  /** For an admin: every chat they are not in, to read unseen. */
+  initialWatched?: { chats: ChatSummary[]; members: ChatMember[] } | null;
 }) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
   const [state, dispatch] = useReducer(chatReducer, undefined, () => chatReducer(
     { chats: [], members: {}, messages: {}, more: {}, pinned: {} },
-    { type: "chats", chats: initialChats, members: initialMembers },
+    { type: "chats", chats: initialChats, members: [...initialMembers, ...(initialWatched?.members ?? [])] },
   ));
   // "Open in new tab": the chat asked for in the address is open from the start.
   const [active, setActive] = useState<string | null>(initialChat ?? null);
@@ -81,9 +97,25 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const [typing, setTyping] = useState<Typing>({});
   const [live, setLive] = useState<"connecting" | "live" | "paused">("connecting");
   const [signedIn, setSignedIn] = useState(false);
-  const [asking, setAsking] = useState<Asking | null>(null);
+  const [confirming, setAsking] = useState<Asking | null>(null);
   const [forwarding, setForwarding] = useState<{ ids: string[]; after?: () => void } | null>(null);
   const [notice, setNotice] = useState("");
+  // Requests to talk this person made or was asked about (for an admin, everyone's).
+  const [requests, setRequests] = useState(initialRequests);
+  // Someone one asked to message, who needs the admin's approval first.
+  const [askFor, setAskFor] = useState<string | null>(null);
+  // For an admin, once asked for: every chat they are not in, to read unseen.
+  const [watched, setWatched] = useState<ChatSummary[] | null>(initialWatched?.chats ?? null);
+  // Every group, by name and how many are in it (what is said in it stays with its members).
+  const [directory, setDirectory] = useState<GroupEntry[]>(initialDirectory);
+  // The members beside the conversation: as the screen's width decides (null), or shown or hidden by hand.
+  const [membersView, setMembersView] = useState<"shown" | "hidden" | null>(null);
+  const ranks = useRanks();
+  const reach = (person: string) => reachOf(me.id, person, ranks, requests);
+  const lead = teamLedBy(me.id, ranks);
+  // A meeting just started in one of my chats, ringing until I join or put it away.
+  const [ringing, setRinging] = useState<{ card: Extract<Attachment, { type: "meeting" }>; chatTitle: string } | null>(null);
+  const stopRinging = useCallback(() => setRinging(null), []);
   // Everyone's photo, by who they are: as the page came, then as people change them.
   const [photos, setPhotos] = useState<Record<string, string>>(() => Object.fromEntries(people.flatMap(person => (person.photo ? [[person.id, person.photo]] : []))));
   // When people seen going offline here left.
@@ -91,6 +123,12 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const photoOf = useCallback((id: string | null | undefined) => (id ? photos[id] ?? null : null), [photos]);
   const peopleNow = useMemo(() => people.map(person => ({ ...person, photo: photos[person.id] ?? null })), [people, photos]);
   const seenOf = useCallback((id: string) => left[id] ?? people.find(person => person.id === id)?.seen ?? null, [left, people]);
+  // Who is online: everyone here now, and the simulated members at work now (shown only to those who see them).
+  const minute = useSyncExternalStore(minuteNow.subscribe, minuteNow.read, () => 0);
+  const onlineNow = useMemo(() => {
+    const working = minute ? people.filter(person => person.hours && atWork(person.hours, minute * 60_000)) : [];
+    return working.length ? new Set([...online, ...working.map(person => person.id)]) : online;
+  }, [online, people, minute]);
   // The open chat and each chat's channel, for the live handlers, which outlive any one render.
   const activeRef = useRef<string | null>(initialChat ?? null);
   const channels = useRef(new Map<string, RealtimeChannel>());
@@ -100,11 +138,46 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const reading = useCallback((chatId: string) => activeRef.current === chatId && document.visibilityState === "visible" && document.hasFocus(), []);
 
   /** The chat list again, in one answer, after a chat appears that this page did not know of. */
+  const reloadDirectory = useCallback(async () => {
+    const { data, error } = await supabase.rpc("group_directory");
+    if (!error) setDirectory((data ?? []) as GroupEntry[]);
+  }, [supabase]);
   const reloadChats = useCallback(async () => {
     const { data, error } = await supabase.rpc("inbox");
     if (error) return null;
     dispatch({ type: "chats", ...splitChatList(data as ChatRow[] | null) });
+    void reloadDirectory();
     return data as ChatRow[] | null;
+  }, [supabase, reloadDirectory]);
+  /** The members beside the conversation, shown or hidden: on a wide screen they show until hidden. */
+  const toggleMembers = useCallback(() => setMembersView(current =>
+    (current ? current === "shown" : window.matchMedia("(min-width: 1200px)").matches) ? "hidden" : "shown"), []);
+
+  /** For an admin: every group and one-to-one chat they are not in, to read
+   * without it showing. Nothing they do there reaches anyone in it. */
+  const loadWatched = useCallback(async () => {
+    const { data, error } = await supabase.rpc("all_chats");
+    if (error) return setNotice(reason(error));
+    const { chats, members } = splitChatList(data as ChatRow[] | null);
+    dispatch({ type: "members", members });
+    setWatched(chats);
+  }, [supabase]);
+  const isWatched = (chatId: string) => !!watched?.some(chat => chat.id === chatId);
+
+  /** Groups changed somewhere: asked for again, a moment later, once for many changes at once. */
+  const groupsTimer = useRef<number | undefined>(undefined);
+  const groupsChanged = useEffectEvent(() => {
+    window.clearTimeout(groupsTimer.current);
+    groupsTimer.current = window.setTimeout(() => {
+      void reloadDirectory();
+      if (me.admin) void loadWatched();
+    }, 400);
+  });
+
+  /** The requests to talk again, after one is made or decided. */
+  const reloadRequests = useCallback(async () => {
+    const { data, error } = await supabase.from("contact_requests").select("id, from_user, to_user, status, asked_at").order("asked_at", { ascending: false }).limit(500);
+    if (!error) setRequests(data as ContactRequest[]);
   }, [supabase]);
 
   // A short word at the foot of the page, after something did not work.
@@ -124,11 +197,32 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
     const alert = (where: Pick<ChatSummary, "kind" | "title" | "muted">, members: ChatMember[]) => {
       if (fresh && !where.muted && message.sender_id !== me.id) void alertNewMessage(messageAlert(message, where, members, me, photoOf));
     };
-    if (chat) alert(chat, state.members[chat.id] ?? []);
-    else void reloadChats().then(rows => {
+    // A meeting starting now, called by someone else: it rings.
+    const card = message.attachment?.type === "meeting" ? message.attachment : null;
+    const ring = (where: ChatSummary, members: ChatMember[]) => {
+      if (fresh && card && message.kind === "notice" && card.status === "live" && card.by !== me.name && Date.now() - Date.parse(message.created_at) < 90_000) {
+        setRinging({ card, chatTitle: chatTitle(where, members, me) });
+      }
+    };
+    const elsewhere = () => void reloadChats().then(rows => {
       const found = rows?.find(row => row.id === message.chat_id);
-      if (found) alert(found, found.members ?? []);
+      if (found) { alert(found, found.members ?? []); ring(found, found.members ?? []); }
     });
+    if (chat) { alert(chat, state.members[chat.id] ?? []); ring(chat, state.members[chat.id] ?? []); }
+    else if (isWatched(message.chat_id)) {
+      // A chat the admin reads, unseen: no alert, no ringing; its row follows.
+      setWatched(list => list && [...list.map(entry => entry.id === message.chat_id && message.created_at >= entry.last_message_at ? {
+        ...entry, last_message_at: message.created_at, last_body: message.body, last_sender: message.sender_id, last_kind: message.kind,
+        last_file: message.attachment && !message.attachment.type ? message.attachment.name : null,
+      } : entry)].sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)));
+    } else if (me.admin) {
+      // An admin hears every chat's messages; only one of their own brings the list again.
+      void supabase.from("chat_members").select("chat_id").eq("chat_id", message.chat_id).eq("user_id", me.id).maybeSingle().then(({ data }) => {
+        if (data) { dispatch({ type: "message", message, me: me.id, reading: reading(message.chat_id) }); elsewhere(); }
+        else if (watched) void loadWatched();
+      });
+      return;
+    } else elsewhere();
     dispatch({ type: "message", message, me: me.id, reading: reading(message.chat_id) });
     if (message.sender_id) {
       const writer = message.sender_id;
@@ -145,7 +239,16 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
    * conversation (and the chat list's preview is asked for again). */
   const changed = useEffectEvent((message: Message) => {
     dispatch({ type: "changed", message: { ...message, provisional: undefined } });
-    if (message.deleted_at) void reloadChats();
+    if (message.deleted_at && state.chats.some(chat => chat.id === message.chat_id)) void reloadChats();
+  });
+
+  /** A chat's row changed: a group renamed, or its photo changed. Every new
+   * message moves its chat's time too, which the messages themselves bring. */
+  const retitled = useEffectEvent((row: { id?: string; title?: string | null; photo?: string | null }) => {
+    const known = state.chats.find(chat => chat.id === row.id) ?? watched?.find(chat => chat.id === row.id);
+    if (!row.id || !known || (known.title === (row.title ?? null) && (known.photo ?? null) === (row.photo ?? null))) return;
+    dispatch({ type: "chat", chatId: row.id, title: row.title ?? null, photo: row.photo ?? null });
+    setWatched(list => list && list.map(chat => chat.id === row.id ? { ...chat, title: row.title ?? null, photo: row.photo ?? null } : chat));
   });
 
   /** A straight copy the database has not confirmed in time: checked against
@@ -165,18 +268,24 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
    * person's own, read in another tab or on another device, and the count
    * here follows (the chat list again, as the database counts it). */
   const member = useEffectEvent((changed: ChatMember) => {
+    if (!state.members[changed.chat_id]) return;
     dispatch({ type: "member", member: changed });
     if (changed.user_id === me.id && (state.chats.find(chat => chat.id === changed.chat_id)?.unread ?? 0) > 0) void reloadChats();
   });
 
   const joined = useEffectEvent((member: ChatMember) => {
-    if (member.user_id !== me.id) return dispatch({ type: "member", member });
-    if (!state.chats.some(chat => chat.id === member.chat_id)) void reloadChats();
+    if (member.user_id !== me.id) return state.members[member.chat_id] ? dispatch({ type: "member", member }) : undefined;
+    if (!state.chats.some(chat => chat.id === member.chat_id)) {
+      void reloadChats();
+      // Added to a chat the admin was reading unseen: it is theirs now.
+      setWatched(list => list && list.filter(chat => chat.id !== member.chat_id));
+    }
   });
 
   /** Someone left a chat (or it was deleted): this person, and it goes from
    * their list; someone else, and they go from its members. */
   const gone = useEffectEvent((member: { chat_id?: string; user_id?: string }) => {
+    if (member.chat_id && member.user_id && isWatched(member.chat_id)) return dispatch({ type: "member-gone", chatId: member.chat_id, userId: member.user_id });
     if (!member.chat_id || !member.user_id || !state.chats.some(chat => chat.id === member.chat_id)) return;
     if (member.user_id !== me.id) return dispatch({ type: "member-gone", chatId: member.chat_id, userId: member.user_id });
     dispatch({ type: "leave", chatId: member.chat_id });
@@ -242,6 +351,8 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
         .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, payload => gone(payload.old as { chat_id?: string; user_id?: string }))
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_settings" }, payload => viewed(payload.new))
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_settings" }, payload => viewed(payload.new))
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chats" }, payload => retitled(payload.new))
+        .on("postgres_changes", { event: "*", schema: "public", table: "contact_requests" }, () => void reloadRequests())
         .on("postgres_changes", { event: "*", schema: "public", table: "avatars" }, payload => {
           if (payload.eventType === "DELETE") {
             const gonePhoto = (payload.old as { user_id?: string }).user_id;
@@ -256,14 +367,18 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
       presence
         .on("presence", { event: "sync" }, () => present(new Set(Object.keys(presence.presenceState()))))
         .subscribe(async status => { if (status === "SUBSCRIBED") await presence.track({ since: new Date().toISOString() }); });
-      opened.push(changes, presence);
+      // A group made, renamed or changed anywhere: the list of groups again (and, for an admin, every chat).
+      const groups = supabase.channel("kiasa:groups", { config: { private: true } })
+        .on("broadcast", { event: "changed" }, () => groupsChanged())
+        .subscribe();
+      opened.push(changes, presence, groups);
       setSignedIn(true);
     })().catch(() => { if (!stopped) setLive("paused"); });
     return () => {
       stopped = true;
       for (const channel of opened) supabase.removeChannel(channel);
     };
-  }, [supabase, me.id, realtime.url]);
+  }, [supabase, me.id, realtime.url, reloadRequests]);
 
   // Each chat's own channel, joined as chats appear and left as they go.
   const chatIds = state.chats.map(chat => chat.id).join(" ");
@@ -360,10 +475,10 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   useEffect(() => { if (alerts === "granted") void alertsWorker(); }, [alerts]);
 
   const markRead = useCallback(async (chatId: string) => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible" || !state.chats.some(chat => chat.id === chatId)) return;
     dispatch({ type: "read", chatId });
     await supabase.rpc("mark_chat_read", { chat: chatId });
-  }, [supabase]);
+  }, [supabase, state.chats]);
   const readActive = useCallback(() => activeRef.current ? markRead(activeRef.current) : Promise.resolve(), [markRead]);
 
   /** A chat's latest messages and its pinned ones, unless here already; then
@@ -445,11 +560,15 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const openPerson = useCallback(async (person: string) => {
     const known = state.chats.find(chat => chat.kind === "direct" && (state.members[chat.id] ?? []).some(member => member.user_id === person));
     if (known) return void open(known.id);
+    const them = people.find(entry => entry.id === person);
+    if (them?.hours) return setNotice(`${them.name.split(" ")[0]} is not taking messages.`);
+    if (reachOf(me.id, person, ranks, requests) !== "free") return setAskFor(person);
     const { data, error } = await supabase.rpc("open_direct", { other: person });
+    if (error?.hint === "ask") return setAskFor(person);
     if (error || !data) return setNotice(reason(error));
     const id = data as string;
     made(id, directDraft(id, me, { id: person, name: people.find(entry => entry.id === person)?.name ?? "" }));
-  }, [state.chats, state.members, supabase, open, made, me, people]);
+  }, [state.chats, state.members, supabase, open, made, me, people, ranks, requests]);
 
   const earlier = useCallback(async (chatId: string) => {
     const first = state.messages[chatId]?.[0];
@@ -724,31 +843,59 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   }, [markRead, setView, askClear, askDelete, runs]);
 
   const canPin = useCallback((chat: ChatSummary) => chat.kind === "direct" || chat.kind === "saved" || (chat.kind === "group" && runs(chat)), [runs]);
+  const writable = (chat: ChatSummary) => chat.kind !== "notices" && (chat.kind !== "direct"
+    || (state.members[chat.id] ?? []).every(member => member.user_id === me.id || reachOf(me.id, member.user_id, ranks, requests) === "free"));
   const forward = useCallback((messages: Message[], after?: () => void) => setForwarding({ ids: messages.map(message => message.id), after }), []);
   const actions: MessageActions = useMemo(() => ({
     react: (message, emoji) => void react(message, emoji),
     pin: (message, on) => void pin(message, on),
     forward, remove, copy, search, bringIn, chatMenu, canPin,
     sendFile: (chatId, file, options) => void sendFile(chatId, file, options), stopFile, retryFile,
+    ask: person => setAskFor(person),
   }), [react, pin, forward, remove, copy, search, bringIn, chatMenu, canPin, sendFile, stopFile, retryFile]);
+  // In a chat read unseen, nothing one does reaches anyone: only reading, copying and searching.
+  const unseen: MessageActions = useMemo(() => ({
+    ...actions, react: () => {}, pin: () => {}, forward: () => {}, remove: () => {}, canPin: () => false,
+    chatMenu: chat => [{ label: "Open in new tab", icon: <NewTab />, onSelect: () => window.open(`/chat?c=${chat.id}`, "_blank", "noopener") }],
+  }), [actions]);
 
-  const activeChat = state.chats.find(chat => chat.id === active) ?? null;
+  /** A group's photo, at its address. */
+  const groupPhoto = useCallback((chat: ChatSummary) => chat.kind === "group" && chat.photo ? photoUrl(realtime.url, chat.photo) : null, [realtime.url]);
+  /** Who may rename a group and change its photo: the admin, and its team's manager. */
+  const canEdit = (chat: ChatSummary) => chat.kind === "group" && (me.admin || (!!chat.team_id && chat.team_id === lead));
+  /** Who may add people to a group they are in: the admin, and its team's manager. */
+  const canAdd = (chat: ChatSummary) => chat.kind === "group" && (me.admin || (!!chat.team_id && chat.team_id === lead));
+
+  const watching = !state.chats.some(chat => chat.id === active) && !!watched?.some(chat => chat.id === active);
+  const activeChat = state.chats.find(chat => chat.id === active) ?? watched?.find(chat => chat.id === active) ?? null;
+  const asking = askFor ? { id: askFor, name: people.find(person => person.id === askFor)?.name ?? "them" } : null;
   const typists = activeChat ? Object.values(typing[activeChat.id] ?? {}).map(entry => entry.name.split(" ")[0]) : [];
-  return <div className="chat" data-open={activeChat ? "" : undefined}>
-    <ChatList me={me} chats={state.chats} members={state.members} people={peopleNow} online={online} active={active} live={live}
-      supabase={supabase} realtime={realtime} photoOf={photoOf} chatMenu={chatMenu}
-      onOpen={chatId => void open(chatId)} onMade={made} onPerson={person => void openPerson(person)} onSaved={() => void openSaved()} />
+  const inGroup = activeChat?.kind === "group" ? (state.members[activeChat.id] ?? []).map(member => member.user_id) : undefined;
+  return <div className="chat" data-open={activeChat ? "" : undefined} data-members={membersView ?? undefined}>
+    <ChatList me={me} chats={state.chats} members={state.members} people={peopleNow} online={onlineNow} active={active} live={live}
+      supabase={supabase} realtime={realtime} photoOf={photoOf} groupPhoto={groupPhoto} chatMenu={chatMenu} lead={lead} reach={reach}
+      watched={watched} onWatch={() => void loadWatched()} directory={directory}
+      onOpen={chatId => void open(chatId)} onMade={made} onPerson={person => void openPerson(person)} onAsk={setAskFor} onSaved={() => void openSaved()} />
     {activeChat
       ? <Conversation key={activeChat.id} me={me} chat={activeChat} members={state.members[activeChat.id] ?? []} people={peopleNow} photoOf={photoOf}
-        messages={state.messages[activeChat.id]} pinned={state.pinned[activeChat.id] ?? []} more={!!state.more[activeChat.id]} online={online} seenOf={seenOf}
-        supabase={supabase} typing={typists} actions={actions}
+        messages={state.messages[activeChat.id]} pinned={state.pinned[activeChat.id] ?? []} more={!!state.more[activeChat.id]} online={onlineNow} seenOf={seenOf}
+        supabase={supabase} typing={typists} actions={watching ? unseen : actions} watching={watching}
+        groupPhoto={groupPhoto(activeChat)} canEdit={canEdit(activeChat)} canAdd={!watching && canAdd(activeChat)} lead={lead}
+        reach={activeChat.kind === "direct" && !watching ? (state.members[activeChat.id] ?? []).map(member => member.user_id === me.id ? "free" : reach(member.user_id)).find(entry => entry !== "free") ?? "free" : "free"}
         onBack={() => void open(null)} onSend={send} onEdit={edit} onEarlier={() => earlier(activeChat.id)}
-        onRead={readActive} onTyping={() => say(activeChat.id, "typing", { user: me.id })} onPerson={person => void openPerson(person)} />
-      : <div className="chat-empty"><p>Choose a chat, or start one.</p></div>}
-    {asking && <Confirm title={asking.title} text={asking.text} also={asking.also} confirm={asking.confirm} onConfirm={asking.run} onClose={() => setAsking(null)} />}
-    {forwarding && <ForwardPicker me={me} chats={state.chats} members={state.members} count={forwarding.ids.length} photoOf={photoOf}
+        onRead={readActive} onTyping={() => say(activeChat.id, "typing", { user: me.id })} onPerson={person => void openPerson(person)} onMembers={toggleMembers} />
+      : <div className="chat-empty">
+        <button type="button" className="chat-icon chat-empty-members" aria-label="Members" title="Members" onClick={toggleMembers}><People /></button>
+        <p>Choose a chat, or start one.</p>
+      </div>}
+    <MembersPanel me={me} people={peopleNow} ids={inGroup} title={inGroup ? "In this group" : "Members"} online={onlineNow}
+      onPerson={person => void openPerson(person)} onClose={() => setMembersView("hidden")} />
+    {asking && <AskToMessage key={asking.id} person={asking} reach={reach(asking.id)} why={whyAsk(me.id, asking, ranks)} onAsked={text => { setNotice(text); void reloadRequests(); }} onClose={() => setAskFor(null)} />}
+    {confirming && <Confirm title={confirming.title} text={confirming.text} also={confirming.also} confirm={confirming.confirm} onConfirm={confirming.run} onClose={() => setAsking(null)} />}
+    {forwarding && <ForwardPicker me={me} chats={state.chats.filter(writable)} members={state.members} count={forwarding.ids.length} photoOf={photoOf} groupPhoto={groupPhoto}
       onPick={forwardTo} onClose={() => setForwarding(null)} />}
     {notice && <p className="chat-notice-bar" role="status">{notice}</p>}
+    {ringing && <Ringing key={ringing.card.id} card={ringing.card} chatTitle={ringing.chatTitle} onClose={stopRinging} />}
   </div>;
 }
 

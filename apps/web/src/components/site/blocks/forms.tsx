@@ -116,7 +116,7 @@ function SignUpForm() {
     {/* Left empty by people, who never see it; filled in by robots. */}
     <label className="b-trap" aria-hidden="true">Leave this empty<input name="website" tabIndex={-1} autoComplete="off" /></label>
     <label className="b-check"><input type="checkbox" name="digest" /><span>Send me the monthly research digest. I can change this in the Preference Center at any time.</span></label>
-    <label className="b-check"><input type="checkbox" name="terms" required /><span>I agree to the terms of use, and that KIASA may use these details as the privacy statement describes.</span></label>
+    <label className="b-check"><input type="checkbox" name="terms" required /><span>I agree to the terms of use, and that KIASA may use these details as the privacy statement describes. I understand that KIASA&apos;s admins may review chats and join meetings in KIASA&apos;s workspace.</span></label>
     {state.error && <p className="b-form-error" role="alert">{state.error}</p>}
     <Submit busy={busy}>{busy ? "Sending…" : "Send request"}</Submit>
   </form>;

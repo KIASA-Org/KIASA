@@ -37,6 +37,8 @@ export const Bell = icon(<path d="M9.5 19.5a2.75 2.75 0 0 0 5 0M6.5 9.5a5.5 5.5 
 export const Archive = icon(<path d="M4.5 5.5h15v3.5h-15zM5.5 9v9.5h13V9M10 12.5h4" />);
 export const Unread = icon(<><path d="M4.5 5.5h10M4.5 5.5v10.5H7v3.5l4.5-3.5h8v-5" /><circle cx="18.5" cy="6.5" r="2.25" /></>);
 export const Eraser = icon(<><circle cx="12" cy="12" r="8" /><path d="m6.5 17.5 11-11" /></>);
+/** An eye: reading unseen. */
+export const Eye = icon(<><path d="M2.75 12S6.25 5.75 12 5.75 21.25 12 21.25 12 17.75 18.25 12 18.25 2.75 12 2.75 12Z" /><circle cx="12" cy="12" r="2.75" /></>);
 export const Bookmark = icon(<path d="M6.5 4.5h11v15L12 15.5l-5.5 4v-15Z" />);
 export const People = icon(<><circle cx="9" cy="8.5" r="3.25" /><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0M15.5 5.5a3.25 3.25 0 0 1 0 6.25M17 14.5a5.5 5.5 0 0 1 3.5 5" /></>);
 export const Gear = icon(<><circle cx="12" cy="12" r="3" /><path d="M12 3.5v2.5M12 18v2.5M3.5 12H6M18 12h2.5M6 6l1.75 1.75M16.25 16.25 18 18M6 18l1.75-1.75M16.25 7.75 18 6" /></>);
@@ -49,3 +51,12 @@ export const Send = icon(<path d="M20 4 3.75 10.75l6.5 2.5L12.75 19.75 20 4ZM10.
 export const Info = icon(<><circle cx="12" cy="12" r="8" /><path d="M12 11v5M12 8h.01" /></>);
 export const Play = icon(<path d="M8.25 5.25v13.5L19.5 12 8.25 5.25Z" fill="currentColor" stroke="none" />);
 export const Pause = icon(<path d="M8.75 6v12m6.5-12v12" strokeWidth="2.4" strokeLinecap="butt" />);
+export const Video = icon(<><path d="M3.5 7h12v10h-12z" /><path d="m15.5 10.5 5-3v9l-5-3" /></>);
+export const VideoOff = icon(<><path d="M8 7h7.5v7.5M15.5 17h-12V7h1" /><path d="m15.5 10.5 5-3v9l-5-3M3.5 3.5l17 17" /></>);
+export const Mic = icon(<><path d="M9 6.5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0v-5Z" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></>);
+export const MicOff = icon(<><path d="M15 10V6.5a3 3 0 0 0-5.6-1.5M9 9v2.5a3 3 0 0 0 4.6 2.5" /><path d="M5.5 11.5a6.5 6.5 0 0 0 10.4 5.2M18.5 11.5c0 .9-.2 1.8-.5 2.6M12 18v2.5M4 4l16 16" /></>);
+export const Screen = icon(<><path d="M3.5 5h17v11h-17z" /><path d="M9 19.5h6M12 16v3.5M12 13V8.5m-2.25 2.25L12 8.5l2.25 2.25" /></>);
+export const Hand = icon(<path d="M8.5 11.5v-6a1.5 1.5 0 0 1 3 0v5m0-6.5a1.5 1.5 0 0 1 3 0v6.5m0-5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.6-2.2L4 14.6a1.5 1.5 0 0 1 2.3-1.9l2.2 2.3v-3.5" />);
+export const Record = icon(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" /></>);
+export const Calendar = icon(<><path d="M4.5 6h15v13.5h-15z" /><path d="M4.5 10h15M8.5 4v4M15.5 4v4" /></>);
+export const PhoneOff = icon(<path d="M4 14.5c4.5-4.2 11.5-4.2 16 0l-1.6 2.6-3.5-1.3v-2.3a10 10 0 0 0-5.8 0v2.3l-3.5 1.3L4 14.5Z" />);

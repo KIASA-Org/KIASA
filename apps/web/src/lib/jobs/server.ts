@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { currentViewer, publicSupabase, siteClient, visitorClient } from "@/lib/accounts/server";
+import { currentViewer, hiddenFromViewer, publicSupabase, siteClient, visitorClient } from "@/lib/accounts/server";
 import { photoUrl } from "@/lib/accounts/viewer";
 import type { BoardRow, Job, JobSettings, JobsMe, JobsStart, Plan, Resume, TeamPerson } from "./types";
 
@@ -16,12 +16,14 @@ export const jobsViewer = cache(async (): Promise<JobsMe | null> => {
 /** The team: every approved member, with who they are and their photo. */
 export async function jobsTeam(): Promise<TeamPerson[]> {
   const site = siteClient();
-  const [approved, avatars] = await Promise.all([
+  const [approved, avatars, hidden] = await Promise.all([
     site.from("profiles").select("id, name, organization").eq("status", "approved").order("name"),
     site.from("avatars").select("user_id, path"),
+    hiddenFromViewer(),
   ]);
   const photos = new Map(((avatars.data ?? []) as { user_id: string; path: string }[]).map(row => [row.user_id, photoUrl(publicSupabase.url, row.path)]));
   return ((approved.data ?? []) as { id: string; name: string; organization: string | null }[])
+    .filter(person => !hidden.has(person.id))
     .map(person => ({ id: person.id, name: person.name, detail: person.organization ?? "KIASA team", photo: photos.get(person.id) ?? null }));
 }
 

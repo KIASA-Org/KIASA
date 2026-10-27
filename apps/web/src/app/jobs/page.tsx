@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LeafMark } from "@/components/site/brand";
+import { AppBar } from "@/components/site/app-bar";
 import { RanksProvider } from "@/components/site/ranks";
-import { YourPhoto } from "@/components/site/your-photo";
 import { ChatWatch } from "@/components/chat/chat-watch";
 import { JobsApp } from "@/components/jobs/jobs-app";
-import { signOut } from "@/lib/accounts/actions";
 import { accountsLive, publicSupabase, ranks, signedIn } from "@/lib/accounts/server";
 import type { Ranks } from "@/lib/accounts/viewer";
 import { jobsStart, jobsViewer, pendingReports } from "@/lib/jobs/server";
@@ -45,29 +42,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
  * signed in, the way to the chat and to their account or the admin page).
  * `ranks`: who wears a badge on their photo. */
 function JobsFrame({ me, ranks, children }: { me?: JobsMe; ranks?: Ranks; children: React.ReactNode }) {
-  const home = me?.admin ? { href: "/admin", label: "Admin" } : { href: "/account", label: "Your account" };
   return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={me ? publicSupabase : undefined} me={me?.id}>
     <div className="site jobs-page">
     <a href="#main-content" className="skip-link">Skip to content</a>
-    <header className="practice-header admin-header jobs-bar">
-      <div className="admin-bar wrap wrap-wide">
-        <Link href="/" className="practice-lockup" aria-label="KIASA home">
-          <LeafMark className="practice-mark" weight={3.4} />
-          <span className="practice-divider" aria-hidden="true" />
-          <span className="practice-word">KIASA <span>Jobs</span></span>
-        </Link>
-        {me && <div className="admin-user">
-          <YourPhoto person={{ id: me.id, name: me.name }} photo={me.photo} realtime={publicSupabase} className="account-initials"
-            details="bar" role={me.admin ? "Admin" : "Team"}>
-            <Link href="/chat">Chat</Link>
-            <Link href={home.href}>{home.label}</Link>
-          </YourPhoto>
-          <Link href="/chat" className="account-button admin-exit">Chat</Link>
-          <Link href={home.href} className="account-button admin-exit">{home.label}</Link>
-          <form action={signOut}><button type="submit" className="account-button">Sign out</button></form>
-        </div>}
-      </div>
-    </header>
+    <div className="jobs-bar">
+      <AppBar area="jobs" person={me ? { id: me.id, name: me.name, detail: me.admin ? "Admin" : "Team", admin: me.admin, photo: me.photo } : { name: "KIASA", detail: "", admin: false }}
+        realtime={publicSupabase} live={!!me} />
+    </div>
     <main id="main-content" tabIndex={-1} className="jobs-main">{children}</main>
     {me && <ChatWatch me={me.id} realtime={publicSupabase} />}
     </div>

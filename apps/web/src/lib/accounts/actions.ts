@@ -87,16 +87,18 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   if (error || !data.user) return { error: "That email and password do not match an account." };
 
   const site = siteClient();
-  const [admin, profile, avatar, top] = await Promise.all([
+  const [admin, profile, avatar, top, team] = await Promise.all([
     site.from("admins").select("name").eq("email", email).maybeSingle(),
     site.from("profiles").select("name, status, decided_at, last_sign_in_at").eq("id", data.user.id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", data.user.id).maybeSingle(),
     site.from("top_managers").select("user_id").eq("user_id", data.user.id).maybeSingle(),
+    site.from("team_members").select("teams(name, color)").eq("user_id", data.user.id).maybeSingle(),
   ]);
+  const inTeam = team.data?.teams as { name: string; color: string } | null | undefined;
   const photo = avatar.data ? photoUrl(publicSupabase.url, avatar.data.path as string) : undefined;
   if (admin.data) {
     const name = admin.data.name as string;
-    await setBadge({ name, initials: initialsOf(name), href: "/admin", photo, rank: "owner" });
+    await setBadge({ name, initials: initialsOf(name), href: "/admin", photo, mark: { kind: "owner" } });
     redirect("/admin");
   }
   if (!profile.data) {
@@ -104,7 +106,10 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
     return { error: "That email and password do not match an account." };
   }
   const name = profile.data.name as string;
-  await setBadge({ name, initials: initialsOf(name), href: "/account", photo, rank: top.data ? "top" : undefined });
+  await setBadge({
+    name, initials: initialsOf(name), href: "/account", photo,
+    mark: inTeam ? { kind: "team", name: inTeam.name, color: inTeam.color, lead: !!top.data } : top.data ? { kind: "top" } : undefined,
+  });
   if (profile.data.status !== "approved") redirect("/account");
   const firstSinceApproval = !profile.data.last_sign_in_at || profile.data.last_sign_in_at < (profile.data.decided_at ?? "");
   await site.from("profiles").update({ last_sign_in_at: new Date().toISOString() }).eq("id", data.user.id);
@@ -128,7 +133,7 @@ export async function refreshBadge(): Promise<void> {
   if (!viewer || !name) return;
   await setBadge({
     name, initials: initialsOf(name), href: viewer.admin ? "/admin" : "/account", photo: viewer.photo ?? undefined,
-    rank: viewer.admin ? "owner" : viewer.top ? "top" : undefined,
+    mark: viewer.mark ?? undefined,
   });
 }
 

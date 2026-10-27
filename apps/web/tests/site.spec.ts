@@ -369,7 +369,8 @@ test.describe("every page", () => {
   test("every link on the homepage has a page behind it", async ({ page, request }, info) => {
     await open(page);
     const hrefs = await page.locator("a[href^='/']").evaluateAll(links => [...new Set(links.map(link => link.getAttribute("href")!))]);
-    const planned = new Set(["/", ...plannedPages.map(planned => planned.href)]);
+    // Signing in is the accounts' own page (src/app/sign-in), not one of the planned content pages.
+    const planned = new Set(["/", "/sign-in", ...plannedPages.map(planned => planned.href)]);
     expect(hrefs.length).toBeGreaterThan(60);
     expect(hrefs.filter(href => !planned.has(href))).toEqual([]);
     // The built site answers for every one of them. The development server renders

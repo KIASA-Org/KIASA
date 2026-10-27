@@ -4,12 +4,16 @@ import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useR
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decide } from "@/lib/accounts/actions";
 import { REACTIONS, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatSummary, type Message } from "@/lib/chat/types";
+import type { Reach } from "@/lib/teams/rules";
 import { Avatar } from "../site/avatar";
-import { Alert, ArrowLeft, BellOff, Bookmark, Check, ChevronDown, Clock, Close, Copy, Download, Forward, More, NewTab, Paperclip, Pencil, Pin, Plus, Reply, Search, Select, Send, Ticks, Trash } from "../site/icons";
+import { Alert, ArrowLeft, BellOff, Bookmark, Check, ChevronDown, Clock, Close, Copy, Download, Eye, Forward, More, NewTab, Paperclip, Pencil, People, Pin, Plus, Reply, Search, Select, Send, Ticks, Trash, Video } from "../site/icons";
+import { useRanks } from "../site/ranks";
+import { AskBar, ContactCard } from "./chat-ask";
 import type { MessageActions } from "./chat-app";
 import { ChatFile, downloadFile, openFile, UploadingFile } from "./chat-file";
 import { authorColor, bigEmoji, chatTitle, clock, dayKey, dayLabel, gist, initialsOf, lastSeen, useInBrowser } from "./chat-format";
 import { ChatInfo } from "./chat-info";
+import { MeetingCard, MeetingDialog } from "./chat-meeting";
 import { Menu, useLongPress, type MenuItem, type MenuPlace } from "./chat-menu";
 import { ChatPicker } from "./chat-picker";
 import { PREVIEWABLE, SendFile } from "./chat-send-file";
@@ -28,6 +32,16 @@ type Props = {
   onBack: () => void; onEarlier: () => Promise<void>; onRead: () => Promise<void>; onTyping: () => void; onPerson: (person: string) => void;
   onSend: (chatId: string, body: string, options?: { replyTo?: string | null; attachment?: Attachment | null; id?: string }) => Promise<void>;
   onEdit: (message: Message, body: string) => Promise<void>;
+  /** Read unseen by an admin who is not in it: nothing they do here reaches anyone. */
+  watching?: boolean;
+  /** The group's photo; whether this person may rename it and change its photo, or add people to it. */
+  groupPhoto?: string | null; canEdit?: boolean; canAdd?: boolean;
+  /** The team this person leads, if any. */
+  lead?: string | null;
+  /** In a direct chat: whether one may write to the other person now. */
+  reach?: Reach;
+  /** Showing or hiding the members beside the conversation. */
+  onMembers?: () => void;
 };
 
 /** One conversation: its messages, live, and the box to write in. As in
@@ -35,7 +49,8 @@ type Props = {
  * with reactions on top; several messages selected at once; the pinned
  * message above; searching the chat; and, from its name, all about it. */
 export function Conversation({ me, chat, members, people, messages, pinned, more, online, seenOf, supabase, photoOf, typing: typingNames, actions,
-  onBack, onEarlier, onRead, onTyping, onPerson, onSend, onEdit }: Props) {
+  onBack, onEarlier, onRead, onTyping, onPerson, onSend, onEdit, watching = false, groupPhoto = null, canEdit = false, canAdd = false, reach = "free", onMembers }: Props) {
+  const ranks = useRanks();
   const inBrowser = useInBrowser();
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -50,6 +65,7 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
   const [highlight, setHighlight] = useState<string | null>(null);
   const [pinAt, setPinAt] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [meeting, setMeeting] = useState(false);
 
   const title = chatTitle(chat, members, me);
   const others = members.filter(member => member.user_id !== me.id);
@@ -115,6 +131,13 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
     const file = message.attachment && !message.attachment.type ? message.attachment : null;
     const text = message.kind === "text";
     const items: MenuItem[] = [];
+    if (watching) {
+      // Reading unseen: only what stays on this computer.
+      if (message.body || file) items.push({ label: "Copy", icon: <Copy />, onSelect: () => actions.copy([message]) });
+      if (file?.path) items.push({ label: "Download", icon: <Download />, onSelect: () => void downloadFile(supabase, file) });
+      if (items.length) setMenu({ at, items, label: "Message" });
+      return;
+    }
     if (text && chat.kind !== "notices") items.push({ label: "Reply", icon: <Reply />, onSelect: () => { setEditing(null); setReplying(message); } });
     if (message.body || file) items.push({ label: "Copy", icon: <Copy />, onSelect: () => actions.copy([message]) });
     if (file?.path) {
@@ -142,16 +165,20 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
       <button type="button" className="chat-head-who" aria-label={`About ${title}`} onClick={() => setInfo(true)}>
         {chat.kind === "saved"
           ? <span className="chat-avatar" data-kind="saved" aria-hidden="true"><Bookmark /></span>
-          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={chat.kind === "direct" ? photoOf(others[0]?.user_id) : null} className="chat-avatar" kind={chat.kind}
-            who={chat.kind === "direct" ? others[0]?.user_id : null} />}
+          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={chat.kind === "direct" ? (watching ? null : photoOf(others[0]?.user_id)) : groupPhoto} className="chat-avatar" kind={chat.kind}
+            who={chat.kind === "direct" && !watching ? others[0]?.user_id : null} />}
         <span className="chat-head-text">
           <span className="chat-head-title">{title}{chat.muted && <BellOff className="chat-row-mark" />}</span>
           <span className="chat-head-status" data-online={status === "online" || undefined}>{status}</span>
         </span>
       </button>
-      {chat.kind === "group" && me.admin && <button type="button" className="chat-pill chat-head-add" onClick={() => setAdding(true)}><Plus /> Add people</button>}
+      {watching && <span className="chat-pill chat-head-unseen" title="No one in this chat can see you here"><Eye /> Unseen</span>}
+      {canAdd && <button type="button" className="chat-pill chat-head-add" onClick={() => setAdding(true)}><Plus /> Add people</button>}
+      {me.admin && !watching && (chat.kind === "group" || chat.kind === "direct") && !chat.draft
+        && <button type="button" className="chat-icon" aria-label="Start or schedule a meeting" title="Meeting" onClick={() => setMeeting(true)}><Video /></button>}
       <button type="button" className="chat-icon" aria-label="Search in this chat" title="Search" onClick={() => setSearching(true)}><Search /></button>
-      <button type="button" className="chat-icon" aria-label="More" title="More" aria-haspopup="menu" onClick={headMenu}><More /></button>
+      {onMembers && <button type="button" className="chat-icon" aria-label="Members" title="Members" onClick={onMembers}><People /></button>}
+      {!watching && <button type="button" className="chat-icon" aria-label="More" title="More" aria-haspopup="menu" onClick={headMenu}><More /></button>}
     </header>
     {searching && <SearchBar chat={chat} actions={actions} onJump={message => void jump(message)} onClose={() => setSearching(false)} />}
     {current && <div className="chat-pinned">
@@ -165,8 +192,11 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
       {actions.canPin(chat) && <button type="button" className="chat-icon" aria-label="Unpin" title="Unpin" onClick={() => actions.pin(current, false)}><Close /></button>}
     </div>}
     {adding && <ChatPicker mode="add" me={me} people={people} supabase={supabase} chatId={chat.id} exclude={members.map(member => member.user_id)}
+      only={chat.team_id ? people.filter(person => ranks.placed?.[person.id] === chat.team_id).map(person => person.id) : undefined}
       onClose={() => setAdding(false)} onDone={() => setAdding(false)} />}
+    {meeting && <MeetingDialog chatId={chat.id} chatTitle={title} onClose={() => setMeeting(false)} />}
     {info && <ChatInfo me={me} chat={chat} members={members} people={people} online={online} seenOf={seenOf} photoOf={photoOf} supabase={supabase}
+      groupPhoto={groupPhoto} canEdit={canEdit}
       onMessage={person => { setInfo(false); onPerson(person); }} onClose={() => setInfo(false)} />}
 
     <div className="chat-messages" ref={scroller} data-choosing={choosing || undefined} onScroll={event => {
@@ -210,8 +240,12 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
           onClick={() => actions.forward(chosen.filter(message => message.kind === "text"), () => setSelected(null))}><Forward /> Forward</button>
         <button type="button" className="chat-pill" data-danger="" disabled={!chosen.length} onClick={() => actions.remove(chosen, () => setSelected(null))}><Trash /> Delete</button>
       </div>
+      : watching
+        ? <p className="chat-readonly chat-unseen"><Eye /> You are reading unseen. No one in this chat can see you here.</p>
       : chat.kind === "notices"
         ? <p className="chat-readonly">Only KIASA writes here.</p>
+      : reach !== "free" && others[0]
+        ? <AskBar name={others[0].name} reach={reach} onAsk={() => actions.ask(others[0].user_id)} />
         : <Composer key={editing?.id ?? "new"} chat={chat} replying={replying} editing={editing} nameOf={nameOf}
           onCancel={() => { setReplying(null); setEditing(null); }}
           onTyping={onTyping}
@@ -226,7 +260,7 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
             setEditing(null);
           }} />}
     {menu && <Menu at={menu.at} items={menu.items} label={menu.label} onClose={closeMenu}
-      top={menu.message && chat.kind !== "notices" ? <ReactionRow message={menu.message} me={me} onPick={emoji => { const message = menu.message!; closeMenu(); actions.react(message, emoji); }} /> : undefined} />}
+      top={menu.message && chat.kind !== "notices" && !watching ? <ReactionRow message={menu.message} me={me} onPick={emoji => { const message = menu.message!; closeMenu(); actions.react(message, emoji); }} /> : undefined} />}
   </section>;
 }
 
@@ -309,7 +343,8 @@ function Bubble({ message, me, chat, members, run, last, inBrowser, supabase, ph
   const file = message.attachment && !message.attachment.type ? message.attachment : null;
   const reactions = Object.entries(message.reactions ?? {});
   const ready = !message.pending && !message.provisional;
-  const group = chat.kind === "group" && !mine;
+  // Who wrote it shows in a group, and in a chat the admin reads between two others.
+  const group = (chat.kind === "group" || !members.some(member => member.user_id === me.id)) && !mine;
   const meta = <span className="chat-meta">
     {message.pinned_at && <Pin className="chat-meta-pin" />}
     {message.edited_at && <span>edited</span>}
@@ -382,12 +417,16 @@ function Notice({ message, me, choosing, chosen, onToggle, onMenu }: {
   const [error, setError] = useState("");
   const press = useLongPress(onMenu);
   const request = message.attachment?.type === "request" ? message.attachment : null;
+  const meeting = message.attachment?.type === "meeting" ? message.attachment : null;
+  const contact = message.attachment?.type === "contact" ? message.attachment : null;
   const menuOn = {
     ...(choosing ? {} : press),
     onContextMenu: (event: MouseEvent) => { if (choosing) return; event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }); },
     onClick: choosing ? onToggle : undefined,
     "data-chosen": chosen || undefined,
   };
+  if (meeting) return <div id={`msg-${message.id}`} className="chat-meeting-wrap" {...menuOn}><MeetingCard card={meeting} admin={me.admin} /></div>;
+  if (contact) return <ContactCard id={`msg-${message.id}`} card={contact} me={me} menuOn={menuOn} />;
   if (!request) return <p id={`msg-${message.id}`} className="chat-notice" {...menuOn}>{message.body}</p>;
   const act = (status: "approved" | "declined") => start(async () => {
     setError("");

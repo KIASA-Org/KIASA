@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { Agent, fetch as undiciFetch, type RequestInit as UndiciInit } from "undici";
 import { reasons, type Account, type AccountStatus, type Reason } from "@/content/accounts";
-import { photoUrl, type Ranks } from "./viewer";
+import { markOf, photoUrl, type Mark, type Ranks, type Team } from "./viewer";
 
 // The server's calls to Supabase go over connections kept open a minute between
 // pages. Node lets one go after four idle seconds, and far from Supabase a new
@@ -78,7 +78,7 @@ const toMember = (row: ProfileRow): Member => ({
 });
 
 /** `photo`: the address of their profile photo, if they have set one; `top`: an admin has made them a top manager. */
-export type Viewer = { id: string; email: string; admin: { name: string } | null; member: Member | null; photo: string | null; top: boolean };
+export type Viewer = { id: string; email: string; admin: { name: string } | null; member: Member | null; photo: string | null; top: boolean; mark: Mark | null };
 
 /** Who is signed in, as far as their sign-in itself says: its signature is
  * checked here, against Supabase's published key, rather than the cookie being
@@ -97,12 +97,14 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
   if (!person) return null;
   const { id, email } = person;
   const site = siteClient();
-  const [admin, profile, avatar, top] = await Promise.all([
+  const [admin, profile, avatar, top, team] = await Promise.all([
     site.from("admins").select("name").eq("email", email).maybeSingle(),
     site.from("profiles").select("*").eq("id", id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", id).maybeSingle(),
     site.from("top_managers").select("user_id").eq("user_id", id).maybeSingle(),
+    site.from("team_members").select("team_id, teams(id, name, color)").eq("user_id", id).maybeSingle(),
   ]);
+  const teamOf = (team.data?.teams ?? null) as Team | null;
   return {
     id,
     email,
@@ -110,31 +112,64 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     member: profile.data ? toMember(profile.data as ProfileRow) : null,
     photo: avatar.data ? photoUrl(url, avatar.data.path as string) : null,
     top: !!top.data,
+    mark: markOf({ owners: admin.data ? [id] : [], top: top.data ? [id] : [], teams: teamOf ? [teamOf] : [], placed: teamOf ? { [id]: teamOf.id } : {} }, id),
   };
+});
+
+/** Every simulated member (accounts the admin makes to fill KIASA while it is
+ * built and tested); none before their file has been run. */
+export const simIds = cache(async (): Promise<Set<string>> => {
+  if (!accountsLive) return new Set();
+  const { data, error } = await siteClient().from("sim_members").select("user_id");
+  return new Set(error ? [] : (data as { user_id: string }[]).map(row => row.user_id));
+});
+
+/** Whether the person signed in sees the simulated members: KIASA's admins,
+ * and the testers an admin names. To everyone else they do not exist. */
+export const seesSims = cache(async (): Promise<boolean> => {
+  const viewer = await currentViewer();
+  if (!viewer) return false;
+  if (viewer.admin) return true;
+  const { data } = await siteClient().from("testers").select("user_id").eq("user_id", viewer.id).maybeSingle();
+  return !!data;
+});
+
+/** Who is hidden from the person signed in: every simulated member, unless they see them. */
+export const hiddenFromViewer = cache(async (): Promise<Set<string>> => {
+  const [sims, sees] = await Promise.all([simIds(), seesSims()]);
+  return sees ? new Set() : sims;
 });
 
 /** Who wears a badge on their photo: KIASA's admins (the leaf and a crown) and
  * the top managers an admin has named (the leaf). Before the top managers'
  * file has been run, there are none. */
 export const ranks = cache(async (): Promise<Ranks> => {
-  if (!accountsLive) return { owners: [], top: [] };
+  if (!accountsLive) return { owners: [], top: [], teams: [], placed: {} };
   const site = siteClient();
-  const [admins, top] = await Promise.all([site.rpc("admin_users"), site.from("top_managers").select("user_id")]);
+  const [admins, top, teams, placed, hidden] = await Promise.all([
+    site.rpc("admin_users"), site.from("top_managers").select("user_id"),
+    site.from("teams").select("id, name, color").order("name"), site.from("team_members").select("user_id, team_id"),
+    hiddenFromViewer(),
+  ]);
   return {
     owners: ((admins.data ?? []) as { id: string }[]).map(admin => admin.id),
-    top: ((top.data ?? []) as { user_id: string }[]).map(row => row.user_id),
+    top: ((top.data ?? []) as { user_id: string }[]).map(row => row.user_id).filter(id => !hidden.has(id)),
+    teams: (teams.data ?? []) as Team[],
+    placed: Object.fromEntries(((placed.data ?? []) as { user_id: string; team_id: string }[]).filter(row => !hidden.has(row.user_id)).map(row => [row.user_id, row.team_id])),
   };
 });
 
-/** Everyone who has asked for an account, newest first, and whether each is a
- * top manager. For the admin page only. */
+/** Everyone who has asked for an account, newest first, whether each is a top
+ * manager, and their team. For the admin page only. */
 export async function everyone(): Promise<Member[]> {
   const site = siteClient();
-  const [{ data, error }, top] = await Promise.all([
+  const [{ data, error }, top, placed] = await Promise.all([
     site.from("profiles").select("*").order("asked_at", { ascending: false }),
     site.from("top_managers").select("user_id"),
+    site.from("team_members").select("user_id, team_id"),
   ]);
   if (error) throw new Error(`The requests could not be read: ${error.message}`);
   const managers = new Set(((top.data ?? []) as { user_id: string }[]).map(row => row.user_id));
-  return (data as ProfileRow[]).map(row => ({ ...toMember(row), top: managers.has(row.id) }));
+  const teams = new Map(((placed.data ?? []) as { user_id: string; team_id: string }[]).map(row => [row.user_id, row.team_id]));
+  return (data as ProfileRow[]).map(row => ({ ...toMember(row), top: managers.has(row.id), team: teams.get(row.id) }));
 }

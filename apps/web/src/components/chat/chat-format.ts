@@ -3,7 +3,11 @@ import type { ChatMe, ChatMember, ChatPerson, ChatSummary } from "@/lib/chat/typ
 
 /** A chat's name: a group's own, the other person's for a direct chat. */
 export function chatTitle(chat: Pick<ChatSummary, "kind" | "title">, members: ChatMember[], me: Pick<ChatMe, "id">) {
-  if (chat.kind === "direct") return members.find(member => member.user_id !== me.id)?.name ?? "Direct message";
+  if (chat.kind === "direct") {
+    // One the admin reads, between two others: both their names, in a steady order.
+    if (members.length > 1 && !members.some(member => member.user_id === me.id)) return members.map(member => member.name).sort((a, b) => a.localeCompare(b)).join(" & ");
+    return members.find(member => member.user_id !== me.id)?.name ?? "Direct message";
+  }
   if (chat.kind === "saved") return "Saved Messages";
   return chat.title ?? "Chat";
 }

@@ -5,7 +5,7 @@ import { RanksProvider } from "@/components/site/ranks";
 import { SiteShell } from "@/components/site/shell";
 import { member as sample } from "@/content/accounts";
 import { pushPublicKey } from "@/lib/accounts/push";
-import { accountsLive, currentViewer, publicSupabase } from "@/lib/accounts/server";
+import { accountsLive, currentViewer, publicSupabase, ranks } from "@/lib/accounts/server";
 import { initialsOf } from "@/lib/accounts/viewer";
 
 export const metadata: Metadata = {
@@ -24,11 +24,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
     <SampleAccountView />
   </SiteShell>;
 
-  const viewer = await currentViewer();
+  // Who is asking, and who wears which badge, together (the badges are only shown once approved).
+  const [viewer, badges] = await Promise.all([currentViewer(), ranks()]);
   if (!viewer) redirect("/sign-in");
   const member = viewer.member;
   if (!member) redirect(viewer.admin ? "/admin" : "/sign-in");
-  const badge = { name: member.name, initials: initialsOf(member.name), href: "/account", photo: viewer.photo ?? undefined, rank: viewer.admin ? "owner" as const : viewer.top ? "top" as const : undefined };
+  const badge = { name: member.name, initials: initialsOf(member.name), href: "/account", photo: viewer.photo ?? undefined, mark: viewer.mark ?? undefined };
   if (member.status !== "approved") return <SiteShell viewer={badge}>
     <RequestStatusView member={member} realtime={publicSupabase} pushKey={pushPublicKey} />
   </SiteShell>;
@@ -36,7 +37,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const welcome = (await searchParams).welcome === "1";
   // Their own photo wears their badge; it comes and goes live as an admin changes it.
   return <SiteShell viewer={badge}>
-    <RanksProvider initial={{ owners: viewer.admin ? [viewer.id] : [], top: viewer.top ? [viewer.id] : [] }} realtime={publicSupabase} me={viewer.id}>
+    <RanksProvider initial={badges} realtime={publicSupabase} me={viewer.id}>
       <MemberAccountView member={member} photo={viewer.photo} realtime={publicSupabase} welcome={welcome} />
     </RanksProvider>
   </SiteShell>;
