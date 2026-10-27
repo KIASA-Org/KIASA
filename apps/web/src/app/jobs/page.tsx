@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LeafMark } from "@/components/site/brand";
+import { RanksProvider } from "@/components/site/ranks";
 import { YourPhoto } from "@/components/site/your-photo";
 import { ChatWatch } from "@/components/chat/chat-watch";
 import { JobsApp } from "@/components/jobs/jobs-app";
 import { signOut } from "@/lib/accounts/actions";
-import { accountsLive, publicSupabase, signedIn } from "@/lib/accounts/server";
+import { accountsLive, publicSupabase, ranks, signedIn } from "@/lib/accounts/server";
+import type { Ranks } from "@/lib/accounts/viewer";
 import { jobsStart, jobsViewer, pendingReports } from "@/lib/jobs/server";
 import type { JobsMe, JobsStart } from "@/lib/jobs/types";
 
@@ -29,21 +31,23 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const person = await signedIn();
   if (!person) redirect("/sign-in");
   // Who they are, and everything the page starts with, asked for together.
-  const [me, start, pending, asked] = await Promise.all([jobsViewer(), jobsStart(person.id), pendingReports().catch(() => 0), searchParams]);
+  const [me, start, pending, badges, asked] = await Promise.all([jobsViewer(), jobsStart(person.id), pendingReports().catch(() => 0), ranks(), searchParams]);
   if (!me) redirect("/account");
-  if (start.setup) return <JobsFrame me={me}>
+  if (start.setup) return <JobsFrame me={me} ranks={badges}>
     <div className="jobs-empty"><p>{me.admin ? SETUP : "KIASA Jobs is being set up. Please try again a little later."}</p></div>
   </JobsFrame>;
-  return <JobsFrame me={me}>
+  return <JobsFrame me={me} ranks={badges}>
     <JobsApp me={me} start={{ ...start, pending: me.admin ? pending : 0 } as JobsStart} realtime={publicSupabase} tab={typeof asked.tab === "string" ? asked.tab : null} />
   </JobsFrame>;
 }
 
 /** The jobs desk's frame: its own bar (the firm's leaf, a rule, "Jobs", who is
- * signed in, the way to the chat and to their account or the admin page). */
-function JobsFrame({ me, children }: { me?: JobsMe; children: React.ReactNode }) {
+ * signed in, the way to the chat and to their account or the admin page).
+ * `ranks`: who wears a badge on their photo. */
+function JobsFrame({ me, ranks, children }: { me?: JobsMe; ranks?: Ranks; children: React.ReactNode }) {
   const home = me?.admin ? { href: "/admin", label: "Admin" } : { href: "/account", label: "Your account" };
-  return <div className="site jobs-page">
+  return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={me ? publicSupabase : undefined} me={me?.id}>
+    <div className="site jobs-page">
     <a href="#main-content" className="skip-link">Skip to content</a>
     <header className="practice-header admin-header jobs-bar">
       <div className="admin-bar wrap wrap-wide">
@@ -66,5 +70,6 @@ function JobsFrame({ me, children }: { me?: JobsMe; children: React.ReactNode })
     </header>
     <main id="main-content" tabIndex={-1} className="jobs-main">{children}</main>
     {me && <ChatWatch me={me.id} realtime={publicSupabase} />}
-  </div>;
+    </div>
+  </RanksProvider>;
 }

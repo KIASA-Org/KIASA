@@ -87,15 +87,16 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   if (error || !data.user) return { error: "That email and password do not match an account." };
 
   const site = siteClient();
-  const [admin, profile, avatar] = await Promise.all([
+  const [admin, profile, avatar, top] = await Promise.all([
     site.from("admins").select("name").eq("email", email).maybeSingle(),
     site.from("profiles").select("name, status, decided_at, last_sign_in_at").eq("id", data.user.id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", data.user.id).maybeSingle(),
+    site.from("top_managers").select("user_id").eq("user_id", data.user.id).maybeSingle(),
   ]);
   const photo = avatar.data ? photoUrl(publicSupabase.url, avatar.data.path as string) : undefined;
   if (admin.data) {
     const name = admin.data.name as string;
-    await setBadge({ name, initials: initialsOf(name), href: "/admin", photo });
+    await setBadge({ name, initials: initialsOf(name), href: "/admin", photo, rank: "owner" });
     redirect("/admin");
   }
   if (!profile.data) {
@@ -103,7 +104,7 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
     return { error: "That email and password do not match an account." };
   }
   const name = profile.data.name as string;
-  await setBadge({ name, initials: initialsOf(name), href: "/account", photo });
+  await setBadge({ name, initials: initialsOf(name), href: "/account", photo, rank: top.data ? "top" : undefined });
   if (profile.data.status !== "approved") redirect("/account");
   const firstSinceApproval = !profile.data.last_sign_in_at || profile.data.last_sign_in_at < (profile.data.decided_at ?? "");
   await site.from("profiles").update({ last_sign_in_at: new Date().toISOString() }).eq("id", data.user.id);
@@ -117,14 +118,18 @@ export async function signOut() {
 }
 
 /** After someone sets or removes their photo (in their browser, straight to
- * Supabase): the badge that names them on every page shows it too. Setting the
- * cookie redraws the page they are on. */
+ * Supabase), or an admin gives or takes away their top manager's badge: the
+ * badge that names them on every page shows it too. Setting the cookie redraws
+ * the page they are on. */
 export async function refreshBadge(): Promise<void> {
   if (!accountsLive) return;
   const viewer = await currentViewer();
   const name = viewer?.admin?.name ?? viewer?.member?.name;
   if (!viewer || !name) return;
-  await setBadge({ name, initials: initialsOf(name), href: viewer.admin ? "/admin" : "/account", photo: viewer.photo ?? undefined });
+  await setBadge({
+    name, initials: initialsOf(name), href: viewer.admin ? "/admin" : "/account", photo: viewer.photo ?? undefined,
+    rank: viewer.admin ? "owner" : viewer.top ? "top" : undefined,
+  });
 }
 
 /** A person's photo files, when their account goes. */
@@ -155,6 +160,27 @@ export async function decide(id: string, status: "approved" | "declined"): Promi
       : { title: "About your KIASA request", body: "A person at KIASA has decided on your request. Click to see it.", url: "/account" });
     await noticeDecision(id, status, by);
   });
+  refresh();
+  return {};
+}
+
+/** An admin making an approved person a top manager, or a member again. Their
+ * photo wears KIASA's leaf wherever it appears, from that moment, on every open
+ * page. Admins wear theirs (and a crown) already. */
+export async function setTopManager(id: string, top: boolean): Promise<{ error?: string }> {
+  if (!accountsLive) return {};
+  const viewer = await currentViewer();
+  if (!viewer?.admin) return { error: "Only KIASA's admins can name top managers." };
+  const site = siteClient();
+  const { data: person } = await site.from("profiles").select("email, status").eq("id", id).maybeSingle();
+  if (!person) return { error: "That account is gone." };
+  if (person.status !== "approved") return { error: "Only an approved person can be a top manager." };
+  const { error } = top
+    ? await site.from("top_managers").upsert({ user_id: id, granted_by: viewer.email }, { onConflict: "user_id", ignoreDuplicates: true })
+    : await site.from("top_managers").delete().eq("user_id", id);
+  if (error) return { error: error.code === "42P01" || error.code === "PGRST205"
+    ? "Top managers are not set up in the database yet: an admin runs supabase/migrations/20261027090000_top_managers.sql in Supabase's SQL Editor."
+    : "That could not be saved. Please try again." };
   refresh();
   return {};
 }

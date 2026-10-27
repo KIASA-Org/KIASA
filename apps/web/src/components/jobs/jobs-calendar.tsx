@@ -160,7 +160,7 @@ function InterviewCard({ interview, me, zone, today, person, supabase, onClose, 
   return <dialog ref={dialog} className="chat-dialog jobs-dialog" aria-label={whatOf(interview)} onClose={onClose}
     onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <p className="chat-dialog-title">{whatOf(interview)}</p>
-    {person && me.admin && <p className="jobs-person jobs-card-who"><Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" />{person.name}</p>}
+    {person && me.admin && <p className="jobs-person jobs-card-who"><Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" who={person.id} />{person.name}</p>}
     <dl className="jobs-facts">
       <div><dt>When</dt><dd>{dayName(when.day, today)}, {clockIn(zone, interview.starts_at)} · {interview.minutes < 60 ? `${interview.minutes} min` : `${interview.minutes / 60} h`} ({zone})</dd></div>
       <div><dt>Kind</dt><dd>{KIND[interview.kind]}{interview.stage ? ` · ${interview.stage}` : ""}</dd></div>

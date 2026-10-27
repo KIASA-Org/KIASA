@@ -137,7 +137,7 @@
 
 /* People. */
 /* (Positioned: a photo fills its own circle, not the page.) */
-.jobs-avatar { position: relative; display: inline-grid; place-items: center; flex: none; width: 30px; height: 30px; overflow: hidden; border-radius: 50%; background: linear-gradient(150deg, #34684a, #1c3b29); color: #e6ffd6; font-size: 11px; font-weight: 700; }
+.jobs-avatar { position: relative; display: inline-grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(150deg, #34684a, #1c3b29); color: #e6ffd6; font-size: 11px; font-weight: 700; }
 .jobs-person { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
 .jobs-you { margin-left: 8px; padding: 2px 8px; border-radius: 10px; background: rgb(184 236 147 / 0.16); font-size: 11.5px; font-weight: 700; color: var(--leaf); vertical-align: 2px; }
 

@@ -44,7 +44,7 @@ export function ChatInfo({ me, chat, members, people, online, seenOf, photoOf, s
       <div className="chat-profile">
         {chat.kind === "saved"
           ? <span className="chat-profile-photo chat-avatar" data-kind="saved" aria-hidden="true"><Bookmark /></span>
-          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-profile-photo chat-avatar" kind={chat.kind} />}
+          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-profile-photo chat-avatar" kind={chat.kind} who={other?.user_id} />}
         <p className="chat-profile-name">{title}</p>
         <p className="chat-profile-status">{other ? status(other.user_id) : chat.kind === "group" ? `${members.length} members` : ""}</p>
       </div>
@@ -60,7 +60,7 @@ export function ChatInfo({ me, chat, members, people, online, seenOf, photoOf, s
       {chat.kind === "group" && <ul className="chat-people">
         {members.map(member => <li key={member.user_id}>
           <button type="button" className="chat-person" disabled={member.user_id === me.id} onClick={() => onMessage(member.user_id)}>
-            <Avatar initials={initialsOf(member.name)} photo={photoOf(member.user_id)} className="chat-avatar">
+            <Avatar initials={initialsOf(member.name)} photo={photoOf(member.user_id)} className="chat-avatar" who={member.user_id}>
               {online.has(member.user_id) && <span className="chat-online" />}
             </Avatar>
             <span className="chat-person-text">

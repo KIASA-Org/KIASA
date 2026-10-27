@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AdminView, NotAdminView } from "@/components/site/admin";
 import { accounts, admin as sampleAdmin } from "@/content/accounts";
-import { accountsLive, currentViewer, everyone } from "@/lib/accounts/server";
+import { accountsLive, currentViewer, everyone, ranks } from "@/lib/accounts/server";
 
 export const metadata: Metadata = {
   title: "Admin: accounts",
@@ -17,9 +17,9 @@ export const metadata: Metadata = {
 export default async function AdminPage() {
   if (!accountsLive) return <AdminView people={accounts} admin={sampleAdmin} live={false} />;
   // Who is asking and the requests, together; the requests are shown only to an admin.
-  const [viewer, people] = await Promise.all([currentViewer(), everyone().catch((error: Error) => error)]);
+  const [viewer, people, badges] = await Promise.all([currentViewer(), everyone().catch((error: Error) => error), ranks()]);
   if (!viewer) redirect("/sign-in");
   if (!viewer.admin) return <NotAdminView email={viewer.email} />;
   if (people instanceof Error) throw people;
-  return <AdminView people={people} admin={{ name: viewer.admin.name, role: viewer.email, id: viewer.id, photo: viewer.photo }} live />;
+  return <AdminView people={people} admin={{ name: viewer.admin.name, role: viewer.email, id: viewer.id, photo: viewer.photo }} ranks={badges} live />;
 }

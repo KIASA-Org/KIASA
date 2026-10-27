@@ -122,7 +122,7 @@ export function YourPhoto({ person, photo: saved, realtime, className, details, 
   return <div className="photo-control" ref={root}>
     <button type="button" className="photo-button" aria-expanded={open} aria-label={`Your photo, ${person.name}: ${photo ? "change or remove it" : "add one"}`}
       title={photo ? "Change your photo" : "Add a photo"} onClick={() => (open ? close() : openPanel())}>
-      <Avatar initials={initials} photo={photo} className={className}>
+      <Avatar initials={initials} photo={photo} className={className} who={person.id}>
         <span className="photo-button-mark"><Camera /></span>
       </Avatar>
       {details && <span className={details === "bar" ? "admin-user-text" : "photo-card-text"}>

@@ -83,6 +83,8 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
   }, text);
   // Ben starts with no résumé, so the one he adds becomes his default (as a member's first does).
   const benId = people["ben@example.com"].id;
+  // Everyone a member again, as a run cut short may have left Ben a top manager.
+  await site.from("top_managers").delete().not("user_id", "is", null);
   const { data: kept } = await site.from("resumes").select("path").eq("user_id", benId);
   if (kept?.length) {
     await site.storage.from("resumes").remove(kept.map(resume => resume.path));
@@ -127,6 +129,32 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     const hers = await ana.page.locator(".jobs-plan .jobs-goal").first().locator(".jobs-meter-text").textContent();
     if (!/\/\s*100/.test(hers ?? "")) throw new Error(`Ana's day reads “${hers}”`);
     return `${cards} cards (goals ${goals.join(", ")}); the team's Goal ${sum}`;
+  });
+
+  await step("the admin makes Ben a top manager: the leaf shows on his own photo, Live drops his card at once; made a member again, all comes back", async () => {
+    // The admin wears the crown and the leaf.
+    const own = admin.page.locator(".jobs-bar .account-initials").first();
+    if (await own.locator(".rank-crown").count() !== 1 || await own.locator(".rank-leaf").count() !== 1) throw new Error("the admin's photo has no crown and leaf");
+    const desk = await admin.context.newPage();
+    await desk.goto(BASE + "/admin");
+    await hydrated(desk, ".admin-table");
+    const cards = () => admin.page.locator(".jobs-member-name").allTextContents();
+    if (!(await cards()).includes("Ben Okoro")) throw new Error("Ben has no card to begin with");
+    const role = desk.getByLabel("Role of Ben Okoro");
+    await role.selectOption("top");
+    const at = Date.now();
+    await admin.page.waitForFunction(() => ![...document.querySelectorAll(".jobs-member-name")].some(name => name.textContent === "Ben Okoro"), null, { polling: 10, timeout: 10000 });
+    const gone = Date.now() - at;
+    await ben.page.locator(".jobs-bar .account-initials .rank-leaf").waitFor({ timeout: 10000 });
+    const seen = Date.now() - at;
+    await desk.reload();
+    await hydrated(desk, ".admin-table");
+    if (await desk.getByLabel("Role of Ben Okoro").inputValue() !== "top") throw new Error("the admin table forgot it");
+    await desk.getByLabel("Role of Ben Okoro").selectOption("member");
+    await admin.page.locator(".jobs-member-name", { hasText: "Ben Okoro" }).waitFor({ timeout: 10000 });
+    await ben.page.locator(".jobs-bar .account-initials .rank-leaf").waitFor({ state: "detached", timeout: 10000 });
+    await desk.close();
+    return `his card gone ${gone} ms after the choice, his own leaf ${seen} ms`;
   });
 
   await step("the admin pastes three links into the jobs bot: saved at once, on Ana's and Ben's lists live", async () => {

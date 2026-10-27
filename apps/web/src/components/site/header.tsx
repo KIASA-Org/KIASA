@@ -92,7 +92,7 @@ export function SiteHeader({ viewer }: { viewer?: Viewer }) {
           {badge
             ? <Link href={badge.href} className="masthead-account" onClick={close}
               aria-label={`${badge.href === "/admin" ? "Admin" : "Your account"}, ${badge.name}`}>
-              <Avatar initials={badge.initials} photo={badge.photo} className="masthead-account-initials" />
+              <Avatar initials={badge.initials} photo={badge.photo} className="masthead-account-initials" rank={badge.rank ?? null} />
               <span className="masthead-account-name" aria-hidden="true">{badge.name.split(" ")[0]}</span>
             </Link>
             : <Link href={signUp.href} className="masthead-signup" onClick={close}>{signUp.label}</Link>}

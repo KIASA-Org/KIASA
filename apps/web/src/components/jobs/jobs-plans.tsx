@@ -132,7 +132,7 @@ export function PlansView({ supabase, team, plans, board, today, settings, onSet
               const row = board.find(entry => entry.user_id === person.id);
               const done = row ? DONE[period](row) : [0, 0, 0];
               return <tr key={person.id} data-changed={drafts[key(person.id)] ? "" : undefined}>
-                <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" />{person.name}</span></th>
+                <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" who={person.id} />{person.name}</span></th>
                 {(["applications", "interviews", "offers"] as const).map(field => <td key={field}>
                   <input className="jobs-number" inputMode="numeric" aria-label={`${field} for ${person.name}`} value={draft[field]}
                     placeholder={period === "day" && field === "applications" ? String(DAILY_GOAL) : "–"}

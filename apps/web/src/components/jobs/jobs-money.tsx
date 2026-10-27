@@ -163,7 +163,7 @@ export function ConfirmView({ supabase, team, currency, today, version, onDecide
   };
   const who = (id: string) => {
     const entry = person(id);
-    return <span className="jobs-person"><Avatar initials={initialsOf(entry?.name ?? "?")} photo={entry?.photo ?? null} className="jobs-avatar" />{entry?.name ?? "A former member"}</span>;
+    return <span className="jobs-person"><Avatar initials={initialsOf(entry?.name ?? "?")} photo={entry?.photo ?? null} className="jobs-avatar" who={id} />{entry?.name ?? "A former member"}</span>;
   };
   const figure = (id: string, value: number) => <input className="jobs-number jobs-money-input" inputMode="decimal" aria-label="Figure to confirm"
     value={figures[id] ?? String(value)} onChange={event => setFigures(current => ({ ...current, [id]: event.target.value.replace(/[^\d.]/g, "") }))} />;

@@ -124,7 +124,7 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
         <ul className="chat-found" aria-labelledby="chat-found-title">
           {found.map(person => <li key={person.id}>
             <button type="button" className="chat-row" onClick={() => { setQuery(""); onPerson(person.id); }}>
-              <Avatar initials={initialsOf(person.name)} photo={photoOf(person.id)} className="chat-avatar">
+              <Avatar initials={initialsOf(person.name)} photo={photoOf(person.id)} className="chat-avatar" who={person.id}>
                 {online.has(person.id) && <span className="chat-online" />}
               </Avatar>
               <span className="chat-row-text">
@@ -161,7 +161,7 @@ function Row({ me, chat, members, online, active, photoOf, onOpen, onMenu }: {
       onContextMenu={event => { event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }); }} {...press}>
       {chat.kind === "saved"
         ? <span className="chat-avatar" data-kind="saved" aria-hidden="true"><Bookmark /></span>
-        : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind}>
+        : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind} who={other?.user_id}>
           {other && online.has(other.user_id) && <span className="chat-online" />}
         </Avatar>}
       <span className="chat-row-text">
