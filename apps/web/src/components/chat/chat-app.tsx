@@ -5,7 +5,7 @@ import type { PostgrestError, RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
 import { photoUrl } from "@/lib/accounts/viewer";
 import { splitChatList, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatRow, type ChatSummary, type ContactRequest, type GroupEntry, type Message } from "@/lib/chat/types";
-import { atWork } from "@/lib/sims/hours";
+import { onlineAt } from "@/lib/sims/hours";
 import { reachOf, teamLedBy, whyAsk } from "@/lib/teams/rules";
 import { Archive, Bell, BellOff, Check, Eraser, Leave, NewTab, People, Pin, Trash, Unread } from "../site/icons";
 import { useRanks } from "../site/ranks";
@@ -123,10 +123,10 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const photoOf = useCallback((id: string | null | undefined) => (id ? photos[id] ?? null : null), [photos]);
   const peopleNow = useMemo(() => people.map(person => ({ ...person, photo: photos[person.id] ?? null })), [people, photos]);
   const seenOf = useCallback((id: string) => left[id] ?? people.find(person => person.id === id)?.seen ?? null, [left, people]);
-  // Who is online: everyone here now, and the simulated members at work now (shown only to those who see them).
+  // Who is online: everyone here now, and the simulated members online now, as the admin set them or as their day goes (shown only to those who see them).
   const minute = useSyncExternalStore(minuteNow.subscribe, minuteNow.read, () => 0);
   const onlineNow = useMemo(() => {
-    const working = minute ? people.filter(person => person.hours && atWork(person.hours, minute * 60_000)) : [];
+    const working = minute ? people.filter(person => person.hours && onlineAt(person.id, person.hours, minute * 60_000)) : [];
     return working.length ? new Set([...online, ...working.map(person => person.id)]) : online;
   }, [online, people, minute]);
   // The open chat and each chat's channel, for the live handlers, which outlive any one render.

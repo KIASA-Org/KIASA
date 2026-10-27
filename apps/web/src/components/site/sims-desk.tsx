@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import type { Team } from "@/lib/accounts/viewer";
 import { initialsOf } from "@/lib/accounts/viewer";
-import { addSims, decideSims, deleteSims, placeSims, planSims, renameSim, setSimPhoto, setSims, setTester, setTesters, workNow } from "@/lib/sims/actions";
-import { atWork, DAY_NAMES, daysInWords } from "@/lib/sims/hours";
+import { addSims, decideSims, deleteSims, onlineCount, placeSims, planSims, renameSim, setSimPhoto, setSims, setTester, setTesters, workNow } from "@/lib/sims/actions";
+import { atWork, DAY_NAMES, daysInWords, onlineAt, type Presence } from "@/lib/sims/hours";
 import type { SimMember, TesterChoice } from "@/lib/sims/server";
 import { Avatar } from "./avatar";
 import { Close } from "./icons";
@@ -17,6 +17,7 @@ const minuteNow = {
 };
 const STATUS = { waiting: "Waiting", approved: "Approved", declined: "Declined" } as const;
 const percent = (share: number) => `${Math.round(share * 100)}%`;
+const PRESENCE: Record<Presence, string> = { auto: "Auto", online: "Online", offline: "Offline" };
 
 /** The admin's simulated members: accounts made to fill KIASA while it is built
  * and tested. New ones ask for an account as anyone does; here the admin
@@ -46,6 +47,7 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
     { value: sims.filter(sim => sim.status === "waiting").length, label: "Waiting for approval" },
     { value: sims.filter(sim => sim.team).length, label: "In a team" },
     { value: minute ? sims.filter(sim => sim.status === "approved" && atWork(sim.hours, minute * 60_000)).length : "–", label: "At work now" },
+    { value: minute ? sims.filter(sim => sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000)).length : "–", label: "Online now" },
     { value: sims.reduce((sum, sim) => sum + (sim.today?.done ?? 0), 0), label: "Applications today" },
   ];
 
@@ -55,7 +57,7 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
         <p className="eyebrow block-eyebrow">Admin</p>
         <h1 id="sims-title" className="account-title">Simulated members</h1>
         <p className="account-lead">Accounts to fill KIASA while it is built and tested. Each asks for an account as anyone does; approve it, put it in a team, and set its hours and pace. Only you, and the testers you name below, see them: to everyone else they do not exist.</p>
-        <dl className="b-stats admin-stats" data-count="5">
+        <dl className="b-stats admin-stats" data-count="6">
           {stats.map(stat => <div key={stat.label} className="b-stat"><dt className="b-stat-value">{stat.value}</dt><dd className="b-stat-label">{stat.label}</dd></div>)}
         </dl>
       </div>
@@ -85,7 +87,7 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
             <thead>
               <tr>
                 <th scope="col"><input type="checkbox" aria-label="Choose everyone" checked={all} onChange={event => setChosen(event.target.checked ? sims.map(sim => sim.id) : [])} /></th>
-                <th scope="col">Person</th><th scope="col">Status</th><th scope="col">Team</th><th scope="col">Hours</th><th scope="col">Pace</th><th scope="col">Today</th><th scope="col">Now</th>
+                <th scope="col">Person</th><th scope="col">Status</th><th scope="col">Team</th><th scope="col">Hours</th><th scope="col">Pace</th><th scope="col">Today</th><th scope="col">Online</th><th scope="col">Now</th>
               </tr>
             </thead>
             <tbody>
@@ -119,6 +121,15 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
                   <td>{sim.hours.from}–{sim.hours.to}<span className="admin-when">{daysInWords(sim.hours.days)}</span></td>
                   <td>{percent(sim.paceMin)}–{percent(sim.paceMax)}</td>
                   <td>{sim.today && sim.status === "approved" ? <>{sim.today.done} of {sim.today.target}<span className="admin-when">applications</span></> : <span className="admin-when">–</span>}</td>
+                  <td>
+                    <span className="sims-online" data-online={minute && sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000) ? "" : undefined}>
+                      {!minute ? "–" : sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000) ? "Online" : "Offline"}
+                    </span>
+                    <select className="admin-role sims-presence" aria-label={`Online status of ${sim.name}`} value={sim.hours.presence} disabled={working}
+                      onChange={event => run(() => setSims([sim.id], { presence: event.target.value as Presence }))}>
+                      {(Object.keys(PRESENCE) as Presence[]).map(key => <option key={key} value={key}>{PRESENCE[key]}</option>)}
+                    </select>
+                  </td>
                   <td>
                     <span className="sims-now" data-now={now}>{now}</span>
                     <button type="button" className="teams-link" disabled={working} onClick={() => run(() => setSims([sim.id], { paused: !sim.hours.paused }))}>
@@ -192,6 +203,7 @@ function Bulk({ ids, teams, working, run, onDone }: {
   const [low, setLow] = useState(120);
   const [high, setHigh] = useState(150);
   const [plan, setPlan] = useState(20);
+  const [online, setOnline] = useState(10);
   const [deleting, setDeleting] = useState(false);
   const none = !ids.length || working;
   return <div className="sims-bulk" role="group" aria-label="Everyone chosen">
@@ -230,6 +242,20 @@ function Bulk({ ids, teams, working, run, onDone }: {
       <input type="number" min={100} max={200} step={5} aria-label="Highest pace, %" value={high} onChange={event => setHigh(Number(event.target.value))} />
       <span>% of the plan</span>
       <button type="button" className="account-button" disabled={none} onClick={() => run(() => setSims(ids, { paceMin: low / 100, paceMax: high / 100 }))}>Set pace</button>
+    </div>
+    <div className="sims-bulk-row">
+      <span className="sims-bulk-label">Online</span>
+      <select className="admin-role" aria-label="Online status of everyone chosen" value="" disabled={none}
+        onChange={event => run(() => setSims(ids, { presence: event.target.value as Presence }))}>
+        <option value="">Set to…</option>
+        <option value="auto">Auto: come and go as people do</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+      <span>or exactly</span>
+      <input type="number" min={0} max={ids.length || undefined} aria-label="How many online" value={online} onChange={event => setOnline(Number(event.target.value))} />
+      <span>of them online, picked at random; the rest offline</span>
+      <button type="button" className="account-button" disabled={none} onClick={() => run(() => onlineCount(ids, online))}>Pick</button>
     </div>
     <div className="sims-bulk-row">
       <span className="sims-bulk-label">Plan</span>
