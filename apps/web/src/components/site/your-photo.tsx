@@ -28,8 +28,9 @@ export function YourPhoto({ person, photo: saved, realtime, className, details, 
 }) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
   const [open, setOpen] = useState(false);
-  // How far the panel sits from the square, sideways: under it, kept on the screen.
-  const [shift, setShift] = useState(0);
+  // Where the panel sits: by the square, kept 16px inside the screen.
+  const [place, setPlace] = useState<{ top: number; left: number; height: number } | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
   // What was just saved here shows at once, before the page is drawn again.
   const [changed, setChanged] = useState<{ photo: string | null } | null>(null);
   const [source, setSource] = useState<string | null>(null);
@@ -47,16 +48,41 @@ export function YourPhoto({ person, photo: saved, realtime, className, details, 
     setSource(next);
   };
   const close = () => { setOpen(false); show(null); setError(""); };
-  /** Under the square, lined up with its start or end, and moved in to stay 16px inside the screen. */
-  const openPanel = () => {
+  /** Under the square (or above it, when there is more room there), lined up
+   * with its start or end, and moved in to stay 16px inside the screen. The
+   * panel is on the browser's top layer: no column cuts it off, and no section
+   * further down the page is drawn over it. */
+  const placePanel = useEffectEvent(() => {
     const square = root.current?.getBoundingClientRect();
-    if (square) {
-      const width = Math.min(PANEL, window.innerWidth - 32);
-      const lined = align === "end" ? square.width - width : 0;
-      setShift(Math.min(Math.max(lined, 16 - square.left), window.innerWidth - 16 - width - square.left));
-    }
-    setOpen(true);
-  };
+    if (!square) return;
+    const width = Math.min(PANEL, window.innerWidth - 32);
+    const wanted = align === "end" ? square.right - width : square.left;
+    const left = Math.min(Math.max(wanted, 16), window.innerWidth - 16 - width);
+    const below = window.innerHeight - square.bottom - 28, above = square.top - 28;
+    const under = below >= 420 || below >= above;
+    const height = Math.max(200, under ? below : above);
+    setPlace({ left, height, top: under ? square.bottom + 12 : Math.max(16, square.top - 12 - Math.min(height, panel.current?.offsetHeight ?? height)) });
+  });
+  const openPanel = () => setOpen(true);
+  useEffect(() => {
+    const box = panel.current;
+    if (!open || !box) return;
+    placePanel();
+    if (!box.matches(":popover-open")) box.showPopover();
+    // Placed again as the page moves under it, or the window changes size.
+    const again = () => placePanel();
+    window.addEventListener("scroll", again, true);
+    window.addEventListener("resize", again);
+    // Its own size changes (a picture chosen): placed again, above the square if that suits better.
+    const watch = new ResizeObserver(again);
+    watch.observe(box);
+    return () => {
+      window.removeEventListener("scroll", again, true);
+      window.removeEventListener("resize", again);
+      watch.disconnect();
+      if (box.matches(":popover-open")) box.hidePopover();
+    };
+  }, [open]);
 
   // Escape, or a click anywhere else, closes the panel; never while saving.
   const dismiss = useEffectEvent(() => { if (!busy) close(); });
@@ -131,7 +157,8 @@ export function YourPhoto({ person, photo: saved, realtime, className, details, 
         {!photo && <span className="photo-cue">Add a photo</span>}
       </span>}
     </button>
-    {open && <div className="photo-panel" style={{ left: shift, width: `min(${PANEL}px, calc(100vw - 32px))` }} role="dialog" aria-label="Your photo">
+    {open && <div ref={panel} popover="manual" className="photo-panel" role="dialog" aria-label="Your photo"
+      style={{ left: place?.left ?? 16, top: place?.top ?? 16, maxHeight: place?.height, width: `min(${PANEL}px, calc(100vw - 32px))`, visibility: place ? undefined : "hidden" }}>
       <div className="photo-panel-head">
         <p className="photo-panel-title">Your photo</p>
         <button type="button" className="photo-close" aria-label="Close" onClick={close} disabled={!!busy}><Close /></button>
@@ -160,7 +187,7 @@ export function YourPhoto({ person, photo: saved, realtime, className, details, 
 /** Placing a photo: drag it in the square, and zoom with the slider (or the
  * arrow keys, and + and −). What is in the square is what is saved: made
  * small and sharp here, as WebP where the browser can, otherwise JPEG. */
-function PhotoFrame({ source, busy, onSave, onCancel, onUnreadable }: {
+export function PhotoFrame({ source, busy, onSave, onCancel, onUnreadable }: {
   source: string; busy: boolean; onSave: (blob: Blob) => void; onCancel: () => void; onUnreadable: () => void;
 }) {
   const image = useRef<HTMLImageElement>(null);

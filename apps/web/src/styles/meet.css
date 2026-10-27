@@ -1,0 +1,160 @@
+/* ───────── KIASA meetings ─────────
+   A meeting fills its own window: a thin bar with what it is, everyone's faces
+   (a shared screen large, the faces in a column beside it), and the controls
+   along the bottom, round, as in a call. Night ground; leaf green for who is
+   speaking and what is on; red only for what is off, recording, and leaving. */
+
+.meet { --tile: #0d1a14; --off: #e5484d; display: flex; flex-direction: column; height: 100dvh; background: var(--night); color: var(--ink); }
+.meet .avatar-photo { border-radius: inherit; }
+
+.meet-bar { flex: none; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.meet-bar-mark { display: grid; place-items: center; width: 36px; height: 36px; color: var(--ink); }
+.meet-bar-mark svg { width: 30px; height: 30px; }
+.meet-bar-text { min-width: 0; }
+.meet-bar-title { overflow: hidden; font-size: 16px; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; }
+.meet-bar-sub { font-size: 13px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.meet-recording { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 6px 12px; border-radius: 999px; background: rgb(229 72 77 / 0.16); color: #ffb4b6; font-size: 13px; font-weight: 650; }
+.meet-recording span { width: 9px; height: 9px; border-radius: 50%; background: var(--off); animation: meet-pulse 1.4s ease-in-out infinite; }
+@keyframes meet-pulse { 50% { opacity: 0.35; } }
+
+.meet-body { flex: 1; min-height: 0; display: flex; }
+.meet-stage { flex: 1; min-width: 0; display: flex; gap: 12px; padding: 16px; }
+/* The faces share the room: as many columns as suit the count, the rows sharing its height. */
+.meet-faces { flex: 1; min-height: 0; display: grid; gap: 12px; grid-template-columns: repeat(var(--columns, 1), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+/* Each face in its cell, in the shape of its picture (--ratio), as large as fits: nothing cut off. */
+.meet-cell { container-type: size; display: grid; place-items: center; min-width: 0; min-height: 0; }
+.meet-cell > .meet-tile { width: min(100cqw, 100cqh * var(--ratio, 1.7778)); aspect-ratio: var(--ratio, 16 / 9); }
+.meet-stage[data-count="2"] .meet-faces { --columns: 2; }
+.meet-stage:is([data-count="3"], [data-count="4"]) .meet-faces { --columns: 2; }
+.meet-stage:is([data-count="5"], [data-count="6"], [data-count="7"], [data-count="8"], [data-count="9"]) .meet-faces { --columns: 3; }
+/* Someone sharing their screen: it takes the room; the faces wait in a column. */
+.meet-stage[data-sharing] .meet-faces { --columns: 1; flex: none; width: 240px; grid-auto-rows: auto; align-content: start; overflow-y: auto; }
+.meet-stage[data-sharing] .meet-cell { container-type: normal; }
+.meet-stage[data-sharing] .meet-cell > .meet-tile { width: 100%; aspect-ratio: 16 / 9; }
+.meet-screen { flex: 1; min-width: 0; aspect-ratio: auto; }
+
+.meet-tile { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 16px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow 0.15s; }
+.meet-tile[data-speaking="true"] { box-shadow: inset 0 0 0 3px var(--leaf); }
+.meet-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.meet-video-whole { object-fit: contain; }
+/* One's own shared screen: kept for a recording, not shown (it would repeat itself). */
+.meet-video-kept { opacity: 0; }
+.meet-presenting { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; }
+.meet-presenting-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: rgb(184 236 147 / 0.14); color: var(--leaf); }
+.meet-presenting-icon svg { width: 32px; height: 32px; }
+.meet-presenting-title { font-size: 20px; font-weight: 650; }
+.meet-presenting-text { max-width: 380px; color: var(--ink-soft); font-size: 14px; }
+.meet-presenting .account-button { margin-top: 6px; }
+.meet-nobody { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 12px; color: var(--ink-mute); font-size: 14px; }
+.meet-avatar { position: relative; display: grid; place-items: center; width: clamp(56px, 22%, 112px); aspect-ratio: 1; border-radius: 50%; background: linear-gradient(150deg, #34684a, #1c3b29); color: #e6ffd6; font-size: clamp(18px, 3vw, 36px); font-weight: 700; }
+.meet-name { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 20px); padding: 5px 10px; border-radius: 8px;
+  background: rgb(3 8 7 / 0.7); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meet-name svg { flex: none; width: 16px; height: 16px; color: #ffb4b6; }
+.meet-hand { position: absolute; top: 10px; left: 10px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--leaf); font-size: 18px; animation: meet-wave 1s ease-in-out 2; }
+@keyframes meet-wave { 50% { transform: rotate(-14deg); } }
+.meet-link { position: absolute; top: 10px; right: 10px; padding: 4px 10px; border-radius: 999px; background: rgb(3 8 7 / 0.7); color: var(--ink-soft); font-size: 12px; }
+
+.meet-panel { flex: none; display: flex; flex-direction: column; width: 320px; padding: 16px; border-left: 1px solid var(--line); background: var(--night-raised); overflow-y: auto; }
+.meet-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.meet-panel-title { font-size: 16px; font-weight: 650; }
+.meet-panel-sub { margin: 18px 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-mute); }
+.meet-panel-hands { margin-bottom: 8px; padding: 8px 12px; border-radius: 10px; background: rgb(184 236 147 / 0.12); font-size: 14px; }
+.meet-people { display: grid; gap: 4px; }
+.meet-people[data-away] { opacity: 0.6; }
+.meet-person { display: flex; align-items: center; gap: 10px; padding: 6px 4px; }
+.meet-person-photo.chat-avatar { width: 36px; height: 36px; font-size: 13px; }
+.meet-person-name { flex: 1; min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.meet-person-marks { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-mute); }
+.meet-person-marks svg { width: 18px; height: 18px; }
+
+.meet-controls { flex: none; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; padding: 14px 16px 18px; }
+.meet-control { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--night-control); color: var(--ink); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.meet-control:hover { background: #1b2b24; }
+.meet-control svg { width: 24px; height: 24px; }
+.meet-control[data-state="off"] { background: var(--off); color: #fff; }
+.meet-control[data-state="lit"] { background: var(--leaf); color: var(--night); }
+.meet-control[data-state="recording"] { background: var(--off); color: #fff; animation: meet-pulse 1.4s ease-in-out infinite; }
+.meet-leave-wrap { position: relative; }
+.meet-leave { display: grid; place-items: center; width: 72px; height: 52px; border-radius: 999px; background: var(--off); color: #fff; cursor: pointer; transition: filter 0.15s; }
+.meet-leave:hover { filter: brightness(1.1); }
+.meet-leave svg { width: 28px; height: 28px; }
+.meet-leave-menu { position: absolute; z-index: 8; right: 0; bottom: calc(100% + 10px); display: grid; gap: 8px; width: 200px; padding: 10px; border-radius: 14px; background: var(--night-raised); box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgb(0 0 0 / 0.5); }
+
+.meet-toasts { position: fixed; left: 50%; bottom: 100px; z-index: 5; display: grid; gap: 8px; width: min(560px, calc(100% - 32px)); transform: translateX(-50%); pointer-events: none; }
+.meet-toast { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--night-raised); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgb(0 0 0 / 0.5); font-size: 14px; pointer-events: auto; }
+.meet-toast button { display: grid; place-items: center; flex: none; margin-left: auto; width: 26px; height: 26px; color: var(--ink-mute); cursor: pointer; }
+.meet-toast svg { width: 16px; height: 16px; }
+
+/* Before and after: the waiting screen, and the meeting over. */
+.meet-outside-main { flex: 1; min-height: 0; display: grid; place-items: center; padding: 24px 16px; overflow-y: auto; }
+.meet-lobby { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 360px); align-items: center; gap: 48px; width: min(1100px, 100%); }
+.meet-preview { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 18px; background: var(--tile); box-shadow: inset 0 0 0 1px var(--line); }
+.meet-preview-controls { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; gap: 12px; }
+.meet-lobby-title { margin: 6px 0 12px; font-size: clamp(28px, 3.4vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; }
+.meet-lobby-who { color: var(--ink-soft); font-size: 15px; }
+.meet-lobby-actions, .meet-message-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.meet-lobby .b-form-error { margin-top: 14px; }
+.meet-message { display: grid; justify-items: center; gap: 12px; max-width: 480px; text-align: center; }
+.meet-message h1 { font-size: 30px; font-weight: 600; }
+.meet-message p { color: var(--ink-soft); }
+
+@media (max-width: 899px) {
+  .meet-lobby { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .meet-panel { position: fixed; inset: 0 0 0 auto; z-index: 6; width: min(320px, 100%); }
+  .meet-stage[data-sharing] { flex-direction: column; }
+  .meet-stage[data-sharing] .meet-faces { width: auto; grid-auto-flow: column; grid-auto-columns: 160px; overflow-x: auto; }
+}
+@media (max-width: 599px) {
+  .meet-stage { padding: 10px; }
+  .meet-stage:not([data-count="1"]) .meet-faces { --columns: 2; }
+  .meet-stage[data-count="2"] .meet-faces { --columns: 1; }
+  .meet-controls { gap: 8px; }
+  .meet-control { width: 46px; height: 46px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-recording span, .meet-control[data-state="recording"], .meet-hand { animation: none; }
+}
+
+/* In the chat: a meeting's card, the dialog that makes one, and the ringing. */
+.chat-meeting { align-self: center; display: grid; gap: 8px; width: min(440px, 100%); margin: 10px 0; padding: 16px 18px; border-radius: 16px; background: var(--bubble); box-shadow: inset 3px 0 0 var(--leaf); }
+.chat-meeting[data-status="scheduled"] { box-shadow: inset 3px 0 0 var(--dew); }
+.chat-meeting:is([data-status="ended"], [data-status="cancelled"]) { box-shadow: inset 3px 0 0 var(--ink-mute); }
+.chat-meeting .chat-request-kicker { display: inline-flex; align-items: center; gap: 6px; color: var(--leaf); }
+.chat-meeting[data-status="scheduled"] .chat-request-kicker { color: var(--dew); }
+.chat-meeting:is([data-status="ended"], [data-status="cancelled"]) .chat-request-kicker { color: var(--ink-mute); }
+.chat-meeting .chat-request-kicker svg { width: 16px; height: 16px; }
+.chat-meeting[data-status="live"] .chat-meeting-status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; animation: meet-pulse 1.4s ease-in-out infinite; }
+.chat-meeting-when { font-size: 13px; color: var(--ink-soft); }
+.chat-meeting .chat-request-actions > a { display: inline-grid; place-items: center; }
+.meet-dialog { display: grid; gap: 14px; }
+.meet-dialog .chat-dialog-title, .meet-dialog .chat-dialog-text { margin: 0; }
+.meet-when { display: flex; gap: 8px; }
+.meet-when button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 1.5px solid var(--line-strong); border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.meet-when button[aria-checked="true"] { border-color: var(--leaf); color: var(--leaf); background: rgb(184 236 147 / 0.08); }
+.meet-when svg { width: 20px; height: 20px; }
+.chat-ringing { position: fixed; right: 20px; bottom: 20px; z-index: 30; display: flex; align-items: center; gap: 12px; width: min(420px, calc(100% - 40px)); padding: 14px 14px 14px 16px; border-radius: 18px;
+  background: var(--night-raised); box-shadow: 0 0 0 1px var(--line-strong), 0 16px 40px rgb(0 0 0 / 0.55); animation: chat-ringing-in 0.3s var(--ease); }
+@keyframes chat-ringing-in { from { opacity: 0; transform: translateY(12px); } }
+.chat-ringing-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--leaf); color: var(--night); animation: meet-wave 1.2s ease-in-out infinite; }
+.chat-ringing-icon svg { width: 22px; height: 22px; }
+.chat-ringing-text { flex: 1; min-width: 0; }
+.chat-ringing-title { overflow: hidden; font-size: 15px; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; }
+.chat-ringing-sub { font-size: 13px; color: var(--ink-mute); }
+.chat-ringing .admin-approve { display: inline-grid; place-items: center; height: 40px; padding: 0 18px; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { .chat-ringing, .chat-ringing-icon, .chat-meeting-status::before { animation: none; } }
+.chat-meeting-wrap { align-self: center; display: grid; justify-items: center; width: min(440px, 100%); }
+.chat-meeting-wrap .chat-meeting { width: 100%; }
+
+/* Letting people in: who is asking (for admins, at the top right), and the
+   waiting line on a member's waiting screen. */
+.meet-knocks { position: fixed; top: 76px; right: 20px; z-index: 9; display: grid; gap: 10px; width: min(420px, calc(100% - 40px)); }
+.meet-knock { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-radius: 16px; background: var(--night-raised);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 14px 36px rgb(0 0 0 / 0.55); animation: chat-ringing-in 0.3s var(--ease); }
+.meet-knock-text { flex: 1; min-width: 0; font-size: 14px; color: var(--ink-soft); }
+.meet-knock-text strong { color: var(--ink); font-weight: 650; }
+.meet-knock :is(.account-button, .admin-approve) { flex: none; height: 38px; padding: 0 14px; border-radius: 10px; }
+.meet-lobby-wait { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--ink-soft); font-size: 15px; }
+.meet-lobby-wait span { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--dew); animation: meet-pulse 1.4s ease-in-out infinite; }
+.meet-mini { height: 30px; padding: 0 12px; border-radius: 8px; background: var(--leaf); color: var(--night); font-size: 13px; font-weight: 650; cursor: pointer; }
+.meet-mini:disabled { opacity: 0.6; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .meet-knock, .meet-lobby-wait span { animation: none; } }

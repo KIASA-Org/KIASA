@@ -63,6 +63,11 @@ async function openChat(page) {
   // The connection is said only while it is not live, so its line is there, but hidden, once live.
   await page.locator(".chat-live[data-state='live']").waitFor({ state: "attached", timeout: 20000 });
 }
+// One's photo is in the menu under one's name in KIASA's bar: opened first, if it is not.
+async function yourPhoto(page) {
+  if (!(await page.locator(".app-menu").count())) await page.getByRole("button", { name: /^Signed in as / }).click();
+  await page.locator(".app-menu").getByRole("button", { name: /^Your photo/ }).click();
+}
 const row = (page, title) => page.locator(".chat-row", { has: page.locator(".chat-row-title", { hasText: title }) });
 // For timings: looks every 10 ms (a locator's own wait looks less and less often, up to every half second).
 const appears = (page, selector, text) => page.waitForFunction(([selector, text]) =>
@@ -76,6 +81,13 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
   // what a run leaves (a second group of the same name, Saved Messages) would
   // otherwise stand beside what the next one makes.
   await fresh.from("chats").delete().not("id", "is", null);
+  // Ana and Ben are in one team, so they may message each other freely (the
+  // rules between teams have their own test: npm run teams:local:e2e).
+  await fresh.from("contact_requests").delete().not("id", "is", null);
+  await fresh.from("teams").delete().not("id", "is", null);
+  await fresh.from("top_managers").delete().not("user_id", "is", null);
+  const { data: team } = await fresh.from("teams").insert({ name: "Chat test", color: "#30a46c" }).select("id").single();
+  await fresh.from("team_members").insert(["ana@example.com", "ben@example.com"].map(email => ({ user_id: people[email].id, team_id: team.id, assigned_by: "chat test" })));
   const { data: listed } = await fresh.auth.admin.listUsers({ page: 1, perPage: 1000 });
   for (const user of listed?.users ?? []) if (/^dan\.\d+@example\.com$/.test(user.email ?? "")) await fresh.auth.admin.deleteUser(user.id);
   // The local realtime server sleeps when no one is connected, and what the
@@ -376,7 +388,7 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
   await ana.page.screenshot({ path: path.join(out, "ana-group.png") });
 
   await step("Ana sets a photo from her square in the chat's bar; Ben sees it live, and her header shows it", async () => {
-    await ana.page.getByRole("button", { name: /^Your photo/ }).click();
+    await yourPhoto(ana.page);
     await ana.page.locator(".photo-choose input[type=file]").setInputFiles(picture);
     await ana.page.locator(".photo-frame img").waitFor({ timeout: 10000 });
     await ana.page.screenshot({ path: path.join(out, "ana-placing-photo.png") });
@@ -397,7 +409,7 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
     return `Ben saw it ${shownToBen} ms after Save; saved as a ${size} square`;
   });
   await step("Ana removes her photo; Ben sees her initials again", async () => {
-    await ana.page.getByRole("button", { name: /^Your photo/ }).click();
+    await yourPhoto(ana.page);
     await ana.page.locator(".photo-panel").getByRole("button", { name: "Remove" }).click();
     await ben.page.locator(".chat-row", { hasText: "Ana Silva" }).locator("img.avatar-photo").waitFor({ state: "detached", timeout: 10000 });
     await ana.page.keyboard.press("Escape");
@@ -589,6 +601,7 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
     return `his page recorded ${Math.round((Date.now() - new Date(seen.at).getTime()) / 1000)} s ago`;
   });
 
+  await fresh.from("teams").delete().not("id", "is", null);
   console.log(results.join("\n"));
   console.log("page errors:", errors.length ? errors.join(" | ") : "none");
   await browser.close();

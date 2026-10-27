@@ -1,0 +1,365 @@
+"use client";
+
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import type { MeetStart } from "@/lib/meetings/types";
+
+/** What each person in the meeting says about themselves, on the meeting's
+ * channel: who they are, and whether their microphone, camera, shared screen
+ * (its stream's id), raised hand and recording are on. */
+export type PeerState = { user: string; name: string; mic: boolean; cam: boolean; screen: string | null; hand: number | null; recording: boolean; joined: string };
+/** Someone else in the meeting, as this browser has them: their state, and what they send. */
+/** `link`, `signaling` and `trouble`: how the connection to them stands, and the last thing that went wrong with it. */
+export type Remote = PeerState & { peer: string; streams: MediaStream[]; link: RTCPeerConnectionState; signaling: RTCSignalingState; trouble: string };
+export type Connection = "connecting" | "live" | "paused";
+
+/** `user`: who sends it, so a browser answers only those it may connect to. */
+type Signal = { from: string; to: string; user: string; description?: RTCSessionDescriptionInit };
+type Link = {
+  pc: RTCPeerConnection; polite: boolean; makingOffer: boolean; ignoreOffer: boolean;
+  cam?: RTCRtpSender; screen?: RTCRtpSender; voice?: RTCRtpSender; queue: Promise<void>;
+  /** Seen in the meeting's list of who is here: from then on, gone from it means gone. */
+  seen: boolean;
+};
+
+// A camera picture good enough for a face, light enough to send to five others at once.
+const CAMERA: MediaTrackConstraints = { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } };
+const VOICE: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const CAMERA_BITRATE = 700_000, SCREEN_BITRATE = 1_800_000, VOICE_BITRATE = 64_000;
+
+/** My offer or answer, asking the other side for a clearer voice than the
+ * usual: Opus at up to 64 kbit/s, with what is lost on the way made up. (In
+ * an offer or answer, these say how one wants to receive.) */
+function clearVoice(description: RTCSessionDescriptionInit): RTCSessionDescriptionInit {
+  const sdp = description.sdp ?? "";
+  const opus = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
+  if (!opus) return description;
+  return {
+    ...description,
+    sdp: sdp.replace(new RegExp(`a=fmtp:${opus} ([^\\r\\n]*)`), (line, params: string) =>
+      /maxaveragebitrate/.test(params) ? line : `a=fmtp:${opus} ${params};maxaveragebitrate=${VOICE_BITRATE};useinbandfec=1`),
+  };
+}
+
+/** Waits until a connection has found the ways to be reached that matter:
+ * the address the internet sees (and, when a relay is set up, the relay's),
+ * or all of them, at most a few seconds. They then travel inside its offer or
+ * answer, in one message, rather than one by one after it, where a pair
+ * offering at the same moment could lose them. */
+function gathered(pc: RTCPeerConnection, relay: boolean, most = 2500): Promise<void> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise(resolve => {
+    let settle = 0;
+    const finish = () => {
+      pc.removeEventListener("icegatheringstatechange", changed);
+      pc.removeEventListener("icecandidate", found);
+      window.clearTimeout(timer);
+      window.clearTimeout(settle);
+      resolve();
+    };
+    const changed = () => { if (pc.iceGatheringState === "complete") finish(); };
+    // Enough found: a moment more for the rest of the same kind, then go.
+    const found = ({ candidate }: RTCPeerConnectionIceEvent) => {
+      if (candidate?.type === (relay ? "relay" : "srflx") && !settle) settle = window.setTimeout(finish, 150);
+    };
+    const timer = window.setTimeout(finish, most);
+    pc.addEventListener("icegatheringstatechange", changed);
+    pc.addEventListener("icecandidate", found);
+  });
+}
+
+/** A meeting, as one browser takes part in it. Each person's browser connects
+ * straight to each other's (WebRTC), finding them on the meeting's private
+ * live channel ("meet:<id>"): who is there (presence), and their offers to
+ * connect (broadcast), each kept to the two it is meant for. Until `joined`,
+ * it only listens, so the waiting screen shows who is already in. Each
+ * connection follows the "perfect negotiation" pattern, so two browsers
+ * offering at once settle it without anyone losing their place. `allowed`:
+ * whom this browser connects to (admins, and the people an admin let in). */
+export function useMeeting({ supabase, start, joined, allowed }: { supabase: SupabaseClient; start: MeetStart; joined: boolean; allowed: string[] }) {
+  const { meeting, me, ice } = start;
+  const relayed = ice.some(server => [server.urls].flat().some(url => url.startsWith("turn")));
+  // This tab, in the meeting: the same person may be in it from two tabs.
+  const [peerId] = useState(() => crypto.randomUUID());
+  const [connection, setConnection] = useState<Connection>("connecting");
+  const [present, setPresent] = useState<(PeerState & { peer: string })[]>([]);
+  const [remotes, setRemotes] = useState<Record<string, Remote>>({});
+  const [ended, setEnded] = useState(false);
+  // Mine: the camera and microphone, the shared screen, and what I say about them.
+  const [local, setLocal] = useState<MediaStream | null>(null);
+  const [screen, setScreen] = useState<MediaStream | null>(null);
+  const [mic, setMic] = useState(true);
+  const [cam, setCam] = useState(true);
+  const [hand, setHand] = useState<number | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [problem, setProblem] = useState("");
+
+  const channel = useRef<RealtimeChannel | null>(null);
+  const links = useRef(new Map<string, Link>());
+  const localRef = useRef<MediaStream | null>(null);
+  const screenRef = useRef<MediaStream | null>(null);
+  const joinedAt = useRef(new Date().toISOString());
+
+  // What I tell the others goes one message at a time, in order: the live
+  // connection refuses messages sent faster than about ten a second ("rate
+  // limited"), and a refused one is sent again a moment later.
+  const outbox = useRef(Promise.resolve());
+  const send = (to: string, signal: Omit<Signal, "from" | "to" | "user">) => {
+    outbox.current = outbox.current.then(async () => {
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const sent = await channel.current?.send({ type: "broadcast", event: "signal", payload: { from: peerId, to, user: me.id, ...signal } });
+        if (sent === undefined || sent === "ok") return;
+        await new Promise(resolve => window.setTimeout(resolve, 120 + attempt * 60));
+      }
+    }).catch(() => {});
+  };
+  const patchRemote = (peer: string, change: (remote: Remote) => Partial<Remote>) =>
+    setRemotes(current => current[peer] ? { ...current, [peer]: { ...current[peer], ...change(current[peer]) } } : current);
+
+  // Each send at a sensible rate: faces lighter, a shared screen sharper; and
+  // the voice first: while a new connection is still finding how much it can
+  // carry, the pictures give way to it.
+  const limit = async (sender: RTCRtpSender | undefined, bitrate: number, first = false) => {
+    if (!sender) return;
+    const parameters = sender.getParameters();
+    if (!parameters.encodings?.length) return;
+    parameters.encodings[0].maxBitrate = bitrate;
+    if (first) Object.assign(parameters.encodings[0], { priority: "high", networkPriority: "high" });
+    await sender.setParameters(parameters).catch(() => {});
+  };
+
+  /** A connection to someone else in the meeting, sending them what I send everyone. */
+  const connect = (peer: string, state?: PeerState): Link => {
+    const pc = new RTCPeerConnection({ iceServers: ice });
+    const link: Link = { pc, polite: peerId > peer, makingOffer: false, ignoreOffer: false, queue: Promise.resolve(), seen: false };
+    links.current.set(peer, link);
+    const mine = localRef.current;
+    for (const track of mine?.getTracks() ?? []) {
+      const sender = pc.addTrack(track, mine!);
+      if (track.kind === "video") link.cam = sender;
+      else link.voice = sender;
+    }
+    const shared = screenRef.current;
+    if (shared) link.screen = pc.addTrack(shared.getVideoTracks()[0], shared);
+    pc.onnegotiationneeded = async () => {
+      try {
+        link.makingOffer = true;
+        await pc.setLocalDescription();
+      } catch (error) {
+        patchRemote(peer, () => ({ trouble: `offer: ${(error as Error).message}`.slice(0, 200) }));
+        return;
+      } finally { link.makingOffer = false; }
+      await gathered(pc, relayed);
+      // Set aside meanwhile, for an offer from the other side: nothing to send.
+      if (pc.signalingState === "have-local-offer") send(peer, { description: clearVoice(pc.localDescription!.toJSON()) });
+    };
+    pc.ontrack = ({ track, streams }) => {
+      const stream = streams[0] ?? new MediaStream([track]);
+      patchRemote(peer, remote => ({ streams: remote.streams.some(known => known.id === stream.id) ? [...remote.streams] : [...remote.streams, stream] }));
+    };
+    pc.onsignalingstatechange = () => patchRemote(peer, () => ({ signaling: pc.signalingState }));
+    pc.onconnectionstatechange = () => {
+      patchRemote(peer, () => ({ link: pc.connectionState }));
+      if (pc.connectionState === "connected") { void limit(link.voice, VOICE_BITRATE, true); void limit(link.cam, CAMERA_BITRATE); void limit(link.screen, SCREEN_BITRATE); }
+      if (pc.connectionState === "failed") pc.restartIce();
+    };
+    setRemotes(current => ({
+      ...current,
+      [peer]: current[peer] ?? { peer, streams: [], link: "new", signaling: "stable", trouble: "", ...(state ?? { user: "", name: "", mic: false, cam: false, screen: null, hand: null, recording: false, joined: "" }) },
+    }));
+    return link;
+  };
+
+  const disconnect = (peer: string) => {
+    links.current.get(peer)?.pc.close();
+    links.current.delete(peer);
+    setRemotes(current => {
+      const rest = { ...current };
+      delete rest[peer];
+      return rest;
+    });
+  };
+
+  const handle = async (signal: Signal) => {
+    let link = links.current.get(signal.from);
+    if (!link) link = connect(signal.from);
+    const { pc } = link;
+    if (signal.description) {
+      const collision = signal.description.type === "offer" && (link.makingOffer || pc.signalingState !== "stable");
+      link.ignoreOffer = !link.polite && collision;
+      if (link.ignoreOffer) return;
+      await pc.setRemoteDescription(signal.description);
+      if (signal.description.type === "offer") {
+        await pc.setLocalDescription();
+        await gathered(pc, relayed);
+        send(signal.from, { description: clearVoice(pc.localDescription!.toJSON()) });
+      }
+    }
+  };
+
+  // Who is here, from the channel: new people are connected to, people gone let go.
+  const synced = useEffectEvent(() => {
+    const state = channel.current?.presenceState<PeerState>() ?? {};
+    const here = Object.entries(state).flatMap(([peer, entries]) => entries[0] ? [{ ...(entries[0] as unknown as PeerState), peer }] : []);
+    setPresent(here);
+    if (!joined) return;
+    const others = here.filter(entry => entry.peer !== peerId && allowed.includes(entry.user));
+    for (const entry of others) {
+      const link = links.current.get(entry.peer) ?? connect(entry.peer, entry);
+      link.seen = true;
+      patchRemote(entry.peer, () => ({ ...entry }));
+    }
+    // Someone whose offer came before the list showed them is not gone: only
+    // someone the list showed, and no longer does, has left.
+    for (const [peer, link] of [...links.current]) if (link.seen && !others.some(entry => entry.peer === peer)) disconnect(peer);
+  });
+  const signalled = useEffectEvent((signal: Signal) => {
+    if (signal.to !== peerId || !joined || !allowed.includes(signal.user)) return;
+    const link = links.current.get(signal.from) ?? connect(signal.from);
+    // One at a time per connection, in the order they came.
+    link.queue = link.queue.then(() => handle(signal)).catch((error: Error) => patchRemote(signal.from, () => ({ trouble: `${error.name}: ${error.message}`.slice(0, 200) })));
+  });
+  const endedHere = useEffectEvent(() => setEnded(true));
+
+  // The meeting's channel, from the first moment: the waiting screen shows who is in.
+  useEffect(() => {
+    let stopped = false;
+    let opened: RealtimeChannel | null = null;
+    (async () => {
+      await supabase.realtime.setAuth();
+      if (stopped) return;
+      opened = supabase.channel(`meet:${meeting.id}`, { config: { private: true, broadcast: { self: false }, presence: { key: peerId } } });
+      channel.current = opened;
+      opened
+        .on("presence", { event: "sync" }, () => synced())
+        .on("broadcast", { event: "signal" }, ({ payload }) => signalled(payload as Signal))
+        .on("broadcast", { event: "ended" }, () => endedHere())
+        .subscribe(status => { if (!stopped) setConnection(status === "SUBSCRIBED" ? "live" : status === "CLOSED" ? "paused" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "paused" : "connecting"); });
+    })().catch(() => { if (!stopped) setConnection("paused"); });
+    return () => {
+      stopped = true;
+      channel.current = null;
+      if (opened) supabase.removeChannel(opened);
+    };
+  }, [supabase, meeting.id, peerId]);
+
+  // What I say about myself, whenever it changes (only once in).
+  useEffect(() => {
+    if (!joined || connection !== "live") return;
+    void channel.current?.track({ user: me.id, name: me.name, mic, cam, screen: screen?.id ?? null, hand, recording, joined: joinedAt.current } satisfies PeerState);
+  }, [joined, connection, me.id, me.name, mic, cam, screen, hand, recording]);
+
+  // Someone let in while I am here: connected to at once.
+  const allowedKey = allowed.join(",");
+  useEffect(() => { if (joined) synced(); }, [joined, allowedKey]);
+
+  // Once in: connected to everyone already here. Leaving: every connection let go.
+  useEffect(() => {
+    if (!joined) return;
+    synced();
+    const open = links.current;
+    return () => {
+      void channel.current?.untrack();
+      for (const link of open.values()) link.pc.close();
+      open.clear();
+      setRemotes({});
+    };
+  }, [joined]);
+
+  // The camera and microphone, asked for once on the waiting screen.
+  useEffect(() => {
+    let stopped = false;
+    (async () => {
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE, video: CAMERA });
+      } catch {
+        // No camera, or it was refused: the microphone alone, then nothing.
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE }); setCam(false); } catch {
+          setMic(false); setCam(false);
+          setProblem("This browser was not allowed to use your camera or microphone. You can still join, and see and hear the others; allow them from the lock beside the address to be seen and heard.");
+        }
+      }
+      if (stopped) { stream?.getTracks().forEach(track => track.stop()); return; }
+      // Tuned for talking, not music.
+      for (const track of stream?.getAudioTracks() ?? []) track.contentHint = "speech";
+      localRef.current = stream ?? new MediaStream();
+      setLocal(localRef.current);
+    })();
+    return () => {
+      stopped = true;
+      localRef.current?.getTracks().forEach(track => track.stop());
+      screenRef.current?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
+  const toggleMic = () => {
+    const track = localRef.current?.getAudioTracks()[0];
+    if (!track) return setProblem("No microphone is available to this page.");
+    track.enabled = !mic;
+    setMic(!mic);
+  };
+
+  /** Camera off lets the camera go (its light goes out); on, a new picture is sent to everyone. */
+  const toggleCam = async () => {
+    const stream = localRef.current;
+    if (!stream) return;
+    if (cam) {
+      for (const track of stream.getVideoTracks()) { track.stop(); stream.removeTrack(track); }
+      for (const link of links.current.values()) await link.cam?.replaceTrack(null);
+      setCam(false);
+      setLocal(new MediaStream(stream.getTracks()));
+      return;
+    }
+    try {
+      const [track] = (await navigator.mediaDevices.getUserMedia({ video: CAMERA })).getVideoTracks();
+      stream.addTrack(track);
+      for (const link of links.current.values()) {
+        if (link.cam) await link.cam.replaceTrack(track);
+        else link.cam = link.pc.addTrack(track, stream);
+      }
+      setCam(true);
+      setLocal(new MediaStream(stream.getTracks()));
+    } catch {
+      setProblem("The camera could not be started. Is another program using it?");
+    }
+  };
+
+  const stopScreen = () => {
+    const shared = screenRef.current;
+    if (!shared) return;
+    shared.getTracks().forEach(track => track.stop());
+    for (const link of links.current.values()) {
+      if (link.screen) { try { link.pc.removeTrack(link.screen); } catch {} }
+      link.screen = undefined;
+    }
+    screenRef.current = null;
+    setScreen(null);
+  };
+
+  const shareScreen = async () => {
+    if (screenRef.current) return stopScreen();
+    try {
+      // The meeting's own tab is not offered: sharing it only shows the meeting to itself.
+      const shared = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false, selfBrowserSurface: "exclude" } as DisplayMediaStreamOptions);
+      const [track] = shared.getVideoTracks();
+      track.contentHint = "detail";
+      // Stopped from the browser's own "Stop sharing" bar, too.
+      track.addEventListener("ended", stopScreen);
+      screenRef.current = shared;
+      for (const link of links.current.values()) link.screen = link.pc.addTrack(track, shared);
+      setScreen(shared);
+    } catch { /* the person chose not to share */ }
+  };
+
+  /** Everyone is told the meeting is over (the admin who ended it). */
+  const announceEnd = () => { void channel.current?.send({ type: "broadcast", event: "ended", payload: {} }); };
+
+  return {
+    peerId, connection, present, remotes: Object.values(remotes), ended, problem, setProblem,
+    local, screen, mic, cam, hand, recording,
+    toggleMic, toggleCam, shareScreen, stopScreen,
+    raiseHand: () => setHand(hand ? null : Date.now()),
+    setRecording, announceEnd,
+  };
+}

@@ -113,7 +113,7 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .admin-show button span { font-size: 13px; font-weight: 500; color: var(--fg-mute); font-variant-numeric: tabular-nums; }
 .admin-show button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--night); }
 .admin-show button[aria-pressed="true"] span { color: var(--night); }
-.admin-table { min-width: 980px; }
+.admin-table { min-width: 1120px; }
 .admin-person-name { display: block; font-weight: 600; }
 .admin-person-email { display: block; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--fg-mute); }
 .admin-person-org { display: none; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--fg-soft); }
@@ -136,14 +136,14 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
   .admin-user-text { display: none; }
   /* The table keeps who, where from, status and last sign-in; the requests above show the rest. */
   .admin-table { min-width: 0; }
-  .admin-table :is(th, td):is(:nth-child(3), :nth-child(6)) { display: none; }
+  .admin-table :is(th, td):is(:nth-child(3), :nth-child(7)) { display: none; }
 }
 @media (max-width: 599px) {
   .account-details div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   /* Phones: each table keeps the columns that fit, so nothing runs off the edge. */
   .account-table :is(th, td) { padding-right: 16px; }
   .block-account-reports .account-table :is(th, td):nth-child(n + 4) { display: none; }
-  .admin-table :is(th, td):is(:nth-child(2), :nth-child(7)) { display: none; }
+  .admin-table :is(th, td):is(:nth-child(2), :nth-child(8)) { display: none; }
   .admin-person-org { display: block; }
   .account-event { padding-right: 0; }
   .account-badge { position: static; margin-top: 8px; }
@@ -243,7 +243,8 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 @media (hover: none) { .photo-button-mark { opacity: 1; } }
 
 /* Placed beside the square by the page itself (left, and width), so it always fits on the screen. */
-.photo-panel { position: absolute; top: calc(100% + 12px); left: 0; z-index: 60; display: grid; gap: 14px; padding: 18px; background: var(--night-raised); border-top: 3px solid var(--leaf); box-shadow: 0 24px 60px rgb(0 0 0 / 0.5); color: var(--ink); text-align: left; }
+/* On the browser's top layer (a popover), placed by the page beside the square. */
+.photo-panel { position: fixed; inset: auto; margin: 0; border: 0; overflow-y: auto; display: grid; gap: 14px; padding: 18px; background: var(--night-raised); border-top: 3px solid var(--leaf); box-shadow: 0 24px 60px rgb(0 0 0 / 0.5); color: var(--ink); text-align: left; }
 .photo-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: -4px; }
 .photo-panel-title { font-size: 17px; font-weight: 650; }
 .photo-close { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-right: -6px; color: var(--ink-soft); transition: color 0.2s; }
@@ -268,3 +269,123 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .photo-links { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 600; }
 .photo-links a { transition: color 0.2s; }
 .photo-links a:hover { color: var(--leaf); }
+
+/* ───────── KIASA's bar, over its private areas (Users, Chat, Job desk) ─────────
+   The leaf and KIASA, the areas as tabs (the open one underlined in leaf), and
+   who is signed in on the right, whose menu holds the rest. */
+.app-bar { position: relative; z-index: 20; }
+.app-bar-inner { display: flex; align-items: center; gap: 28px; height: var(--header); }
+.app-bar-brand { display: inline-flex; flex: none; align-items: center; gap: 10px; color: var(--ink); }
+.app-bar-brand .practice-mark { width: 34px; height: 34px; }
+.app-bar-word { font-size: 18px; font-weight: 700; letter-spacing: 0.08em; }
+.app-bar-tabs { display: flex; align-self: stretch; gap: 2px; }
+.app-bar-tab { display: inline-flex; align-items: center; padding: 0 14px; color: var(--ink-soft); font-size: 15px; font-weight: 600; box-shadow: inset 0 -2px 0 transparent; transition: color 0.2s, box-shadow 0.2s; }
+.app-bar-tab:hover { color: var(--ink); }
+.app-bar-tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--leaf); }
+.app-bar-me { position: relative; margin-left: auto; }
+.app-bar-who { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 5px; border-radius: 999px; color: var(--ink); cursor: pointer; transition: background-color 0.2s; }
+.app-bar-who:hover, .app-bar-who[aria-expanded="true"] { background: rgb(236 255 243 / 0.07); }
+.app-bar .account-initials { width: 36px; height: 36px; border-radius: 50%; font-size: 13px; }
+.app-bar .avatar-photo { border-radius: inherit; }
+.app-bar-who-text { display: grid; text-align: left; line-height: 1.25; }
+.app-bar-name { font-size: 14px; font-weight: 650; }
+.app-bar-detail { font-size: 12px; color: var(--ink-mute); }
+.app-bar-chevron { width: 16px; height: 16px; color: var(--ink-mute); }
+.app-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 80; display: grid; gap: 2px; width: 290px; padding: 8px; border-radius: 14px;
+  background: var(--night-raised); box-shadow: 0 0 0 1px var(--line-strong), 0 18px 44px rgb(0 0 0 / 0.55); }
+.app-menu-head { margin-bottom: 6px; padding: 10px 10px 14px; border-bottom: 1px solid var(--line); }
+.app-menu-head .account-initials { width: 48px; height: 48px; font-size: 16px; }
+.app-menu-name { display: grid; font-weight: 650; }
+.app-menu-name span { font-size: 13px; font-weight: 400; color: var(--ink-mute); }
+.app-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px; border-radius: 8px; color: var(--ink); font-size: 15px; font-weight: 500; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+.app-menu-item:hover { background: rgb(236 255 243 / 0.07); }
+.app-menu-item svg { width: 18px; height: 18px; }
+.app-menu-out { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; padding-top: 2px; height: 44px; color: #ffb4a2; }
+.app-signout .chat-dialog-actions { margin-top: 8px; }
+@media (max-width: 767px) {
+  .app-bar-inner { gap: 12px; }
+  .app-bar-who-text, .app-bar-chevron { display: none; }
+  .app-bar-who { padding: 4px; }
+  .app-bar-tab { padding: 0 10px; font-size: 14px; }
+}
+@media (max-width: 479px) {
+  .app-bar-word { display: none; }
+  .app-bar-tab { padding: 0 8px; }
+}
+
+/* A team's shield on a photo, where the leaf would be (bottom right). */
+.rank-team { position: absolute; z-index: 2; right: -12%; bottom: -12%; width: 42%; min-width: 14px; filter: drop-shadow(0 1px 2px rgb(3 8 7 / 0.7)); }
+.rank-team > svg.rank-shield { display: block; width: 100%; height: auto; }
+
+/* ───────── The admin's teams ─────────
+   A card per team, edged in its colour: its shield, its manager, its members. */
+.teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+.teams-card { display: grid; gap: 12px; padding: 22px; background: var(--night-raised); border-top: 3px solid var(--team, var(--line-strong)); }
+.teams-new { background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); border-top: 0; }
+.teams-card-head { display: flex; align-items: center; gap: 16px; }
+.teams-card-shield { flex: none; width: 56px; height: 65px; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.45)); }
+.teams-card-title { min-width: 0; }
+.teams-name { font-size: 22px; font-weight: 650; line-height: 1.2; }
+.teams-count { margin-top: 2px; font-size: 14px; color: var(--ink-mute); }
+.teams-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 8px; }
+.teams-actions .admin-confirm { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.teams-link { font-size: 14px; font-weight: 600; color: var(--leaf); cursor: pointer; text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.2s; }
+.teams-link:hover { text-decoration-color: currentColor; }
+.teams-danger { color: #ffb4a2; }
+.teams-label { margin-top: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.teams-people { display: grid; gap: 2px; }
+.teams-person { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.teams-person-photo.chat-avatar { width: 38px; height: 38px; font-size: 13px; }
+.teams-person-text { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
+.teams-person-name { overflow: hidden; font-size: 15px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.teams-person-role { overflow: hidden; font-size: 13px; color: var(--ink-mute); white-space: nowrap; text-overflow: ellipsis; }
+.teams-none { font-size: 14px; color: var(--ink-mute); }
+.teams-give { display: grid; gap: 8px; justify-items: start; }
+.teams-add { justify-self: start; }
+.teams-edit { display: grid; flex: 1; gap: 12px; min-width: 0; }
+.teams-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.teams-color { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.25); transition: opacity 0.2s; }
+.teams-color[aria-checked="true"] { outline: 2px solid var(--ink); outline-offset: 3px; }
+.teams-color[data-taken] { opacity: 0.35; }
+.teams-unplaced { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 32px; }
+.teams-unplaced .teams-person { border-bottom: 1px solid var(--line); padding: 10px 0; }
+
+/* ── The admin's simulated members: adding them, changing many at once, the
+   table (each one's photo, name, team, hours, pace, now), and the testers. */
+.sims { display: grid; gap: 18px; }
+.sims-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+.sims-count input { width: 120px; }
+.sims-hint { flex-basis: 100%; font-size: 13px; color: var(--ink-mute); }
+.sims-bulk { display: grid; gap: 10px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--night-raised); }
+.sims-bulk-count { font-size: 14px; font-weight: 650; }
+.sims-bulk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; color: var(--ink-soft); }
+.sims-bulk-label { min-width: 48px; font-weight: 650; color: var(--ink); }
+.sims-bulk-row input[type="time"], .sims-bulk-row input[type="number"] { height: 36px; padding: 0 10px; border: 1.5px solid var(--line-strong); border-radius: 10px; background: var(--night); color: var(--ink); font: inherit; }
+.sims-bulk-row input[type="number"] { width: 82px; }
+.sims-days { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+.sims-days label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.sims-days input, .sims-table input[type="checkbox"], .sims-tester input { width: 17px; height: 17px; accent-color: var(--leaf); }
+.sims-table { min-width: 900px; }
+.sims-table tr[data-chosen] { background: rgb(184 236 147 / 0.05); }
+.sims-person { display: flex; align-items: center; gap: 12px; }
+.sims-photo-button { flex: none; border-radius: 50%; cursor: pointer; }
+.sims-photo-button:focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; }
+.sims-avatar { width: 40px; height: 40px; font-size: 13px; }
+.sims-name { display: grid; gap: 2px; min-width: 0; }
+.sims-name input { width: 100%; min-width: 160px; height: 34px; padding: 0 10px; border: 1.5px solid transparent; border-radius: 9px; background: none; color: var(--ink); font: inherit; font-weight: 650; }
+.sims-name input:is(:hover, :focus) { border-color: var(--line-strong); background: var(--night); outline: none; }
+.sims-name .admin-when { padding-left: 11px; }
+.sims-approve { height: 34px; padding: 0 14px; }
+.sims-now { display: block; font-weight: 650; }
+.sims-now[data-now="At work"] { color: var(--leaf); }
+.sims-now[data-now="Paused"] { color: #ffb4a2; }
+.sims-testers { display: flex; flex-wrap: wrap; gap: 10px; }
+.sims-tester { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; }
+.sims-photo { width: min(330px, calc(100vw - 32px)); margin: auto; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: #101b16; color: var(--ink); }
+.sims-photo::backdrop { background: rgb(0 0 0 / 0.55); }
+.sims-photo .photo-preview { margin: 8px auto 14px; }
+.sims-avatar .avatar-photo { border-radius: 50%; }
+.sims-work { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 14px 18px; border-left: 3px solid var(--leaf); background: var(--night-raised); font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+.sims-work p { flex: 1 1 420px; }
+.sims-table { min-width: 1000px; }
+.sims-testers-all { display: flex; gap: 10px; margin-bottom: 14px; }

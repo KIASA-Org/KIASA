@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LeafMark } from "@/components/site/brand";
+import { AppBar } from "@/components/site/app-bar";
 import { RanksProvider } from "@/components/site/ranks";
-import { YourPhoto } from "@/components/site/your-photo";
 import { ChatApp } from "@/components/chat/chat-app";
-import { signOut } from "@/lib/accounts/actions";
 import { accountsLive, publicSupabase, ranks, signedIn } from "@/lib/accounts/server";
 import type { Ranks } from "@/lib/accounts/viewer";
-import { chatPeople, chatViewer, myChats } from "@/lib/chat/server";
+import { chatPeople, chatsToWatch, chatViewer, groupDirectory, myChats, myRequests } from "@/lib/chat/server";
 import type { ChatMe } from "@/lib/chat/types";
 
 export const metadata: Metadata = {
@@ -32,14 +29,14 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
     <div className="chat-empty"><p>KIASA Chat opens once accounts are connected.</p></div>
   </ChatFrame>;
   if (!(await signedIn())) redirect("/sign-in");
-  const [me, { setup, chats, members }, people, badges, asked] = await Promise.all([chatViewer(), myChats(), chatPeople(), ranks(), searchParams]);
+  const [me, { setup, chats, members }, people, badges, requests, groups, watched, asked] = await Promise.all([chatViewer(), myChats(), chatPeople(), ranks(), myRequests(), groupDirectory(), chatsToWatch(), searchParams]);
   if (!me) redirect("/sign-in");
   if (setup) return <ChatFrame me={me} ranks={badges}>
     <div className="chat-empty"><p>{me.admin ? SETUP[setup] : "KIASA Chat is being updated. Please try again a little later."}</p></div>
   </ChatFrame>;
-  const opening = typeof asked.c === "string" && chats.some(chat => chat.id === asked.c) ? asked.c : null;
+  const opening = typeof asked.c === "string" && [...chats, ...(watched?.chats ?? [])].some(chat => chat.id === asked.c) ? asked.c : null;
   return <ChatFrame me={me} ranks={badges}>
-    <ChatApp me={me} initialChats={chats} initialMembers={members} people={people} realtime={publicSupabase} initialChat={opening} />
+    <ChatApp me={me} initialChats={chats} initialMembers={members} people={people} realtime={publicSupabase} initialChat={opening} initialRequests={requests} initialDirectory={groups} initialWatched={watched} />
   </ChatFrame>;
 }
 
@@ -50,24 +47,10 @@ function ChatFrame({ me, ranks, children }: { me?: ChatMe; ranks?: Ranks; childr
   return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={me ? publicSupabase : undefined} me={me?.id}>
     <div className="site chat-page">
     <a href="#main-content" className="skip-link">Skip to content</a>
-    <header className="practice-header admin-header chat-bar">
-      <div className="admin-bar wrap wrap-wide">
-        <Link href="/" className="practice-lockup" aria-label="KIASA home">
-          <LeafMark className="practice-mark" weight={3.4} />
-          <span className="practice-divider" aria-hidden="true" />
-          <span className="practice-word">KIASA <span>Chat</span></span>
-        </Link>
-        {me && <div className="admin-user">
-          <YourPhoto person={{ id: me.id, name: me.name }} photo={me.photo} realtime={publicSupabase} className="account-initials"
-            details="bar" role={me.admin ? "Admin" : "Team"}>
-            <Link href={me.admin ? "/admin" : "/account"}>{me.admin ? "Admin" : "Your account"}</Link>
-          </YourPhoto>
-          <Link href="/jobs" className="account-button admin-exit">Jobs</Link>
-          <Link href={me.admin ? "/admin" : "/account"} className="account-button admin-exit">{me.admin ? "Admin" : "Your account"}</Link>
-          <form action={signOut}><button type="submit" className="account-button">Sign out</button></form>
-        </div>}
-      </div>
-    </header>
+    <div className="chat-bar">
+      <AppBar area="chat" person={me ? { id: me.id, name: me.name, detail: me.admin ? "Admin" : "Team", admin: me.admin, photo: me.photo } : { name: "KIASA", detail: "", admin: false }}
+        realtime={publicSupabase} live={!!me} />
+    </div>
     <main id="main-content" tabIndex={-1} className="chat-main">{children}</main>
     </div>
   </RanksProvider>;

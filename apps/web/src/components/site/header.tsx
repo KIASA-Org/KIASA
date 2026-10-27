@@ -92,10 +92,13 @@ export function SiteHeader({ viewer }: { viewer?: Viewer }) {
           {badge
             ? <Link href={badge.href} className="masthead-account" onClick={close}
               aria-label={`${badge.href === "/admin" ? "Admin" : "Your account"}, ${badge.name}`}>
-              <Avatar initials={badge.initials} photo={badge.photo} className="masthead-account-initials" rank={badge.rank ?? null} />
+              <Avatar initials={badge.initials} photo={badge.photo} className="masthead-account-initials" mark={badge.mark ?? null} />
               <span className="masthead-account-name" aria-hidden="true">{badge.name.split(" ")[0]}</span>
             </Link>
-            : <Link href={signUp.href} className="masthead-signup" onClick={close}>{signUp.label}</Link>}
+            : <>
+              <Link href="/sign-in" className="masthead-signin" onClick={close}>Sign in</Link>
+              <Link href={signUp.href} className="masthead-signup" onClick={close}>{signUp.label}</Link>
+            </>}
 
           <button type="button" id="nav-search" className="masthead-tool" aria-label="Search" aria-expanded={open === "search"}
             aria-controls="panel-search" onClick={() => toggle("search")}>
@@ -113,7 +116,7 @@ export function SiteHeader({ viewer }: { viewer?: Viewer }) {
             aria-expanded={open === "menu"} aria-controls="panel-menu" onClick={() => toggle("menu")}>
             {open === "menu" ? <Close /> : <Menu />}
           </button>
-          <MobileMenu open={open === "menu"} onNavigate={close} />
+          <MobileMenu open={open === "menu"} signedIn={!!badge} onNavigate={close} />
         </div>
       </div>
     </header>
@@ -198,7 +201,7 @@ function RegionPanel({ open, onChoose }: { open: boolean; onChoose: () => void }
 }
 
 /** Small screens: the whole navigation in one scrolling sheet, one section open at a time. */
-function MobileMenu({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
+function MobileMenu({ open, signedIn, onNavigate }: { open: boolean; signedIn: boolean; onNavigate: () => void }) {
   return <div id="panel-menu" className="sheet" data-open={open ? "" : undefined}>
     <nav aria-label="Menu" className="sheet-scroll">
       <ul className="sheet-list">
@@ -220,6 +223,8 @@ function MobileMenu({ open, onNavigate }: { open: boolean; onNavigate: () => voi
         </li>)}
       </ul>
       <div className="sheet-foot">
+        {/* Phones: Sign in has no room in the bar beside Sign up; it is here. */}
+        {!signedIn && <Go href="/sign-in" onNavigate={onNavigate} className="sheet-link sheet-signin"><span>Sign in</span><ArrowRight /></Go>}
         <Go href="/contact" onNavigate={onNavigate} className="cta">
           <CtaContent>Contact us</CtaContent>
         </Go>

@@ -25,6 +25,9 @@ const people = [
   { email: "ana@example.com", name: "Ana Silva", status: "approved", organization: "Halden Mutual" },
   { email: "ben@example.com", name: "Ben Okoro", status: "approved", organization: "Varda Energy" },
   { email: "cara@example.com", name: "Cara Wu", status: "waiting", organization: "Osprey Freight" },
+  // Two more approved people, for the teams test (one leads a second team, one is in it).
+  { email: "dia@example.com", name: "Dia Rahman", status: "approved", organization: "Northwind Labs" },
+  { email: "eli@example.com", name: "Eli Novak", status: "approved", organization: "Northwind Labs" },
 ];
 (async () => {
   const out = {};

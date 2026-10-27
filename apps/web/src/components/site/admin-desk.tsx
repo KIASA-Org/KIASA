@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useRef, useState } from "react";
 import type { Account, AccountStatus } from "@/content/accounts";
 import { decide, removeAccount, setTopManager } from "@/lib/accounts/actions";
+import type { Team } from "@/lib/accounts/viewer";
+import { setTeam } from "@/lib/teams/actions";
 import { useLiveRows } from "@/lib/accounts/live";
 import { Search } from "./icons";
 
@@ -24,7 +26,7 @@ type Decision = { status: "approved" | "declined"; decided: string };
  * search and a filter. With accounts connected (`live`) each decision is saved
  * and the page hears of new requests the moment they arrive; on the sample page
  * a decision lasts until the page is left, and says that nothing was sent. */
-export function AdminDesk({ people: given, live, realtime }: { people: Account[]; live: boolean; realtime?: { url: string; key: string } }) {
+export function AdminDesk({ people: given, teams = [], live, realtime }: { people: Account[]; teams?: Team[]; live: boolean; realtime?: { url: string; key: string } }) {
   const router = useRouter();
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [query, setQuery] = useState("");
@@ -35,6 +37,8 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
   const [removal, setRemoval] = useState<{ text: string; sample?: boolean; failed?: boolean } | null>(null);
   // Roles chosen here, shown at once; what the server sends back takes over when it agrees.
   const [roles, setRoles] = useState<Record<string, boolean>>({});
+  // Teams chosen here, shown at once (the empty string: no team).
+  const [placed, setPlaced] = useState<Record<string, string>>({});
   const keep = useRef<HTMLButtonElement>(null);
   // Asked to confirm a deletion, the safe answer is the one under the admin's hand.
   useEffect(() => { if (confirming) keep.current?.focus(); }, [confirming]);
@@ -45,7 +49,8 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
   // A decision or a deletion shows at once; what the server sends back takes over when it agrees.
   const people = given.filter(person => !removed.includes(person.id))
     .map(person => person.status === "waiting" && decisions[person.id] ? { ...person, ...decisions[person.id] } : person)
-    .map(person => person.id in roles ? { ...person, top: roles[person.id] } : person);
+    .map(person => person.id in roles ? { ...person, top: roles[person.id] } : person)
+    .map(person => person.id in placed ? { ...person, team: placed[person.id] || undefined } : person);
   const count = (status: AccountStatus) => people.filter(person => person.status === status).length;
   const waiting = people.filter(person => person.status === "waiting");
 
@@ -93,6 +98,23 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
       const result = await setTopManager(person.id, top);
       if (!result.error) return;
       setRoles(current => {
+        const rest = { ...current };
+        delete rest[person.id];
+        return rest;
+      });
+      setRemoval({ text: result.error, failed: true });
+    });
+  };
+
+  const placeIn = (person: Account, teamId: string) => {
+    const team = teams.find(entry => entry.id === teamId);
+    setPlaced(current => ({ ...current, [person.id]: teamId }));
+    setRemoval({ sample: !live, text: team ? `${person.name} is in ${team.name} now, and wears its badge${person.top ? " as its manager" : ""}.` : `${person.name} is in no team now.` });
+    if (!live) return;
+    startTransition(async () => {
+      const result = await setTeam(person.id, teamId || null);
+      if (!result.error) return;
+      setPlaced(current => {
         const rest = { ...current };
         delete rest[person.id];
         return rest;
@@ -189,7 +211,7 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
         {shown.length > 0 && <div className="account-scroll">
           <table className="account-table admin-table">
             <thead>
-              <tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Why</th><th scope="col">Status</th><th scope="col">Role</th><th scope="col">Asked</th><th scope="col">Last signed in</th><th scope="col" className="admin-actions-head">Delete</th></tr>
+              <tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Why</th><th scope="col">Status</th><th scope="col">Role</th><th scope="col">Team</th><th scope="col">Asked</th><th scope="col">Last signed in</th><th scope="col" className="admin-actions-head">Delete</th></tr>
             </thead>
             <tbody>
               {shown.map(person => <tr key={person.id}>
@@ -212,6 +234,15 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
                       aria-label={`Role of ${person.name}`} onChange={event => setRole(person, event.target.value === "top")}>
                       <option value="member">Member</option>
                       <option value="top">Top manager</option>
+                    </select>
+                    : <span className="admin-when">None yet</span>}
+                </td>
+                <td>
+                  {person.status === "approved"
+                    ? <select className="admin-role" value={person.team ?? ""} aria-label={`Team of ${person.name}`} disabled={!teams.length}
+                      onChange={event => placeIn(person, event.target.value)}>
+                      <option value="">{teams.length ? "No team" : "No teams yet"}</option>
+                      {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
                     </select>
                     : <span className="admin-when">None yet</span>}
                 </td>

@@ -39,6 +39,8 @@ export type Account = {
   lastSignIn?: string;
   /** An admin has made them a top manager: KIASA's leaf shows on their photo. */
   top?: boolean;
+  /** The id of the team an admin put them in. */
+  team?: string;
 };
 
 /** The person the account page is drawn for: a client, signed in. */

@@ -1,50 +1,25 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Account } from "@/content/accounts";
-import { signOut } from "@/lib/accounts/actions";
 import { publicSupabase } from "@/lib/accounts/server";
-import { initialsOf, type Ranks } from "@/lib/accounts/viewer";
+import type { Ranks, Team } from "@/lib/accounts/viewer";
 import { ChatWatch } from "../chat/chat-watch";
 import { PreviewNote } from "./account";
 import { AdminDesk } from "./admin-desk";
-import { Avatar } from "./avatar";
-import { LeafMark } from "./brand";
+import { AppBar, type AppArea } from "./app-bar";
 import { RanksProvider } from "./ranks";
-import { YourPhoto } from "./your-photo";
+import type { SimDesk } from "@/lib/sims/server";
+import { SimsDesk } from "./sims-desk";
+import { TeamsDesk } from "./teams-desk";
 
 /** `id` and `photo` once accounts are connected: their square is then their photo, which they can change there. */
 type Admin = { name: string; role: string; id?: string; photo?: string | null };
 
-/** The admin page's frame: its own bar, as a practice page has (the firm's leaf,
- * a rule, "Admin", and who is signed in), then the page. */
-function AdminFrame({ admin, live, children }: { admin: Admin; live: boolean; children: ReactNode }) {
+/** The admin's console: KIASA's bar (Users, Chat, the Job desk, and who is
+ * signed in), then the page. */
+function AdminFrame({ admin, live, isAdmin = true, area = "admin", children }: { admin: Admin; live: boolean; isAdmin?: boolean; area?: AppArea; children: ReactNode }) {
   return <div className="site admin">
     <a href="#main-content" className="skip-link">Skip to content</a>
-    <header className="practice-header admin-header">
-      <div className="admin-bar wrap wrap-wide">
-        <Link href="/" className="practice-lockup" aria-label="KIASA home">
-          <LeafMark className="practice-mark" weight={3.4} />
-          <span className="practice-divider" aria-hidden="true" />
-          <span className="practice-word">KIASA <span>Admin</span></span>
-        </Link>
-        <div className="admin-user">
-          {live && admin.id
-            ? <YourPhoto person={{ id: admin.id, name: admin.name }} photo={admin.photo ?? null} realtime={publicSupabase} className="account-initials"
-              details="bar" role={admin.role} />
-            : <>
-              <Avatar initials={initialsOf(admin.name)} className="account-initials" rank="owner" />
-              <span className="admin-user-text">
-                <span className="admin-user-name">{admin.name}</span>
-                <span className="admin-user-role">{admin.role}</span>
-              </span>
-            </>}
-          {live && <Link href="/jobs" className="account-button admin-exit">Jobs</Link>}
-          {live && <Link href="/chat" className="account-button admin-exit">Chat</Link>}
-          <Link href="/" className="account-button admin-exit">Back to the site</Link>
-          {live && <form action={signOut}><button type="submit" className="account-button">Sign out</button></form>}
-        </div>
-      </div>
-    </header>
+    <AppBar area={area} person={{ id: admin.id, name: admin.name, detail: admin.role, admin: isAdmin, photo: admin.photo }} realtime={publicSupabase} live={live} />
     <main id="main-content" tabIndex={-1} className="page">{children}</main>
     {live && admin.id && <ChatWatch me={admin.id} realtime={publicSupabase} />}
   </div>;
@@ -57,14 +32,34 @@ export function AdminView({ people, admin, ranks, live }: { people: Account[]; a
   return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={live ? publicSupabase : undefined} me={admin.id}>
     <AdminFrame admin={admin} live={live}>
       {!live && <div className="wrap wrap-wide admin-preview"><PreviewNote /></div>}
-      <AdminDesk people={people} live={live} realtime={live ? publicSupabase : undefined} />
+      <AdminDesk people={people} teams={ranks?.teams ?? []} live={live} realtime={live ? publicSupabase : undefined} />
+    </AdminFrame>
+  </RanksProvider>;
+}
+
+/** The admin's teams (`/admin/teams`): each team's shield, its manager and members. */
+export function TeamsView({ people, teams, admin, ranks }: { people: Account[]; teams: Team[]; admin: Admin; ranks: Ranks }) {
+  return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
+    <AdminFrame admin={admin} live area="teams">
+      <TeamsDesk teams={teams} people={people} />
+    </AdminFrame>
+  </RanksProvider>;
+}
+
+/** The admin's simulated members (`/admin/simulated`): adding them, approving, teams, hours, pace, photos, testers. */
+export function SimsView({ desk, admin, ranks }: { desk: SimDesk; admin: Admin; ranks: Ranks }) {
+  return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
+    <AdminFrame admin={admin} live area="simulated">
+      {desk.setup
+        ? <div className="wrap wrap-wide admin-preview"><p className="admin-notice" data-failed="">Simulated members are not set up in the database yet: run supabase/migrations/20261028090000_simulated_members.sql in Supabase&apos;s SQL Editor, then reload this page.</p></div>
+        : <SimsDesk sims={desk.sims} people={desk.people} teams={ranks.teams ?? []} zone={desk.zone} links={desk.links} />}
     </AdminFrame>
   </RanksProvider>;
 }
 
 /** Signed in, but not one of KIASA's admins. */
 export function NotAdminView({ email }: { email: string }) {
-  return <AdminFrame admin={{ name: email, role: "Signed in" }} live>
+  return <AdminFrame admin={{ name: email, role: "Signed in" }} live isAdmin={false}>
     <section className="block admin-top" aria-labelledby="admin-title">
       <div className="wrap wrap-wide">
         <p className="eyebrow block-eyebrow">Admin</p>

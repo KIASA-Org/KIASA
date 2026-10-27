@@ -3,19 +3,23 @@
 import { useState, useTransition } from "react";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { ChatMe, ChatMember, ChatPerson } from "@/lib/chat/types";
+import type { Reach } from "@/lib/teams/rules";
 import { Avatar } from "../site/avatar";
 import { Close, Search } from "../site/icons";
 import { findable, initialsOf } from "./chat-format";
 import type { ChatDraft } from "./chat-state";
 
 /** Choosing people: one, for a direct chat; several and a name, for a new
- * group (admins only); or several to add to a group. A direct chat there is
+ * group (admins, and a team's manager, of their team's people: `only`); or
+ * several to add to a group. Someone one may not message yet says so, and
+ * choosing them asks the admin instead (`onAsk`). A direct chat there is
  * already opens at once; anything new is made in one trip to the database,
  * whose rules decide who may chat with whom. People are found by name, by
  * who they are, or by @username. */
-export function ChatPicker({ mode, heading: named, me, people, supabase, chatId, exclude = [], directWith, onClose, onDone }: {
+export function ChatPicker({ mode, heading: named, me, people, supabase, chatId, exclude = [], only, teamId = null, directWith, reach, onAsk, onClose, onDone }: {
   mode: "direct" | "group" | "add"; heading?: string; me: ChatMe; people: ChatPerson[]; supabase: SupabaseClient; chatId?: string; exclude?: string[];
-  directWith?: (person: string) => string | undefined;
+  only?: string[]; teamId?: string | null;
+  directWith?: (person: string) => string | undefined; reach?: (person: string) => Reach; onAsk?: (person: string) => void;
   onClose: () => void; onDone: (chatId: string, draft?: ChatDraft) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -24,7 +28,10 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
   const [error, setError] = useState("");
   const [busy, start] = useTransition();
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = people.filter(person => person.id !== me.id && !exclude.includes(person.id) && findable(person, words));
+  // Simulated members can be put in a group, never written to one to one.
+  const shown = people.filter(person => person.id !== me.id && !exclude.includes(person.id) && (!only || only.includes(person.id))
+    && !(mode === "direct" && person.hours) && findable(person, words));
+  const limit = (person: string) => mode === "direct" && !directWith?.(person) ? reach?.(person) ?? "free" : "free";
 
   /** How a chat just made looks until the chat list is asked for again. */
   const draft = (id: string, kind: "direct" | "group", ids: string[]): ChatDraft => {
@@ -33,7 +40,7 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
     return {
       chat: {
         id, kind, title: kind === "group" ? title.trim() : null, last_message_at: now, unread: 0, last_body: null, last_sender: null, last_kind: null, last_file: null,
-        pinned_at: null, muted: false, archived: false, marked_unread: false,
+        pinned_at: null, muted: false, archived: false, marked_unread: false, photo: null, team_id: kind === "group" ? teamId : null,
       },
       members: [member(me.id, me.name, kind === "group" ? "owner" : "member"),
         ...ids.map(user => member(user, people.find(person => person.id === user)?.name ?? "", "member"))],
@@ -45,7 +52,9 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
     if (mode === "direct") {
       const known = directWith?.(ids[0]);
       if (known) return onDone(known);
+      if (limit(ids[0]) !== "free" && onAsk) return onAsk(ids[0]);
       const { data, error: failed } = await supabase.rpc("open_direct", { other: ids[0] });
+      if (failed?.hint === "ask" && onAsk) return onAsk(ids[0]);
       if (failed || !data) return setError(problem(failed, me));
       onDone(data as string, draft(data as string, "direct", ids));
     } else if (mode === "group") {
@@ -77,7 +86,8 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
         {mode === "direct"
           ? <button type="button" className="chat-person" disabled={busy} onClick={() => finish([person.id])}>
             <Avatar initials={initialsOf(person.name)} photo={person.photo} className="chat-avatar" who={person.id} />
-            <span className="chat-person-text"><span>{person.name}</span><span>{person.detail}</span></span>
+            <span className="chat-person-text"><span>{person.name}</span>
+              <span>{limit(person.id) === "free" ? person.detail : limit(person.id) === "waiting" ? "Waiting for the admin's approval" : "Needs the admin's approval"}</span></span>
           </button>
           : <label className="chat-person">
             <input type="checkbox" checked={chosen.includes(person.id)}
@@ -86,7 +96,7 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
             <span className="chat-person-text"><span>{person.name}</span><span>{person.detail}</span></span>
           </label>}
       </li>)}
-      {!shown.length && <li className="chat-list-empty">{people.length > 1 ? "No one by that name." : "No one else can chat yet: approve someone first."}</li>}
+      {!shown.length && <li className="chat-list-empty">{only && !words.length ? "No one else is in your team yet." : people.length > 1 ? "No one by that name." : "No one else can chat yet: approve someone first."}</li>}
     </ul>
     {error && <p className="b-form-error" role="alert">{error}</p>}
     {mode !== "direct" && <button type="button" className="b-submit chat-picker-go" aria-disabled={busy || undefined}

@@ -46,6 +46,10 @@ export type ChatAction =
   | { type: "pinned"; chatId: string; messages: Message[] }
   | { type: "member"; member: ChatMember }
   | { type: "member-gone"; chatId: string; userId: string }
+  /** Everyone in some chats, as the database gave them (chats the admin reads, not being in them). */
+  | { type: "members"; members: ChatMember[] }
+  /** A group renamed, or its photo changed. */
+  | { type: "chat"; chatId: string; title: string | null; photo: string | null }
   | { type: "read"; chatId: string };
 
 const byTime = (a: Message, b: Message) => a.created_at.localeCompare(b.created_at);
@@ -159,6 +163,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (!list) return state;
       return { ...state, members: { ...state.members, [action.chatId]: list.filter(entry => entry.user_id !== action.userId) } };
     }
+    case "members": {
+      const members: Record<string, ChatMember[]> = {};
+      for (const member of action.members) (members[member.chat_id] ??= []).push(member);
+      return { ...state, members: { ...state.members, ...members } };
+    }
+    case "chat":
+      return { ...state, chats: state.chats.map(chat => chat.id === action.chatId ? { ...chat, title: action.title, photo: action.photo } : chat) };
     case "read":
       return { ...state, chats: state.chats.map(chat => chat.id === action.chatId ? { ...chat, unread: 0, marked_unread: false } : chat) };
   }

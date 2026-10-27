@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { startTransition, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { deleteAccount, setDigest, signOut } from "@/lib/accounts/actions";
+import { deleteAccount, setDigest } from "@/lib/accounts/actions";
+import { SignOutButton } from "./app-bar";
 
 const WORDS = {
   account: {
@@ -38,7 +39,7 @@ export function AccountActions({ live = false, subject = "account" }: { live?: b
   return <div className="account-actions">
     <div className="account-buttons">
       {live
-        ? <form action={signOut}><button type="submit" className="account-button">Sign out</button></form>
+        ? <SignOutButton />
         : <Link href="/" className="account-button">Sign out</Link>}
       {step === "idle" && <button type="button" className="account-button account-danger" onClick={() => setStep("confirm")}>{words.start}</button>}
     </div>

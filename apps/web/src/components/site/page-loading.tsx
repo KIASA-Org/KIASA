@@ -17,12 +17,12 @@ export function PageLoading({ label, kind }: { label: string; kind: Kind }) {
   </SiteShell>;
   return <div className={`site page-loading page-loading-${kind}`} aria-busy="true">
     <LoadingSignal />{said}
-    <header className="practice-header admin-header" aria-hidden="true">
-      <div className="admin-bar wrap wrap-wide">
-        <span className="practice-lockup">
+    {/* KIASA's bar, as the area will have it, without the tabs and the person yet. */}
+    <header className="practice-header app-bar" aria-hidden="true">
+      <div className="app-bar-inner wrap wrap-wide">
+        <span className="app-bar-brand">
           <LeafMark className="practice-mark" weight={3.4} />
-          <span className="practice-divider" />
-          <span className="practice-word">KIASA <span>{label}</span></span>
+          <span className="app-bar-word">KIASA</span>
         </span>
       </div>
     </header>

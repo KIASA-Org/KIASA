@@ -7,9 +7,9 @@ import { Bookmark, Search } from "../site/icons";
 import { chatTitle, initialsOf } from "./chat-format";
 
 /** Where to forward messages: Saved Messages, or any chat one may write in. */
-export function ForwardPicker({ me, chats, members, count, photoOf, onPick, onClose }: {
+export function ForwardPicker({ me, chats, members, count, photoOf, groupPhoto, onPick, onClose }: {
   me: ChatMe; chats: ChatSummary[]; members: Record<string, ChatMember[]>; count: number;
-  photoOf: (person: string | null | undefined) => string | null;
+  photoOf: (person: string | null | undefined) => string | null; groupPhoto: (chat: ChatSummary) => string | null;
   onPick: (target: string | "saved") => Promise<string | null>; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -52,7 +52,7 @@ export function ForwardPicker({ me, chats, members, count, photoOf, onPick, onCl
         const other = chat.kind === "direct" ? list.find(member => member.user_id !== me.id) : undefined;
         return <li key={chat.id}>
           <button type="button" className="chat-person" disabled={busy} onClick={() => void pick(chat.id)}>
-            <Avatar initials={initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind} who={other?.user_id} />
+            <Avatar initials={initialsOf(title)} photo={other ? photoOf(other.user_id) : groupPhoto(chat)} className="chat-avatar" kind={chat.kind} who={other?.user_id} />
             <span className="chat-person-text"><span>{title}</span><span>{chat.kind === "group" ? `${list.length} members` : "Direct message"}</span></span>
           </button>
         </li>;
