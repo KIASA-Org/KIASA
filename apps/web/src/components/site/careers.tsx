@@ -14,7 +14,7 @@ export function Careers() {
       <p className="eyebrow reveal">{careers.eyebrow}</p>
       <h2 id="careers-title" className="careers-title reveal">{careers.heading}</h2>
       <p className="careers-body reveal">{careers.body}</p>
-      <Link href={careers.cta.href} prefetch={false} className="cta reveal"><CtaContent>{careers.cta.label}</CtaContent></Link>
+      <Link href={careers.cta.href} className="cta reveal"><CtaContent>{careers.cta.label}</CtaContent></Link>
     </div>
   </section>;
 }

@@ -148,6 +148,13 @@ export const regions = [
 /** Each of these finds something in the pages listed in pages.ts. */
 export const popularSearches = ["Cloud migration", "Managed services", "Artificial intelligence", "Case study", "Jobs"];
 
+/** The header's one button, just before Search: the page where a visitor asks for a KIASA account. */
+export const signUp = {
+  label: "Sign up",
+  href: "/sign-up",
+  summary: "Ask for a KIASA account to keep your reading, your topics and, as a client, your reports in one place.",
+};
+
 export const hero = {
   /** Two lines; the second is set in from the first. */
   headline: ["Where change", "takes root"] as const,

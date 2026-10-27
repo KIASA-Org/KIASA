@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { startTransition, useActionState, useState, type FormEvent, type ReactNode } from "react";
+import { reasons, subjects } from "@/content/accounts";
 import type { FormBlock } from "@/content/blocks";
+import { requestAccount } from "@/lib/accounts/actions";
 import { ArrowRight } from "../icons";
 import { Section, SectionHead } from "./shared";
 
-/** Nothing is sent anywhere yet. Submitting says so plainly instead of pretending. */
-function Sent({ children }: { children: ReactNode }) {
+/** Most forms send nothing anywhere yet. Submitting says so plainly instead of
+ * pretending, unless the form is connected (`sample` false). */
+function Sent({ children, sample = true }: { children: ReactNode; sample?: boolean }) {
   return <div className="b-form-sent" role="status">
     <p className="b-form-sent-title">Thank you.</p>
     <p>{children}</p>
-    <p className="b-form-sent-note">This is a sample site: the form is not connected yet, so nothing was sent or stored.</p>
+    {sample && <p className="b-form-sent-note">This is a sample site: the form is not connected yet, so nothing was sent or stored.</p>}
   </div>;
 }
 
-function Submit({ children }: { children: ReactNode }) {
-  return <button type="submit" className="b-submit"><span>{children}</span><span className="cta-chip" aria-hidden="true"><span className="cta-chip-track"><ArrowRight /><ArrowRight /></span></span></button>;
+export function Submit({ children, busy = false }: { children: ReactNode; busy?: boolean }) {
+  return <button type="submit" className="b-submit" aria-disabled={busy || undefined}><span>{children}</span><span className="cta-chip" aria-hidden="true"><span className="cta-chip-track"><ArrowRight /><ArrowRight /></span></span></button>;
 }
 
 const TOPICS = ["Starting a project", "KIASA Canopy", "Technology due diligence", "Partnerships", "Press and media", "Something else"];
@@ -42,8 +45,6 @@ function ContactForm() {
   </form>;
 }
 
-const SUBJECTS = ["Research and reports", "Perspectives from our people", "News from KIASA", "Events and webinars", "Careers and open roles"];
-
 function PreferencesForm() {
   const [sent, setSent] = useState(false);
   if (sent) return <Sent>Your choices are saved. You can change them here at any time.</Sent>;
@@ -51,7 +52,7 @@ function PreferencesForm() {
     <label className="b-field"><span>Email</span><input name="email" type="email" autoComplete="email" required /></label>
     <fieldset className="b-fieldset">
       <legend>What would you like to hear about?</legend>
-      {SUBJECTS.map((subject, index) => <label key={subject} className="b-check"><input type="checkbox" name="subjects" value={subject} defaultChecked={index < 2} /><span>{subject}</span></label>)}
+      {subjects.map((subject, index) => <label key={subject} className="b-check"><input type="checkbox" name="subjects" value={subject} defaultChecked={index < 2} /><span>{subject}</span></label>)}
     </fieldset>
     <fieldset className="b-fieldset">
       <legend>How often?</legend>
@@ -81,11 +82,54 @@ function CookieForm() {
   </form>;
 }
 
+/** A request for an account. A person at KIASA approves it on the admin page;
+ * then the visitor signs in with their email and the password they chose here.
+ * Sent from the page rather than as a plain form post, so a request that needs
+ * fixing keeps what was typed. */
+function SignUpForm() {
+  const [state, send, busy] = useActionState(requestAccount, {});
+  if (state.done) return <Sent sample={!!state.preview}>
+    Your request is with our team. A person reads every request, usually within one working day; once yours is approved, sign in with your email and the password you chose.
+  </Sent>;
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (busy || !form.reportValidity()) return;
+    startTransition(() => send(new FormData(form)));
+  };
+  return <form className="b-form" onSubmit={submit} aria-busy={busy}>
+    <div className="b-form-row">
+      <label className="b-field"><span>First name</span><input name="first" autoComplete="given-name" required /></label>
+      <label className="b-field"><span>Last name</span><input name="last" autoComplete="family-name" required /></label>
+    </div>
+    <div className="b-form-row">
+      <label className="b-field"><span>Work email</span><input name="email" type="email" autoComplete="email" required /></label>
+      <label className="b-field"><span>Organization</span><input name="organization" autoComplete="organization" /></label>
+    </div>
+    <label className="b-field"><span>What brings you to KIASA?</span>
+      <select name="reason" defaultValue={reasons[0]}>{reasons.map(reason => <option key={reason}>{reason}</option>)}</select>
+    </label>
+    <label className="b-field"><span>Choose a password</span>
+      <input name="password" type="password" autoComplete="new-password" minLength={10} maxLength={72} required aria-describedby="sign-up-password-hint" />
+    </label>
+    <p id="sign-up-password-hint" className="b-field-hint">At least 10 characters. You sign in with it once your request is approved.</p>
+    {/* Left empty by people, who never see it; filled in by robots. */}
+    <label className="b-trap" aria-hidden="true">Leave this empty<input name="website" tabIndex={-1} autoComplete="off" /></label>
+    <label className="b-check"><input type="checkbox" name="digest" /><span>Send me the monthly research digest. I can change this in the Preference Center at any time.</span></label>
+    <label className="b-check"><input type="checkbox" name="terms" required /><span>I agree to the terms of use, and that KIASA may use these details as the privacy statement describes.</span></label>
+    {state.error && <p className="b-form-error" role="alert">{state.error}</p>}
+    <Submit busy={busy}>{busy ? "Sending…" : "Send request"}</Submit>
+  </form>;
+}
+
+const FORMS = { contact: ContactForm, preferences: PreferencesForm, cookies: CookieForm, "sign-up": SignUpForm };
+
 export function FormSection({ block }: { block: FormBlock }) {
+  const Form = FORMS[block.kind];
   return <Section type="form" tone={block.tone} id={block.id}>
     <div className="b-form-layout">
       <SectionHead heading={block.heading} intro={block.intro} />
-      {block.kind === "contact" ? <ContactForm /> : block.kind === "preferences" ? <PreferencesForm /> : <CookieForm />}
+      <Form />
     </div>
   </Section>;
 }

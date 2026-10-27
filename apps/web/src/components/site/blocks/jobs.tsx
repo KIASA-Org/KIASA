@@ -54,7 +54,7 @@ export function Jobs({ block }: { block: JobsBlock }) {
           <div className="b-job-body">
             <p>{job.summary}</p>
             <p className="b-job-posted">Posted {longDate(job.posted)}</p>
-            <Link href="/careers/hiring-journey" prefetch={false} className="cta" aria-describedby={`${id}-${index}`}><CtaContent>Apply</CtaContent></Link>
+            <Link href="/careers/hiring-journey" className="cta" aria-describedby={`${id}-${index}`}><CtaContent>Apply</CtaContent></Link>
           </div>
         </details>
       </li>)}

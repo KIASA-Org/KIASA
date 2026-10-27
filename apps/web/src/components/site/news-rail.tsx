@@ -53,7 +53,7 @@ export function NewsRail({ items }: { items: Item[] }) {
       onPointerEnter={() => { waiting.current.pointer = true; }} onPointerLeave={() => { waiting.current.pointer = false; }}
       onFocus={() => { waiting.current.focus = true; }} onBlur={() => { waiting.current.focus = false; }}>
       {items.map(item => <li key={item.href} className="news-item">
-        <Link href={item.href} prefetch={false}>
+        <Link href={item.href}>
           <time dateTime={item.date}>{item.day}</time>
           <span className="news-headline">{item.title}</span>
         </Link>

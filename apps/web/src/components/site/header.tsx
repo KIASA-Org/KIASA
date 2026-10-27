@@ -3,13 +3,22 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type ReactNode } from "react";
 import { searchPages } from "@/content/pages";
-import { navigation, popularSearches, regions, type NavItem } from "@/content/site";
+import { navigation, popularSearches, regions, signUp, type NavItem } from "@/content/site";
+import { readBadge, type ViewerBadge } from "@/lib/accounts/viewer";
+import { Avatar } from "./avatar";
 import { Lockup } from "./brand";
 import { CtaContent } from "./cta";
-import { ArrowRight, ChevronDown, Close, Globe, Menu, Search } from "./icons";
+import { ArrowRight, ChatBubble, ChevronDown, Close, Globe, Menu, Search } from "./icons";
 
 /** Which panel is open under the bar: a navigation item's id, or one of the tools. */
 type Panel = string | null;
+
+/** Who is signed in: the bar then shows them, a way to their account (or the
+ * admin page), in the place of Sign up. A page drawn for a signed-in visitor
+ * names them; on every other page the header finds them in the badge cookie. */
+export type Viewer = ViewerBadge;
+
+const quiet = () => () => {};
 
 const onScroll = (notify: () => void) => {
   window.addEventListener("scroll", notify, { passive: true });
@@ -19,12 +28,16 @@ const onScroll = (notify: () => void) => {
 const hasScrolled = () => window.scrollY > 8;
 
 /** The site's header: the lockup, four navigation items and two tools, as on the
- * homepage's model. Three of the items open a panel of links; so do Search and
- * the region menu. One panel is open at a time. On small screens the navigation
- * moves into a single menu. */
-export function SiteHeader() {
+ * homepage's model, with a Sign up button before the tools. Three of the items
+ * open a panel of links; so do Search and the region menu. One panel is open at
+ * a time. On small screens the navigation moves into a single menu; Sign up
+ * stays in the bar. */
+export function SiteHeader({ viewer }: { viewer?: Viewer }) {
   const [open, setOpen] = useState<Panel>(null);
   const scrolled = useSyncExternalStore(onScroll, hasScrolled, () => false);
+  // Read after the page arrives, so the page itself can stay the same for everyone.
+  const cookieText = useSyncExternalStore(quiet, () => document.cookie, () => "");
+  const badge = viewer ?? readBadge(cookieText);
   const root = useRef<HTMLElement>(null);
   const close = () => setOpen(null);
   const toggle = (panel: string) => setOpen(current => (current === panel ? null : panel));
@@ -69,12 +82,21 @@ export function SiteHeader() {
                   <span>{item.label}</span><ChevronDown />
                 </button>
                 <Mega item={item} open={open === item.id} onNavigate={close} />
-              </> : <Link href={item.href} prefetch={false} className="masthead-item" onClick={close}><span>{item.label}</span></Link>}
+              </> : <Link href={item.href} className="masthead-item" onClick={close}><span>{item.label}</span></Link>}
             </li>)}
           </ul>
         </nav>
 
         <div className="masthead-tools">
+          {badge && <Link href="/chat" className="masthead-tool masthead-chat" aria-label="KIASA Chat" onClick={close}><ChatBubble /></Link>}
+          {badge
+            ? <Link href={badge.href} className="masthead-account" onClick={close}
+              aria-label={`${badge.href === "/admin" ? "Admin" : "Your account"}, ${badge.name}`}>
+              <Avatar initials={badge.initials} photo={badge.photo} className="masthead-account-initials" />
+              <span className="masthead-account-name" aria-hidden="true">{badge.name.split(" ")[0]}</span>
+            </Link>
+            : <Link href={signUp.href} className="masthead-signup" onClick={close}>{signUp.label}</Link>}
+
           <button type="button" id="nav-search" className="masthead-tool" aria-label="Search" aria-expanded={open === "search"}
             aria-controls="panel-search" onClick={() => toggle("search")}>
             {open === "search" ? <Close /> : <Search />}
@@ -101,7 +123,7 @@ export function SiteHeader() {
 }
 
 function Go({ href, onNavigate, className, children }: { href: string; onNavigate: () => void; className?: string; children: ReactNode }) {
-  return <Link href={href} prefetch={false} className={className} onClick={onNavigate}>{children}</Link>;
+  return <Link href={href} className={className} onClick={onNavigate}>{children}</Link>;
 }
 
 /** The panel under a navigation item: its title, then its groups of links. */

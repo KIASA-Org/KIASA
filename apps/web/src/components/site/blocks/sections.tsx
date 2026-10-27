@@ -72,7 +72,7 @@ export function Media({ block }: { block: MediaBlock }) {
     <SectionHead eyebrow={block.eyebrow} heading={block.heading} intro={block.intro} />
     <ul className="b-media" data-count={block.items.length}>
       {block.items.map(item => <li key={item.href + item.title}>
-        <Link href={item.href} prefetch={false} className="b-media-card">
+        <Link href={item.href} className="b-media-card">
           <div className="b-media-image"><Photo photo={item.image} sizes="(max-width: 899px) 92vw, 30vw" decorative /></div>
           <div className="b-media-text">
             {item.eyebrow && <p className="eyebrow">{item.eyebrow}</p>}
@@ -175,7 +175,7 @@ export function Links({ block }: { block: LinksBlock }) {
         <h3 className="b-links-label">{group.label}</h3>
         <ul>
           {group.links.map(link => <li key={link.href + link.title}>
-            <Link href={link.href} prefetch={false} className="b-links-row">
+            <Link href={link.href} className="b-links-row">
               <span className="b-links-title">{link.title}</span>
               {link.summary && <span className="b-links-text">{link.summary}</span>}
               <ArrowRight />
@@ -237,7 +237,7 @@ export function News({ block }: { block: NewsBlock }) {
     <SectionHead eyebrow={block.eyebrow} heading={block.heading} intro={block.intro} cta={block.cta} />
     <ul className="b-news">
       {block.items.map(item => <li key={item.href + item.title}>
-        <Link href={item.href} prefetch={false} className="b-news-row">
+        <Link href={item.href} className="b-news-row">
           <time dateTime={item.date} className="b-news-date">{longDate(item.date)}</time>
           {item.kind && <span className="b-news-kind">{item.kind}</span>}
           <span className="b-news-title">{item.title}</span>

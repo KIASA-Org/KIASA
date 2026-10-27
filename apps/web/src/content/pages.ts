@@ -1,4 +1,4 @@
-import { footer, navigation, news, spotlight, stories } from "./site";
+import { footer, navigation, news, signUp, spotlight, stories } from "./site";
 
 /** A page the site links to. Only the homepage is designed so far; every other
  * page is listed here so its link, title and place in the site are already real. */
@@ -16,6 +16,7 @@ function collect(): PlannedPage[] {
       for (const link of group.links) pages.push({ href: link.href, title: link.label, section: group.label, summary: link.summary ?? "" });
     }
   }
+  pages.push({ href: signUp.href, title: signUp.label, section: "KIASA", summary: signUp.summary });
   for (const story of stories) pages.push({ href: story.href, title: story.title, section: story.kind, summary: story.summary });
   pages.push({ href: spotlight.film.cta.href, title: spotlight.film.title, section: "Film series", summary: spotlight.film.description });
   pages.push({ href: "/client-stories", title: "Client stories", section: "KIASA", summary: "How the systems we helped build are working today, told by the people who run them." });

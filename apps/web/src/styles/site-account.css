@@ -1,0 +1,253 @@
+/* ───────── Accounts ─────────
+   The two private pages behind Sign up: a signed-in visitor's account
+   (account.tsx) and the admin page where KIASA approves who may sign in
+   (admin.tsx). They use the pages' building blocks where they can (sections,
+   headings, stats, contacts, the search field) and add what an account needs:
+   a card for who is signed in, tables, rows, and buttons that act. */
+
+.account, .admin { --warn: #ffb4a2; }
+
+/* Who is signed in, and the page's title. */
+.account .account-hero { padding-top: calc(var(--header) + clamp(40px, 5vw, 88px)); }
+.account-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); gap: 40px clamp(40px, 6vw, 120px); align-items: end; }
+.account-title { margin-top: 20px; font-size: clamp(42px, 5vw, 92px); line-height: 1.02; font-weight: 520; letter-spacing: -0.036em; }
+.account-lead { max-width: 720px; margin-top: clamp(20px, 2vw, 32px); font-size: clamp(18px, 1.35vw, 24px); line-height: 1.5; color: var(--ink-soft); }
+.account-card { padding: 28px; background: var(--night-raised); border-top: 3px solid var(--leaf); }
+.account-who { display: flex; align-items: center; gap: 16px; }
+.account-initials { display: grid; place-items: center; flex: none; width: 48px; height: 48px; background: var(--leaf); color: var(--night); font-size: 16px; line-height: 1; font-weight: 700; letter-spacing: 0.02em; }
+.account-name { font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -0.012em; }
+.account-role { margin-top: 2px; font-size: 15px; line-height: 1.4; color: var(--ink-mute); }
+.account-facts { display: grid; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.account-facts div { display: grid; gap: 2px; font-size: 15px; line-height: 1.4; }
+.account-facts dt { font-size: 14px; color: var(--ink-mute); }
+.account-facts dd { overflow-wrap: anywhere; }
+
+/* Tables: the reports, and everyone on the admin page. Narrow screens scroll them sideways. */
+.account-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.account-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.45; }
+.account-table :is(th, td) { padding: 16px 24px 16px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
+.account-table thead th { padding-block: 0 14px; font-size: 13px; font-weight: 600; color: var(--fg-mute); border-bottom-color: var(--rule-strong); }
+.account-table tbody th { font-weight: 600; }
+.account-figure { font-weight: 650; color: var(--accent); }
+.account-note { margin-top: 20px; font-size: 14px; line-height: 1.5; color: var(--fg-mute); }
+
+/* Two lists side by side: reading and events, then topics and details. */
+.account-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 64px clamp(40px, 6vw, 120px); }
+.account-columns .block-head { margin-bottom: 24px; }
+.account-columns .block-title { font-size: clamp(28px, 2.4vw, 40px); }
+.account-rows { border-top: 1px solid var(--rule-strong); }
+.account-rows > li { border-bottom: 1px solid var(--rule); }
+.account-row { display: grid; justify-items: start; gap: 4px; padding: 18px 0; }
+a.account-row:hover .account-row-title { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.account-row-kind { font-size: 13px; line-height: 18px; font-weight: 650; color: var(--accent); }
+.account-row-title { font-size: 18px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
+.account-row-meta { font-size: 14px; line-height: 1.45; color: var(--fg-mute); }
+.account-event { position: relative; padding-right: 150px; }
+.account-badge { position: absolute; top: 18px; right: 0; padding: 3px 10px; font-size: 13px; line-height: 18px; font-weight: 650; background: var(--accent); color: var(--paper); }
+.account-badge[data-done] { background: none; color: var(--fg-soft); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+
+/* What the visitor hears about: each subject on or off. */
+.account-topics { border-top: 1px solid var(--rule-strong); }
+.account-topics li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); font-size: 17px; line-height: 1.4; }
+.account-topic-mark { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--rule-strong); }
+.account-topic-mark svg { width: 16px; height: 16px; stroke-width: 2.4; }
+.account-topics li[data-chosen] .account-topic-mark { background: var(--leaf); border-color: var(--leaf); color: var(--night); }
+.account-topic-state { font-size: 13px; font-weight: 650; color: var(--fg-mute); }
+.account-topics li[data-chosen] .account-topic-state { color: var(--accent); }
+.account-cta { margin-top: 24px; }
+.account-ctas { display: flex; flex-wrap: wrap; gap: 0 20px; }
+
+/* The visitor's details, and what they can do with the account. */
+.account-details { border-top: 1px solid var(--rule-strong); }
+.account-details div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--rule); font-size: 16px; line-height: 1.45; }
+.account-details dt { color: var(--fg-mute); }
+.account-details dd { overflow-wrap: anywhere; }
+.account-actions { display: grid; gap: 16px; margin-top: 28px; }
+.account-buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+.account-button { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 18px; border: 1px solid var(--line-strong); font-size: 15px; font-weight: 600; white-space: nowrap; transition: border-color 0.2s, color 0.2s; }
+.account-button:hover { border-color: var(--ink); }
+.account-danger { color: var(--warn); border-color: rgb(255 180 162 / 0.45); }
+.account-danger:hover { border-color: var(--warn); }
+.account-confirm { padding: 20px; background: var(--night-raised); border-left: 3px solid var(--warn); }
+.account-confirm p { margin-bottom: 16px; font-size: 15px; line-height: 1.5; color: var(--ink-soft); }
+.account-status { font-size: 15px; line-height: 1.5; color: var(--ink-soft); }
+/* A member's details, and changing them in place. */
+.account-editable { display: grid; gap: 18px; }
+.account-edit { gap: 18px; padding: 22px; border: 1px solid var(--line-strong); }
+.account-edit .account-note { margin-top: 0; }
+.account-save { height: 44px; margin-top: 0; padding-inline: 20px; }
+
+/* ───────── Admin ───────── */
+.admin-header { height: auto; }
+.admin-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: var(--header); padding-block: 10px; }
+.admin-user { display: flex; align-items: center; gap: 12px; }
+.admin-user .account-initials { width: 36px; height: 36px; font-size: 13px; }
+.admin-user-text { display: grid; line-height: 1.3; }
+.admin-user-name { font-size: 15px; font-weight: 600; }
+.admin-user-role { font-size: 13px; color: var(--ink-mute); }
+.admin-exit { height: 40px; margin-left: 12px; }
+
+.admin .admin-top { padding-top: clamp(40px, 5vw, 88px); }
+.admin-stats { margin-top: clamp(32px, 3.6vw, 56px); }
+.admin-stats .b-stat-value { font-size: clamp(44px, 4.4vw, 80px); }
+
+/* Each request waiting: who, what they told us, and the two decisions. */
+.admin-notice { margin-bottom: 20px; padding: 16px 20px; background: var(--night-raised); border-left: 3px solid var(--leaf); font-size: 16px; line-height: 1.5; }
+.admin-notice span { color: var(--ink-mute); }
+.admin-requests { display: grid; gap: 12px; }
+.admin-request { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.2fr) auto; align-items: center; gap: 20px 32px; padding: 22px 24px; background: var(--night-raised); }
+.admin-request-name { font-size: 19px; line-height: 1.3; font-weight: 600; letter-spacing: -0.01em; }
+.admin-request-email { margin-top: 2px; font-size: 14px; line-height: 1.4; color: var(--ink-mute); overflow-wrap: anywhere; }
+.admin-request-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.admin-request-facts dt { font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
+.admin-request-facts dd { margin-top: 4px; font-size: 15px; line-height: 1.4; }
+.admin-request-actions { display: flex; gap: 10px; }
+.admin-approve { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 22px; background: var(--leaf); color: var(--night); font-size: 15px; font-weight: 650; transition: background-color 0.25s; }
+.admin-approve:hover { background: var(--ink); }
+
+/* Everyone: a search, a filter by status, and the table. */
+.admin-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.admin-show { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-show button { display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 16px; border: 1px solid var(--rule-strong); font-size: 15px; font-weight: 600; transition: border-color 0.2s, background-color 0.2s, color 0.2s; }
+.admin-show button:hover { border-color: var(--ink); }
+.admin-show button span { font-size: 13px; font-weight: 500; color: var(--fg-mute); font-variant-numeric: tabular-nums; }
+.admin-show button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--night); }
+.admin-show button[aria-pressed="true"] span { color: var(--night); }
+.admin-table { min-width: 980px; }
+.admin-person-name { display: block; font-weight: 600; }
+.admin-person-email { display: block; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--fg-mute); }
+.admin-person-org { display: none; margin-top: 2px; font-size: 14px; font-weight: 400; color: var(--fg-soft); }
+.admin-status { display: inline-block; padding: 2px 10px; font-size: 13px; line-height: 18px; font-weight: 650; box-shadow: inset 0 0 0 1px currentColor; }
+.admin-status[data-status="waiting"] { color: var(--dew); }
+.admin-status[data-status="approved"] { color: var(--leaf); }
+.admin-status[data-status="declined"] { color: var(--ink-mute); }
+.admin-when { display: block; margin-top: 6px; font-size: 13px; color: var(--fg-mute); }
+
+@media (max-width: 1023px) {
+  .account-hero-grid, .account-columns { grid-template-columns: minmax(0, 1fr); }
+  .admin-request, .admin-request-facts, .admin-filters { grid-template-columns: minmax(0, 1fr); }
+  .admin-request-facts { gap: 10px; }
+  .admin-user-text { display: none; }
+  /* The table keeps who, where from, status and last sign-in; the requests above show the rest. */
+  .admin-table { min-width: 0; }
+  .admin-table :is(th, td):is(:nth-child(3), :nth-child(5)) { display: none; }
+}
+@media (max-width: 599px) {
+  .account-details div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  /* Phones: each table keeps the columns that fit, so nothing runs off the edge. */
+  .account-table :is(th, td) { padding-right: 16px; }
+  .block-account-reports .account-table :is(th, td):nth-child(n + 4) { display: none; }
+  .admin-table :is(th, td):is(:nth-child(2), :nth-child(6)) { display: none; }
+  .admin-person-org { display: block; }
+  .account-event { padding-right: 0; }
+  .account-badge { position: static; margin-top: 8px; }
+  .admin-exit { margin-left: 0; }
+  .admin-request-actions > * { flex: 1; }
+}
+
+/* ───────── Preview, sign-in, live ───────── */
+/* Until accounts are connected, the private pages say they show sample people. */
+.account-preview { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: clamp(28px, 3vw, 44px); padding: 12px 16px; border: 1px solid var(--line-strong); font-size: 15px; line-height: 1.5; color: var(--ink-soft); }
+.account-preview span { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dew); }
+.admin-preview { padding-top: clamp(28px, 3vw, 44px); }
+.admin-preview .account-preview { margin-bottom: 0; }
+.account-preview-note { font-size: 15px; line-height: 1.5; color: var(--ink-mute); }
+
+/* Sign in: the title on the left, the form on the right, as the site's other forms. */
+.signin-alt { margin-top: 28px; }
+.signin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+.signin-actions .b-submit { margin-top: 0; }
+
+/* The digest: one row that is a switch. */
+.account-switch { display: grid; gap: 12px; }
+.account-switch-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px; align-items: center; gap: 24px; width: 100%; padding: 20px 0; border-block: 1px solid var(--rule); text-align: left; }
+.account-switch-text { display: grid; gap: 4px; font-size: 15px; line-height: 1.5; color: var(--fg-soft); }
+.account-switch-name { font-size: 18px; font-weight: 600; color: var(--ink); }
+.account-switch-track { position: relative; width: 52px; height: 30px; border-radius: 15px; background: var(--line-strong); transition: background-color 0.25s; }
+.account-switch-track::after { content: ""; position: absolute; top: 4px; left: 4px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); transition: transform 0.3s var(--ease); }
+.account-switch-row[aria-checked="true"] .account-switch-track { background: var(--leaf); }
+.account-switch-row[aria-checked="true"] .account-switch-track::after { transform: translateX(22px); background: var(--night); }
+
+/* Live: the admin page hears of new requests as they arrive. */
+.admin-live { display: inline-flex; align-items: center; gap: 10px; margin-top: 24px; font-size: 14px; font-weight: 600; color: var(--leaf); }
+.admin-live span { width: 8px; height: 8px; border-radius: 50%; background: var(--leaf); box-shadow: 0 0 0 4px rgb(184 236 147 / 0.18); }
+.admin-notice[data-failed] { border-left-color: #ffb4a2; }
+.admin-bar form { display: contents; }
+.admin-live[data-state="connecting"], .admin-live[data-state="paused"] { color: var(--ink-mute); }
+.admin-live[data-state="connecting"] span, .admin-live[data-state="paused"] span { background: var(--ink-mute); box-shadow: none; }
+
+/* The news of an approval, above the account it opens. */
+.account-welcome { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: clamp(28px, 3vw, 44px); padding: 14px 18px; border-left: 3px solid var(--leaf); background: var(--night-raised); font-size: 16px; line-height: 1.5; }
+.account-welcome span { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--leaf); }
+/* A request waiting: the watch, and the offer to be told on this computer. */
+.request-watch { display: grid; justify-items: start; gap: 16px; margin-top: 28px; }
+.request-watch .admin-live { margin-top: 0; }
+.account-note-lead { margin: 0 0 20px; }
+
+/* Deleting someone from the admin page: a quiet button, then a second, explicit yes. */
+.admin-actions-head { text-align: right !important; }
+.admin-actions { text-align: right; white-space: nowrap; }
+.admin-delete { padding: 6px 0; font-size: 14px; font-weight: 600; color: var(--warn); text-decoration: underline transparent 1px; text-underline-offset: 4px; transition: text-decoration-color 0.2s; }
+.admin-delete:hover { text-decoration-color: currentColor; }
+.admin-confirm { display: inline-grid; justify-items: end; gap: 8px; white-space: normal; }
+.admin-confirm span { font-size: 14px; color: var(--ink-soft); }
+.admin-confirm .account-button { height: 36px; padding: 0 14px; font-size: 14px; }
+.admin-removal { margin: 20px 0 0; }
+.admin-person-email { overflow-wrap: anywhere; }
+/* "Alert me on this computer": the button, and what it says once on. */
+.request-alerts { display: grid; justify-items: start; gap: 10px; }
+.request-alerts-button { margin-top: 4px; }
+.request-alerts-on { padding: 12px 16px; border-left: 3px solid var(--leaf); background: var(--night-raised); font-size: 15px; line-height: 1.5; }
+
+/* ───────── Your photo ─────────
+   Your own square at the top of the account, admin and chat pages: a photo
+   over the initials (which stay under it), and a small panel to choose one,
+   place and zoom it in a square, or remove it. */
+.avatar-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.account-initials, .masthead-account-initials { position: relative; }
+.photo-control { position: relative; display: inline-flex; flex: none; }
+/* The square, with their name beside it where there is room: one button. */
+.photo-button { display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer; }
+.account-who .photo-button { gap: 16px; }
+.photo-button:focus-visible { outline: none; }
+.photo-button > :first-child { outline: 2px solid transparent; outline-offset: 2px; transition: outline-color 0.2s; }
+.photo-button:is(:hover, :focus-visible, [aria-expanded="true"]) > :first-child { outline-color: var(--leaf); }
+.photo-button :is(.admin-user-name, .account-name) { transition: color 0.2s; }
+.photo-button:is(:hover, :focus-visible) :is(.admin-user-name, .account-name) { color: var(--leaf); }
+.photo-card-text { display: grid; }
+.photo-cue { font-size: 12px; line-height: 1.3; font-weight: 650; color: var(--leaf); }
+.photo-card-text .photo-cue { margin-top: 6px; font-size: 14px; }
+/* The camera hangs off the corner, clear of the initials. */
+.photo-button-mark { position: absolute; right: -5px; bottom: -5px; display: grid; place-items: center; width: 16px; height: 16px; background: var(--night); color: var(--leaf); opacity: 0; transition: opacity 0.2s; }
+.photo-button-mark svg { width: 12px; height: 12px; }
+/* The camera shows on a square without a photo, as an invitation; on one with a photo, when pointed at. */
+.photo-button > :not([data-photo]) > .photo-button-mark,
+.photo-button:hover .photo-button-mark, .photo-button:focus-visible .photo-button-mark, .photo-button[aria-expanded="true"] .photo-button-mark { opacity: 1; }
+@media (hover: none) { .photo-button-mark { opacity: 1; } }
+
+/* Placed beside the square by the page itself (left, and width), so it always fits on the screen. */
+.photo-panel { position: absolute; top: calc(100% + 12px); left: 0; z-index: 60; display: grid; gap: 14px; padding: 18px; background: var(--night-raised); border-top: 3px solid var(--leaf); box-shadow: 0 24px 60px rgb(0 0 0 / 0.5); color: var(--ink); text-align: left; }
+.photo-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: -4px; }
+.photo-panel-title { font-size: 17px; font-weight: 650; }
+.photo-close { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-right: -6px; color: var(--ink-soft); transition: color 0.2s; }
+.photo-close:hover { color: var(--leaf); }
+.photo-close svg { width: 18px; height: 18px; }
+.photo-preview { position: relative; display: grid; place-items: center; width: 120px; height: 120px; background: var(--leaf); color: var(--night); font-size: 40px; line-height: 1; font-weight: 700; letter-spacing: 0.02em; }
+.photo-frame { position: relative; overflow: hidden; justify-self: center; width: 224px; height: 224px; background: var(--night); cursor: grab; touch-action: none; user-select: none; }
+.photo-frame:active { cursor: grabbing; }
+.photo-frame:focus-visible { outline: 2px solid var(--leaf); outline-offset: 3px; }
+.photo-frame img { position: absolute; top: 0; left: 0; max-width: none; pointer-events: none; }
+.photo-zoom { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.photo-zoom input { flex: 1; accent-color: var(--leaf); }
+.photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-actions .account-button { height: 40px; padding-inline: 14px; }
+.photo-save { height: 40px; margin-top: 0; padding-inline: 18px; font-size: 15px; }
+.photo-choose { position: relative; cursor: pointer; }
+.photo-choose:focus-within { border-color: var(--leaf); }
+.photo-choose input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.photo-wait { opacity: 0.5; pointer-events: none; }
+.photo-note { font-size: 13px; line-height: 1.45; color: var(--ink-mute); }
+.photo-status { font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+.photo-links { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+.photo-links a { transition: color 0.2s; }
+.photo-links a:hover { color: var(--leaf); }

@@ -145,6 +145,7 @@ const sitemapGroups: LinksBlock["groups"] = [
       { title: "Cookie Policy/Settings", href: "/cookies", summary: "The cookies this site sets, and how to change your settings." },
       { title: "Accessibility Statement", href: "/accessibility", summary: "How we build this site to be usable by everyone, and how to tell us where it falls short." },
       { title: "Preference Center", href: "/preferences", summary: "Choose what you hear from us, and how often." },
+      { title: "Sign up", href: "/sign-up", summary: "Ask for a KIASA account to keep your reading, your topics and, as a client, your reports in one place." },
     ],
   },
 ];
@@ -283,7 +284,7 @@ const sitemap: PageDoc = {
     },
     {
       type: "intro",
-      text: "Seventy-six pages in nine groups, in the order the header and footer list them. Each one has a single line that says what you will find there.",
+      text: "Seventy-seven pages in nine groups, in the order the header and footer list them. Each one has a single line that says what you will find there.",
       body: [
         "If you cannot find what you are looking for, try the search in the header, or write to us and a person will point you to it.",
       ],

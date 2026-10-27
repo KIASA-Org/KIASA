@@ -28,6 +28,13 @@
 .masthead-region > svg:last-child { width: 16px; height: 16px; transition: transform 0.35s var(--ease); }
 .masthead-region[aria-expanded="true"] > svg:last-child { transform: rotate(180deg); }
 .masthead-menu { display: none; }
+/* The bar's one button, just before Search: small, leaf green and square, like the site's other buttons. */
+.masthead-signup { display: inline-flex; align-items: center; height: 36px; margin-right: 6px; padding: 0 16px; background: var(--leaf); color: var(--night); font-size: 15px; line-height: 20px; font-weight: 650; white-space: nowrap; transition: background-color 0.25s; }
+.masthead-signup:hover { background: var(--ink); }
+/* Signed in: who it is, in the place of Sign up, and the way to their account. */
+.masthead-account { display: inline-flex; align-items: center; gap: 10px; height: 44px; margin-right: 6px; padding: 0 4px; font-size: 15px; line-height: 20px; font-weight: 600; transition: color 0.2s; }
+.masthead-account:hover { color: var(--leaf); }
+.masthead-account-initials { display: grid; place-items: center; width: 34px; height: 34px; background: var(--leaf); color: var(--night); font-size: 13px; line-height: 1; font-weight: 700; letter-spacing: 0.02em; }
 
 .masthead-scrim { position: fixed; inset: 0; z-index: 30; background: rgb(3 8 7 / 0.66); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0s 0.3s; }
 .masthead-scrim[data-open] { opacity: 1; visibility: visible; transition-delay: 0s; }
@@ -105,6 +112,9 @@
   .masthead-nav, .masthead-region, .region { display: none; }
   .masthead-bar { grid-template-columns: 1fr auto; }
   .masthead-menu { display: inline-flex; }
+  .masthead-signup { height: 34px; margin-right: 2px; padding: 0 13px; font-size: 14px; }
+  .masthead-account { margin-right: 0; }
+  .masthead-account-name { display: none; }
   .sheet { display: block; }
   .lockup-mark { width: 36px; height: 36px; }
   .lockup-word { font-size: 18px; }
@@ -112,3 +122,11 @@
   .search-result-kind { grid-column: 1 / -1; }
   html[data-menu-open] { overflow: hidden; }
 }
+/* Narrow phones: the bar closes up so the menu button keeps its place. Below
+   320px, under what the site is built for, Sign up gives way to it. */
+@media (max-width: 359px) {
+  .masthead-bar { column-gap: 12px; }
+  .masthead-tools { gap: 0; }
+  .masthead-signup { margin-right: 0; padding: 0 10px; }
+}
+@media (max-width: 319px) { .masthead-signup { display: none; } }
