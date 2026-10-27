@@ -172,6 +172,7 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
       const cards = await ben.page.locator(".jobs-member-name").allTextContents();
       if (cards.join() !== "Ana Silva") throw new Error(`cards: ${cards.join(", ")}`);
       if (await ben.page.getByText("Waiting to confirm").count()) throw new Error("a manager has things to confirm");
+      if (await ben.page.locator(".jobs-tab", { hasText: "Résumés" }).count()) throw new Error("a manager has a Résumés tab");
       // The database gives him his team's days and plans, and no one else's.
       const asBen = createClient(env.url, env.publishable, { auth: { persistSession: false } });
       await asBen.auth.signInWithPassword({ email: "ben@example.com", password: people["ben@example.com"].password });
