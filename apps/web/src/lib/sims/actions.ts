@@ -28,6 +28,18 @@ async function onlySims(ids: string[]): Promise<string[]> {
   return [...new Set(ids)].filter(id => rows.has(id));
 }
 
+/** Whether a name is already someone's in KIASA (a person, a simulated member or an admin), case aside. */
+async function nameTaken(name: string, except?: string): Promise<boolean> {
+  const site = siteClient();
+  // Matched whole, its own % and _ taken as they are.
+  const exact = name.replace(/[\\%_]/g, char => `\\${char}`);
+  const [people, admins] = await Promise.all([
+    site.from("profiles").select("id").ilike("name", exact).limit(2),
+    site.from("admins").select("email").ilike("name", exact).limit(1),
+  ]);
+  return ((people.data ?? []) as { id: string }[]).some(row => row.id !== except) || !!admins.data?.length;
+}
+
 /** New simulated members, each asking for an account as anyone does: its
  * request reaches the admins' chat, to approve there or on this page. */
 export async function addSims(count: number): Promise<Done> {
@@ -38,10 +50,14 @@ export async function addSims(count: number): Promise<Done> {
   const site = siteClient();
   const probe = await site.from("sim_members").select("user_id", { head: true, count: "exact" });
   if (probe.error) return { error: SETUP };
-  const { data: profiles } = await site.from("profiles").select("name");
-  const names = freshNames(wanted, ((profiles ?? []) as { name: string }[]).map(row => row.name));
+  const [{ data: profiles }, { data: admins }] = await Promise.all([site.from("profiles").select("name"), site.from("admins").select("name")]);
+  const taken = [...((profiles ?? []) as { name: string }[]), ...((admins ?? []) as { name: string }[])].map(row => row.name);
+  // A few spare names, for any taken meanwhile (another window adding at the same moment).
+  const names = freshNames(wanted + 10, taken);
   const made: { id: string; name: string; email: string }[] = [];
   for (const name of names) {
+    if (made.length === wanted) break;
+    if (await nameTaken(name)) continue;
     const email = simEmail(name);
     // A password no one knows: a simulated member never signs in.
     const { data, error } = await site.auth.admin.createUser({ email, password: randomBytes(24).toString("base64url"), email_confirm: true, user_metadata: { name } });
@@ -160,6 +176,7 @@ export async function renameSim(id: string, name: string): Promise<Done> {
   const tidy = name.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!sim) return { error: RETRY };
   if (!tidy) return { error: "Please give a name." };
+  if (await nameTaken(tidy, sim)) return { error: `${tidy} is already someone's name. Please choose another.` };
   const site = siteClient();
   const { error } = await site.from("profiles").update({ name: tidy }).eq("id", sim);
   if (error) return { error: RETRY };
