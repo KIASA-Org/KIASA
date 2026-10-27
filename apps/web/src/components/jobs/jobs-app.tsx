@@ -50,7 +50,8 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
   // A team's manager sees their team's day first, as the admin sees everyone's.
   const ranks = useRanks();
   const lead = me.admin ? null : teamLedBy(me.id, ranks);
-  const tabs = me.admin ? ADMIN : lead ? [{ id: "team" as Tab, label: "My team" }, ...MEMBER] : MEMBER;
+  // (A manager keeps no résumés: they do not apply for jobs.)
+  const tabs = me.admin ? ADMIN : lead ? [{ id: "team" as Tab, label: "My team" }, ...MEMBER.filter(entry => entry.id !== "resumes")] : MEMBER;
   const [tab, setTab] = useState<Tab>(() => tabs.find(entry => entry.id === asked)?.id ?? tabs[0].id);
   const [settings, setSettings] = useState<JobSettings>(start.settings);
   const zone = settings.timezone ?? "UTC";
@@ -256,7 +257,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
     team: () => <LiveView supabase={supabase} team={team} board={board} plans={plans} zone={zone} today={today} now={now} version={versions.live}
       only={mates} teamName={ranks.teams?.find(entry => entry.id === lead)?.name} />,
     today: () => <TodayView me={me} zone={zone} today={today} day={day} jobs={list.jobs} loading={loading} resumes={resumes} plans={plans} mine={mine}
-      currency={settings.currency} act={act} onDay={setPicked} onResumes={() => choose("resumes")} />,
+      currency={settings.currency} act={act} onDay={setPicked} onResumes={lead ? undefined : () => choose("resumes")} />,
     mine: () => <MyJobs me={me} supabase={supabase} zone={zone} today={today} resumes={resumes} currency={settings.currency} act={act} version={versions.applications} />,
     calendar: () => <CalendarView me={me} supabase={supabase} zone={zone} today={today} team={team} version={versions.interviews} onInterview={act.interview} />,
     board: () => <Leaderboard me={me} board={board} team={team} currency={settings.currency} zone={zone} today={today} now={now} />,

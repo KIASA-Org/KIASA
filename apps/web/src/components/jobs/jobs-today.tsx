@@ -18,7 +18,7 @@ const matches = (job: Pick<Job, "title" | "company" | "location" | "url">, words
  * click back, to catch up. */
 export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans, mine, currency, act, onDay, onResumes }: {
   me: JobsMe; zone: string; today: string; day: string; jobs: Job[]; loading: boolean; resumes: Resume[]; plans: Plan[];
-  mine: BoardRow | null; currency: string; act: JobActions; onDay: (day: string | null) => void; onResumes: () => void;
+  mine: BoardRow | null; currency: string; act: JobActions; onDay: (day: string | null) => void; onResumes?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("todo");
   const [query, setQuery] = useState("");
@@ -74,7 +74,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
               <option value="">No résumé</option>
             </select>
           </label>
-          : me.member && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
+          : me.member && onResumes && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
       </div>
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
         {shown.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
