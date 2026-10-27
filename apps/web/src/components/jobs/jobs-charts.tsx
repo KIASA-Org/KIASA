@@ -53,15 +53,18 @@ export type Column = { key: string; label: string; value: number; long?: string 
 
 /** One measure over time or hours, as columns. `accent`: the column in leaf
  * (today, now). `max`: a top shared with other charts (small multiples, each
- * on the same scale). `compact`: a small one, with its top and zero only. */
-export function Columns({ items, accent, title, unit, height = 170, every = 1, max: shared, compact }: {
-  items: Column[]; accent?: string; title: string; unit: string; height?: number; every?: number; max?: number; compact?: boolean;
+ * on the same scale). `compact`: a small one, with its top and zero only.
+ * `goal`: a dashed line at the day's goal, named at its end ("Goal 100"); the
+ * scale always reaches it, so each column shows how far it got. */
+export function Columns({ items, accent, title, unit, height = 170, every = 1, max: shared, compact, goal }: {
+  items: Column[]; accent?: string; title: string; unit: string; height?: number; every?: number; max?: number; compact?: boolean; goal?: number;
 }) {
   const [box, width] = useWidth<HTMLDivElement>();
   const [shown, setShown] = useState<number | null>(null);
-  const left = compact ? 26 : 34, right = 6, top = 10, bottom = 22;
+  const aimed = goal !== undefined && goal > 0;
+  const left = compact ? 26 : 34, right = 6, top = aimed ? 18 : 10, bottom = 22;
   const plot = Math.max(0, width - left - right), tall = height - top - bottom;
-  const max = niceTop(Math.max(0, shared ?? 0, ...items.map(item => item.value)));
+  const max = niceTop(Math.max(0, shared ?? 0, aimed ? goal : 0, ...items.map(item => item.value)));
   const band = items.length ? plot / items.length : 0;
   const bar = Math.max(2, Math.min(24, band * 0.62));
   const y = (value: number) => top + tall - (value / max) * tall;
@@ -73,11 +76,16 @@ export function Columns({ items, accent, title, unit, height = 170, every = 1, m
 
   return <figure className="jobs-chart">
     <div ref={box} className="jobs-chart-plot" style={{ height }} onPointerLeave={() => setShown(null)}>
-      {width > 0 && <svg width={width} height={height} role="img" aria-label={`${title}. ${items.length} values; the table below lists them.`}>
+      {width > 0 && <svg width={width} height={height} role="img"
+        aria-label={`${title}.${aimed ? ` Goal: ${goal} a day.` : ""} ${items.length} values; the table below lists them.`}>
         {ticks.map(tick => <g key={tick}>
           <line className={tick === 0 ? "jobs-chart-axis" : "jobs-chart-grid"} x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} />
           <text className="jobs-chart-tick" x={left - 6} y={y(tick)} dy="0.32em" textAnchor="end">{Number.isInteger(tick) ? tick : tick.toFixed(1)}</text>
         </g>)}
+        {aimed && <g className="jobs-chart-goal">
+          <line x1={left} x2={width - right} y1={y(goal)} y2={y(goal)} />
+          <text x={width - right} y={y(goal) - 5} textAnchor="end">Goal {goal.toLocaleString()}</text>
+        </g>}
         {items.map((item, index) => {
           const x = left + index * band + (band - bar) / 2;
           const h = Math.max(0, y(0) - y(item.value));
@@ -104,6 +112,7 @@ export function Columns({ items, accent, title, unit, height = 170, every = 1, m
     <details className="jobs-chart-table">
       <summary>Show as a table</summary>
       <table>
+        {aimed && <caption>Goal: {goal.toLocaleString()} a day</caption>}
         <thead><tr><th scope="col">When</th><th scope="col">{unit[0].toUpperCase() + unit.slice(1)}</th></tr></thead>
         <tbody>{items.map(item => <tr key={item.key}><th scope="row">{item.long ?? item.label}</th><td>{item.value.toLocaleString()}</td></tr>)}</tbody>
       </table>

@@ -5,8 +5,9 @@ import { useState, useSyncExternalStore } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshBadge } from "@/lib/accounts/actions";
 import type { ChatMe, ChatPerson } from "@/lib/chat/types";
-import { ArrowLeft, Bell, Bookmark, People, Pencil } from "../site/icons";
+import { ArrowLeft, Bell, Bookmark, Close, People, Pencil } from "../site/icons";
 import { YourPhoto } from "../site/your-photo";
+import { testAlert, turnOnAlerts, useAlerts, type AlertsState } from "./chat-alerts";
 
 const NOT_SET_UP = "Profiles need the latest database update: an admin runs supabase/migrations/20261026233000_chat_more.sql in Supabase's SQL Editor.";
 
@@ -44,18 +45,51 @@ export function SettingsPanel({ me, self, realtime, onBack, onEdit, onSaved }: {
   </section>;
 }
 
-const quiet = () => () => {};
-const permission = () => ("Notification" in window ? Notification.permission : "unsupported");
+const ALERTS: Record<AlertsState, string> = { granted: "On: test it", default: "Off: turn on", denied: "Blocked", unsupported: "Not in this browser" };
 
-/** Alerts on this computer for new messages while KIASA Chat is in another tab. */
+/** Alerts on this computer for new messages, when KIASA Chat is not the window
+ * in front: turned on here, and, once on, a test to see that the computer shows
+ * them. Blocked, it says where the browser allows them again. */
 function Alerts() {
-  const [asked, setAsked] = useState<string | null>(null);
-  const current = useSyncExternalStore(quiet, permission, () => "default");
-  const state = asked ?? current;
-  const label = state === "granted" ? "On" : state === "denied" ? "Blocked in this browser" : state === "unsupported" ? "Not in this browser" : "Off: turn on";
-  return <button type="button" disabled={state !== "default"} onClick={() => void Notification.requestPermission().then(setAsked)}>
-    <Bell /><span>Alerts on this computer</span><span className="chat-panel-note">{label}</span>
-  </button>;
+  const state = useAlerts();
+  return <>
+    <button type="button" disabled={state === "denied" || state === "unsupported"}
+      onClick={() => void (state === "granted" ? testAlert() : turnOnAlerts())}>
+      <Bell /><span>Alerts on this computer</span><span className="chat-panel-note">{ALERTS[state]}</span>
+    </button>
+    {state === "denied" && <p className="chat-panel-hint">This browser blocks them for KIASA. To allow them: the icon left of the address, then Notifications: Allow, then reload the page.</p>}
+  </>;
+}
+
+const LATER = "kiasa-alerts-later";
+const laterListeners = new Set<() => void>();
+const onLater = (listener: () => void) => { laterListeners.add(listener); return () => { laterListeners.delete(listener); }; };
+const askedLately = () => {
+  try {
+    return Date.now() - Number(window.localStorage.getItem(LATER) ?? 0) < 14 * 86_400_000;
+  } catch {
+    return false;
+  }
+};
+
+/** Above the chat list, until answered: alerts on this computer for new messages.
+ * "Not now" puts the question away for two weeks; Settings has it any time. */
+export function AlertsPrompt() {
+  const state = useAlerts();
+  const later = useSyncExternalStore(onLater, askedLately, () => true);
+  if (state !== "default" || later) return null;
+  const notNow = () => {
+    try {
+      window.localStorage.setItem(LATER, String(Date.now()));
+    } catch {}
+    laterListeners.forEach(listener => listener());
+  };
+  return <div className="chat-alerts-ask" role="region" aria-label="Alerts on this computer">
+    <Bell />
+    <p>Get an alert on this computer when a message comes.</p>
+    <button type="button" className="chat-alerts-on" onClick={() => void turnOnAlerts()}>Turn on</button>
+    <button type="button" className="chat-icon chat-alerts-later" aria-label="Not now" title="Not now" onClick={notNow}><Close /></button>
+  </div>;
 }
 
 /** Editing one's profile: photo, first and last name, a short bio and a

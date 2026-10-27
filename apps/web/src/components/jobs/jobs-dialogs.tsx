@@ -55,7 +55,7 @@ export function InterviewDialog({ job, jobs, zone, today, onSave, onClose }: {
   onSave: (form: InterviewForm) => Promise<string | null>; onClose: () => void;
 }) {
   const [which, setWhich] = useState(job?.id ?? jobs?.[0]?.id ?? "");
-  return <FormDialog title={job ? `Interview: ${job.title ?? job.company ?? "this job"}` : "Add an interview"} action="Save interview" onClose={onClose}
+  return <FormDialog title={job ? `Interview: ${job.title ?? job.company ?? "this job"}` : "Add an interview"} action="Save interview" onClose={onClose} wide
     onSubmit={async form => {
       const text = (name: string) => String(form.get(name) ?? "").trim();
       const chosen = job?.id ?? (which === "elsewhere" ? null : which || null);

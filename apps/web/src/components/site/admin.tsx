@@ -4,6 +4,7 @@ import type { Account } from "@/content/accounts";
 import { signOut } from "@/lib/accounts/actions";
 import { publicSupabase } from "@/lib/accounts/server";
 import { initialsOf } from "@/lib/accounts/viewer";
+import { ChatWatch } from "../chat/chat-watch";
 import { PreviewNote } from "./account";
 import { AdminDesk } from "./admin-desk";
 import { Avatar } from "./avatar";
@@ -44,6 +45,7 @@ function AdminFrame({ admin, live, children }: { admin: Admin; live: boolean; ch
       </div>
     </header>
     <main id="main-content" tabIndex={-1} className="page">{children}</main>
+    {live && admin.id && <ChatWatch me={admin.id} realtime={publicSupabase} />}
   </div>;
 }
 

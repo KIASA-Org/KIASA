@@ -120,10 +120,15 @@
 .jobs-chip[data-decision="pending"] { --tint: rgb(242 211 107 / 0.16); --tone: #f2d36b; }
 .jobs-chip[data-decision="confirmed"] { --tint: rgb(184 236 147 / 0.2); --tone: var(--leaf); }
 .jobs-chip[data-decision="declined"] { --tint: rgb(255 180 162 / 0.12); --tone: #ffb4a2; }
-.jobs-status { position: relative; display: inline-flex; color: var(--tone); }
-.jobs-status select { height: 34px; padding: 0 32px 0 14px; border: 0; border-radius: 17px; background: var(--tint); color: var(--tone); font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer; appearance: none; }
-.jobs-status::after { content: ""; position: absolute; top: 50%; right: 13px; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; translate: 0 -70%; rotate: 45deg; pointer-events: none; }
-.jobs-status select option { background: #101b16; color: var(--ink); }
+/* A job's status: a dropdown in the status's own colour. Before a job is marked,
+   "Applied" and the dropdown beside it, as one split button. */
+.jobs-status { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 14px; border-radius: 18px; background: var(--tint); color: var(--tone); font-size: 13.5px; font-weight: 650; white-space: nowrap; cursor: pointer; transition: filter 0.15s; }
+.jobs-status:hover, .jobs-status[aria-expanded="true"] { filter: brightness(1.25); }
+.jobs-status svg { width: 15px; height: 15px; }
+.jobs-split { display: inline-flex; }
+.jobs-split > .jobs-button:first-child { padding-right: 12px; border-radius: 19px 0 0 19px; }
+.jobs-split > .jobs-split-more { width: 36px; padding: 0; border-left: 1px solid rgb(3 8 7 / 0.28); border-radius: 0 19px 19px 0; }
+.jobs-split-more[aria-expanded="true"] { background: #cdf6ad; }
 .jobs-chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--tint); font-size: 12.5px; font-weight: 650; color: var(--tone); white-space: nowrap; }
 .jobs-chip[data-status="todo"] { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-mute); }
 .jobs-tally { font-weight: 650; color: var(--tone); }
@@ -169,6 +174,10 @@
 .jobs-chart-bar[data-accent][data-shown] { fill: #d4f7b8; }
 .jobs-chart-grid { stroke: var(--chart-grid); stroke-width: 1; }
 .jobs-chart-axis { stroke: var(--chart-axis); stroke-width: 1; }
+/* The day's goal: a dashed line in quiet ink, named at its end. */
+.jobs-chart-goal line { stroke: var(--ink-soft); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.jobs-chart-goal text { fill: var(--ink-soft); font-size: 11px; font-weight: 650; }
+.jobs-chart-table caption { padding-top: 8px; font-size: 13px; text-align: left; color: var(--ink-soft); }
 .jobs-chart-tick, .jobs-chart-label { fill: var(--ink-mute); font-size: 11px; font-variant-numeric: tabular-nums; }
 .jobs-chart-label[data-accent] { fill: var(--ink); font-weight: 650; }
 .jobs-chart-hit { fill: transparent; outline: none; }
@@ -256,7 +265,7 @@
 .jobs-form { display: grid; gap: 12px; margin-top: 14px; }
 .jobs-form-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .jobs-form-hint { font-size: 13px; line-height: 1.5; color: var(--ink-mute); }
-.jobs-page .chat-field :is(select, textarea), .jobs-page .chat-field input:is([type="date"], [type="time"]) { min-height: 44px; padding: 0 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: inherit; font-size: 15px; font-weight: 400; }
+.jobs-page .chat-field :is(select, textarea), .jobs-page .chat-field input:is([type="date"], [type="time"]) { width: 100%; min-width: 0; min-height: 44px; padding: 0 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: inherit; font-size: 15px; font-weight: 400; }
 .jobs-page .chat-field textarea { padding: 10px 14px; line-height: 1.45; resize: vertical; }
 .jobs-page .chat-field :is(select, textarea):focus { outline: none; border-color: var(--leaf); }
 .jobs-page .chat-field input[type="file"] { height: auto; padding: 10px; }

@@ -341,9 +341,23 @@ polls, stickers, voice messages, calls, channels, stories, translation).
   changing live for everyone. Photos are public by their address, which is
   random and never reused, so they load at once and browsers keep them; only
   their owner can write them, and they go with the account.
-- **Live status.** Unread counts (also in the tab's title), ✓ sent and ✓✓ read,
-  "…is typing", who is online, and an alert on the computer for a new message
-  while the tab is hidden, if allowed.
+- **Live status.** Unread counts, ✓ sent and ✓✓ read, "…is typing", and who
+  is online.
+- **Alerts and the tab's count.** Every KIASA desk tab (the chat, the jobs
+  desk, the admin and account pages) carries the unread count, muted chats
+  aside: a red badge with the number on the leaf (`tab-badge.ts`, so a pinned
+  tab shows it) and "(3)" before the title. A new message from someone else, in
+  a chat not muted, is an alert on the computer (Windows' own notification):
+  each open desk hears it (the chat by its own live route, the others through
+  `chat-watch.tsx`) and hands it to the service worker (`public/sw.js`),
+  which shows it once, titled with the person or the group, unless KIASA Chat is
+  the window in front. A click brings KIASA forward with that chat open, in
+  place. A message that comes while the person is in another window stays
+  unread until they are back. The chat asks once, above its list ("Turn on";
+  "Not now" puts the question away for two weeks); Settings turns alerts on,
+  sends a test alert once on, and says how to allow them again if the browser
+  blocks them. Alerts come while a KIASA desk is open in the browser; with none
+  open, nothing shows.
 - **Private by the database.** Every rule is in the chat migrations: a person
   reads and writes only in chats they belong to (and sees nothing they cleared
   or deleted for themselves); notices come only from KIASA;
@@ -385,11 +399,14 @@ own, changeable under Plans).
 - **Members work through the day** (Today): their plan at the top (each target
   with its progress, and the admins' notes), then the day's jobs, newest first.
   Open ↗ opens the posting; ✓ Applied marks it at once, with the résumé chosen
-  above the list. From then on a job's status (Applied, Interview, Offer,
-  Hired, Rejected, Skipped) is a click away: Interview asks for the time and
-  puts it on the calendar; Hired asks for the monthly salary. Earlier days are
-  a click back. My jobs gathers every application across days, interviews and
-  offers first.
+  above the list, and the dropdown beside it (▾) gives any other status. From
+  then on the status itself is a dropdown (Applied, Interview, Offer, Hired,
+  Rejected, Skipped), led by "Not applied: back to To do" for a click made by
+  mistake; a job marked stays in sight in the list it was marked in until the
+  list changes, so the mistake can be put right at once. Interview asks for
+  the time and puts it on the calendar; Hired asks for the monthly salary.
+  Earlier days are a click back. My jobs gathers every application across
+  days, interviews and offers first.
 - **Calendars.** A week of interviews, live: a member's own; for admins,
   everyone's or one member's. Each opens to its details and outcome.
 - **The leaderboard**, for everyone on the team: each member's jobs held,
@@ -398,10 +415,14 @@ own, changeable under Plans).
   Jobs and pay count once an admin confirms them (Confirm tab, with the figure
   correctable first); a member's own Earnings tab lists theirs.
 - **Live, for admins**: today's applications member by member against their
-  plan, when each last applied, their last 14 days, and the team's last 30
-  days and today hour by hour; then a card for each member, with their day
-  against their plan, their last 30 days and today hour by hour, every card on
-  the same scales so they compare. It moves as members apply.
+  goal, when each last applied, their last 14 days, and the team's last 30
+  days (with the team's goal for a day, dashed) and today hour by hour; then a
+  card for each member, with their day against their goal, their last 30 days
+  (their goal dashed) and today hour by hour, every card on the same scales so
+  they compare. It moves as members apply.
+- **The day's goal.** Every member's goal is 100 applications a day
+  (`DAILY_GOAL` in `jobs-format.ts`), unless an admin's plan for them sets
+  another; it shows above their list, on Live and in Plans.
 - **Plans, for admins**: each member's targets (applications, interviews,
   offers) and a note, for a day, a week or a month. Targets carry on until
   changed; a note is for its own period.

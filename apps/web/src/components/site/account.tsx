@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { member as sample, subjects } from "@/content/accounts";
 import type { Member } from "@/lib/accounts/server";
 import { initialsOf } from "@/lib/accounts/viewer";
+import { ChatWatch } from "../chat/chat-watch";
 import { AccountActions, DigestSwitch } from "./account-actions";
 import { AccountDetails } from "./account-details";
 import { Avatar } from "./avatar";
@@ -102,6 +103,7 @@ export function MemberAccountView({ member, photo, realtime, welcome = false }: 
         { title: "Your events", text: "Your seats at breakfasts, talks and open evenings in our studios.", pattern: "orbit", link: { label: "Our studios", href: "/about/locations" } },
       ],
     }} />
+    <ChatWatch me={member.id} realtime={realtime} />
   </div>;
 }
 

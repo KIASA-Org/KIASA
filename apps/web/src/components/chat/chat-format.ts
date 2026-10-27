@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ChatMe, ChatMember, ChatPerson, ChatSummary } from "@/lib/chat/types";
 
 /** A chat's name: a group's own, the other person's for a direct chat. */
-export function chatTitle(chat: Pick<ChatSummary, "kind" | "title">, members: ChatMember[], me: ChatMe) {
+export function chatTitle(chat: Pick<ChatSummary, "kind" | "title">, members: ChatMember[], me: Pick<ChatMe, "id">) {
   if (chat.kind === "direct") return members.find(member => member.user_id !== me.id)?.name ?? "Direct message";
   if (chat.kind === "saved") return "Saved Messages";
   return chat.title ?? "Chat";

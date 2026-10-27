@@ -96,6 +96,12 @@ export function planFor(plans: Plan[], user: string, period: Period, start: stri
   };
 }
 
+/** Every member's goal for a day: at least this many applications, unless an
+ * admin's plan for them says another number. */
+export const DAILY_GOAL = 100;
+/** A member's applications goal for a day: their plan's, or the team's daily goal. */
+export const dayGoal = (plans: Plan[], user: string, day: string) => planFor(plans, user, "day", day).applications ?? DAILY_GOAL;
+
 /** A link's place, for a job not yet titled: "boards.greenhouse.io/acme/…". */
 export function linkLabel(link: string) {
   try {
