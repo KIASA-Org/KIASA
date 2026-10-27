@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import type { Account } from "@/content/accounts";
 import { signOut } from "@/lib/accounts/actions";
 import { publicSupabase } from "@/lib/accounts/server";
-import { initialsOf } from "@/lib/accounts/viewer";
+import { initialsOf, type Ranks } from "@/lib/accounts/viewer";
 import { ChatWatch } from "../chat/chat-watch";
 import { PreviewNote } from "./account";
 import { AdminDesk } from "./admin-desk";
 import { Avatar } from "./avatar";
 import { LeafMark } from "./brand";
+import { RanksProvider } from "./ranks";
 import { YourPhoto } from "./your-photo";
 
 /** `id` and `photo` once accounts are connected: their square is then their photo, which they can change there. */
@@ -31,7 +32,7 @@ function AdminFrame({ admin, live, children }: { admin: Admin; live: boolean; ch
             ? <YourPhoto person={{ id: admin.id, name: admin.name }} photo={admin.photo ?? null} realtime={publicSupabase} className="account-initials"
               details="bar" role={admin.role} />
             : <>
-              <Avatar initials={initialsOf(admin.name)} className="account-initials" />
+              <Avatar initials={initialsOf(admin.name)} className="account-initials" rank="owner" />
               <span className="admin-user-text">
                 <span className="admin-user-name">{admin.name}</span>
                 <span className="admin-user-role">{admin.role}</span>
@@ -52,11 +53,13 @@ function AdminFrame({ admin, live, children }: { admin: Admin; live: boolean; ch
 /** The admin page (`/admin`): where a person at KIASA approves who may sign in,
  * and finds anyone who has asked. `live` once accounts are connected; until
  * then it shows the sample people and keeps nothing. */
-export function AdminView({ people, admin, live }: { people: Account[]; admin: Admin; live: boolean }) {
-  return <AdminFrame admin={admin} live={live}>
-    {!live && <div className="wrap wrap-wide admin-preview"><PreviewNote /></div>}
-    <AdminDesk people={people} live={live} realtime={live ? publicSupabase : undefined} />
-  </AdminFrame>;
+export function AdminView({ people, admin, ranks, live }: { people: Account[]; admin: Admin; ranks?: Ranks; live: boolean }) {
+  return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={live ? publicSupabase : undefined} me={admin.id}>
+    <AdminFrame admin={admin} live={live}>
+      {!live && <div className="wrap wrap-wide admin-preview"><PreviewNote /></div>}
+      <AdminDesk people={people} live={live} realtime={live ? publicSupabase : undefined} />
+    </AdminFrame>
+  </RanksProvider>;
 }
 
 /** Signed in, but not one of KIASA's admins. */

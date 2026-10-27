@@ -4,16 +4,20 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardRow, HourRow, Plan, TeamPerson, TrendRow } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
+import { useTopManagers } from "../site/ranks";
 import { Columns, Meter, Sparkline, StatTile, type Column } from "./jobs-charts";
 import { addDays, ago, compact, dayGoal, initialsOf, partsIn, shortDay, weekdayOf } from "./jobs-format";
 
 /** The admins' live view of the team's job search: today's applications per
  * member against their plan, when each last applied, their last two weeks, the
- * team's last thirty days and today hour by hour. It moves as members apply. */
-export function LiveView({ supabase, team, board, plans, zone, today, now, version, pending, onConfirm }: {
+ * team's last thirty days and today hour by hour. It moves as members apply.
+ * Top managers do not apply for jobs: they have no card, row or goal here. */
+export function LiveView({ supabase, team, board: everyone, plans, zone, today, now, version, pending, onConfirm }: {
   supabase: SupabaseClient; team: TeamPerson[]; board: BoardRow[]; plans: Plan[]; zone: string; today: string; now: number;
   version: number; pending: number; onConfirm: () => void;
 }) {
+  const managers = useTopManagers();
+  const board = everyone.filter(row => !managers.includes(row.user_id));
   const [trend, setTrend] = useState<TrendRow[]>([]);
   const [hours, setHours] = useState<HourRow[]>([]);
   useEffect(() => {
@@ -70,7 +74,7 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
               const target = goals.get(row.user_id) ?? null;
               const recent = days.slice(-14).map(day => perDay(day, row.user_id));
               return <tr key={row.user_id}>
-                <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" />{row.name}</span></th>
+                <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" who={row.user_id} />{row.name}</span></th>
                 <td><Meter value={row.apps_day} target={target} label={`${row.name}, applied today`} compact /></td>
                 <td className="jobs-quiet">{now ? ago(row.last_applied_at, now, zone, today) : ""}</td>
                 <td><Sparkline values={recent} label={`${row.name}, applications a day over the last 14 days`} /></td>
@@ -112,7 +116,7 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
           }));
           return <article key={row.user_id} className="jobs-card jobs-member" aria-label={row.name}>
             <header className="jobs-member-head">
-              <Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" />
+              <Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" who={row.user_id} />
               <div>
                 <p className="jobs-member-name">{row.name}</p>
                 <p className="jobs-card-sub">Last applied {now ? ago(row.last_applied_at, now, zone, today) : ""} · {row.apps_week} this week</p>

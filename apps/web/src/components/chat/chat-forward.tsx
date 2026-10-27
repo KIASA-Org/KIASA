@@ -52,7 +52,7 @@ export function ForwardPicker({ me, chats, members, count, photoOf, onPick, onCl
         const other = chat.kind === "direct" ? list.find(member => member.user_id !== me.id) : undefined;
         return <li key={chat.id}>
           <button type="button" className="chat-person" disabled={busy} onClick={() => void pick(chat.id)}>
-            <Avatar initials={initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind} />
+            <Avatar initials={initialsOf(title)} photo={photoOf(other?.user_id)} className="chat-avatar" kind={chat.kind} who={other?.user_id} />
             <span className="chat-person-text"><span>{title}</span><span>{chat.kind === "group" ? `${list.length} members` : "Direct message"}</span></span>
           </button>
         </li>;

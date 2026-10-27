@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useRef, useState } from "react";
 import type { Account, AccountStatus } from "@/content/accounts";
-import { decide, removeAccount } from "@/lib/accounts/actions";
+import { decide, removeAccount, setTopManager } from "@/lib/accounts/actions";
 import { useLiveRows } from "@/lib/accounts/live";
 import { Search } from "./icons";
 
@@ -33,6 +33,8 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
   const [removed, setRemoved] = useState<string[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [removal, setRemoval] = useState<{ text: string; sample?: boolean; failed?: boolean } | null>(null);
+  // Roles chosen here, shown at once; what the server sends back takes over when it agrees.
+  const [roles, setRoles] = useState<Record<string, boolean>>({});
   const keep = useRef<HTMLButtonElement>(null);
   // Asked to confirm a deletion, the safe answer is the one under the admin's hand.
   useEffect(() => { if (confirming) keep.current?.focus(); }, [confirming]);
@@ -42,7 +44,8 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
 
   // A decision or a deletion shows at once; what the server sends back takes over when it agrees.
   const people = given.filter(person => !removed.includes(person.id))
-    .map(person => person.status === "waiting" && decisions[person.id] ? { ...person, ...decisions[person.id] } : person);
+    .map(person => person.status === "waiting" && decisions[person.id] ? { ...person, ...decisions[person.id] } : person)
+    .map(person => person.id in roles ? { ...person, top: roles[person.id] } : person);
   const count = (status: AccountStatus) => people.filter(person => person.status === status).length;
   const waiting = people.filter(person => person.status === "waiting");
 
@@ -74,6 +77,26 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
       const result = await removeAccount(person.id);
       if (!result.error) return;
       setRemoved(current => current.filter(id => id !== person.id));
+      setRemoval({ text: result.error, failed: true });
+    });
+  };
+
+  const setRole = (person: Account, top: boolean) => {
+    setRoles(current => ({ ...current, [person.id]: top }));
+    setRemoval({
+      sample: !live,
+      text: top ? `${person.name} is a top manager: KIASA's leaf now shows on their photo everywhere, and Jobs' Live view leaves them out.`
+        : `${person.name} is a member again: the leaf is gone from their photo.`,
+    });
+    if (!live) return;
+    startTransition(async () => {
+      const result = await setTopManager(person.id, top);
+      if (!result.error) return;
+      setRoles(current => {
+        const rest = { ...current };
+        delete rest[person.id];
+        return rest;
+      });
       setRemoval({ text: result.error, failed: true });
     });
   };
@@ -166,7 +189,7 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
         {shown.length > 0 && <div className="account-scroll">
           <table className="account-table admin-table">
             <thead>
-              <tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Why</th><th scope="col">Status</th><th scope="col">Asked</th><th scope="col">Last signed in</th><th scope="col" className="admin-actions-head">Delete</th></tr>
+              <tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Why</th><th scope="col">Status</th><th scope="col">Role</th><th scope="col">Asked</th><th scope="col">Last signed in</th><th scope="col" className="admin-actions-head">Delete</th></tr>
             </thead>
             <tbody>
               {shown.map(person => <tr key={person.id}>
@@ -181,6 +204,16 @@ export function AdminDesk({ people: given, live, realtime }: { people: Account[]
                 <td>
                   <span className="admin-status" data-status={person.status}>{STATUS[person.status]}</span>
                   {person.decided && <span className="admin-when">{day(person.decided)}</span>}
+                </td>
+                <td>
+                  {/* Only an approved person can be named; anyone else is not on the team yet. */}
+                  {person.status === "approved"
+                    ? <select className="admin-role" value={person.top ? "top" : "member"} data-top={person.top ? "" : undefined}
+                      aria-label={`Role of ${person.name}`} onChange={event => setRole(person, event.target.value === "top")}>
+                      <option value="member">Member</option>
+                      <option value="top">Top manager</option>
+                    </select>
+                    : <span className="admin-when">None yet</span>}
                 </td>
                 <td>{day(person.asked)}</td>
                 <td>{person.lastSignIn ? day(person.lastSignIn) : person.status === "approved" ? "Not yet" : "None"}</td>

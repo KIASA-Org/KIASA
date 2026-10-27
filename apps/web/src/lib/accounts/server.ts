@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import { Agent, fetch as undiciFetch, type RequestInit as UndiciInit } from "undici";
 import { reasons, type Account, type AccountStatus, type Reason } from "@/content/accounts";
-import { photoUrl } from "./viewer";
+import { photoUrl, type Ranks } from "./viewer";
 
 // The server's calls to Supabase go over connections kept open a minute between
 // pages. Node lets one go after four idle seconds, and far from Supabase a new
@@ -77,8 +77,8 @@ const toMember = (row: ProfileRow): Member => ({
   digest: row.digest,
 });
 
-/** `photo`: the address of their profile photo, if they have set one. */
-export type Viewer = { id: string; email: string; admin: { name: string } | null; member: Member | null; photo: string | null };
+/** `photo`: the address of their profile photo, if they have set one; `top`: an admin has made them a top manager. */
+export type Viewer = { id: string; email: string; admin: { name: string } | null; member: Member | null; photo: string | null; top: boolean };
 
 /** Who is signed in, as far as their sign-in itself says: its signature is
  * checked here, against Supabase's published key, rather than the cookie being
@@ -97,10 +97,11 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
   if (!person) return null;
   const { id, email } = person;
   const site = siteClient();
-  const [admin, profile, avatar] = await Promise.all([
+  const [admin, profile, avatar, top] = await Promise.all([
     site.from("admins").select("name").eq("email", email).maybeSingle(),
     site.from("profiles").select("*").eq("id", id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", id).maybeSingle(),
+    site.from("top_managers").select("user_id").eq("user_id", id).maybeSingle(),
   ]);
   return {
     id,
@@ -108,12 +109,32 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
     admin: admin.data ? { name: admin.data.name as string } : null,
     member: profile.data ? toMember(profile.data as ProfileRow) : null,
     photo: avatar.data ? photoUrl(url, avatar.data.path as string) : null,
+    top: !!top.data,
   };
 });
 
-/** Everyone who has asked for an account, newest first. For the admin page only. */
+/** Who wears a badge on their photo: KIASA's admins (the leaf and a crown) and
+ * the top managers an admin has named (the leaf). Before the top managers'
+ * file has been run, there are none. */
+export const ranks = cache(async (): Promise<Ranks> => {
+  if (!accountsLive) return { owners: [], top: [] };
+  const site = siteClient();
+  const [admins, top] = await Promise.all([site.rpc("admin_users"), site.from("top_managers").select("user_id")]);
+  return {
+    owners: ((admins.data ?? []) as { id: string }[]).map(admin => admin.id),
+    top: ((top.data ?? []) as { user_id: string }[]).map(row => row.user_id),
+  };
+});
+
+/** Everyone who has asked for an account, newest first, and whether each is a
+ * top manager. For the admin page only. */
 export async function everyone(): Promise<Member[]> {
-  const { data, error } = await siteClient().from("profiles").select("*").order("asked_at", { ascending: false });
+  const site = siteClient();
+  const [{ data, error }, top] = await Promise.all([
+    site.from("profiles").select("*").order("asked_at", { ascending: false }),
+    site.from("top_managers").select("user_id"),
+  ]);
   if (error) throw new Error(`The requests could not be read: ${error.message}`);
-  return (data as ProfileRow[]).map(toMember);
+  const managers = new Set(((top.data ?? []) as { user_id: string }[]).map(row => row.user_id));
+  return (data as ProfileRow[]).map(row => ({ ...toMember(row), top: managers.has(row.id) }));
 }

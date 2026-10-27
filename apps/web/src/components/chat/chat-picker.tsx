@@ -76,13 +76,13 @@ export function ChatPicker({ mode, heading: named, me, people, supabase, chatId,
       {shown.map(person => <li key={person.id}>
         {mode === "direct"
           ? <button type="button" className="chat-person" disabled={busy} onClick={() => finish([person.id])}>
-            <Avatar initials={initialsOf(person.name)} photo={person.photo} className="chat-avatar" />
+            <Avatar initials={initialsOf(person.name)} photo={person.photo} className="chat-avatar" who={person.id} />
             <span className="chat-person-text"><span>{person.name}</span><span>{person.detail}</span></span>
           </button>
           : <label className="chat-person">
             <input type="checkbox" checked={chosen.includes(person.id)}
               onChange={event => setChosen(current => event.target.checked ? [...current, person.id] : current.filter(id => id !== person.id))} />
-            <Avatar initials={initialsOf(person.name)} photo={person.photo} className="chat-avatar" />
+            <Avatar initials={initialsOf(person.name)} photo={person.photo} className="chat-avatar" who={person.id} />
             <span className="chat-person-text"><span>{person.name}</span><span>{person.detail}</span></span>
           </label>}
       </li>)}

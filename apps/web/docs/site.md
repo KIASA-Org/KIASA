@@ -436,6 +436,19 @@ own, changeable under Plans).
   word on the team's private channel tells every page when the leaderboard has
   moved.
 
+### Top managers and badges
+
+On the admin page, each approved person has a **Role**: Member or Top manager.
+A top manager wears KIASA's leaf (the logo's own, `public/brand/kiasa-leaf-badge.png`)
+at the bottom right of their photo, like a verified mark, wherever it appears (the chat, Jobs, the admin page, the site's header);
+KIASA's admins wear the leaf and a crown. A badge given or taken away reaches
+every open page at once. Jobs' Live view leaves top managers out: no card, no
+row, no part of the team's goal. Only the site's server changes the list
+(`setTopManager`, after checking the admin); everyone who may chat can read it
+(`supabase/migrations/20261027090000_top_managers.sql`). The header of the
+public pages reads the badge from the sign-in cookie, which each private page
+brings up to date.
+
 To test it on this computer, after the chat's steps above: run the jobs file on
 the local copy (`npx supabase migration up --local`), `npm run jobs:local:seed`
 (a made-up month: four more members beside Ana and Ben, thirty days of links
@@ -462,8 +475,9 @@ Once, in this order:
    profiles, last seen), then
    `supabase/migrations/20261026234500_chat_reopen.sql` (a deleted chat back
    in the list when opened again), then
-   `supabase/migrations/20261026235000_jobs.sql` (KIASA Jobs). Each file is
-   safe to run again.
+   `supabase/migrations/20261026235000_jobs.sql` (KIASA Jobs), then
+   `supabase/migrations/20261027090000_top_managers.sql` (top managers).
+   Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto
    Confirm User". Only you know that password; the site never sees it.

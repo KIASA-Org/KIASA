@@ -77,7 +77,7 @@ export function PostJobs({ supabase, zone, today, day, jobs, loading, team, onDa
                 {team.map(person => {
                   const row = rows.find(entry => entry.user_id === person.id);
                   return <li key={person.id}>
-                    <Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" />
+                    <Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" who={person.id} />
                     <span>{person.name}</span>
                     <span className="jobs-chip" data-status={row?.status ?? "todo"}>{row ? STATUS_LABELS[row.status] : "Not yet"}</span>
                   </li>;

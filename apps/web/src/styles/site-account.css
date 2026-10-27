@@ -122,6 +122,12 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .admin-status[data-status="approved"] { color: var(--leaf); }
 .admin-status[data-status="declined"] { color: var(--ink-mute); }
 .admin-when { display: block; margin-top: 6px; font-size: 13px; color: var(--fg-mute); }
+/* A person's role: a top manager's reads in leaf, as the badge on their photo. */
+.admin-role { height: 34px; padding: 0 30px 0 10px; border: 1px solid var(--rule-strong); border-radius: 0; background: var(--night-control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23c5d4cb' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 10px center / 10px 7px;
+  appearance: none; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: border-color 0.2s; }
+.admin-role:hover { border-color: var(--ink); }
+.admin-role[data-top] { border-color: var(--leaf); color: var(--leaf); }
+.admin-role option { background: var(--night-raised); color: var(--ink); }
 
 @media (max-width: 1023px) {
   .account-hero-grid, .account-columns { grid-template-columns: minmax(0, 1fr); }
@@ -130,14 +136,14 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
   .admin-user-text { display: none; }
   /* The table keeps who, where from, status and last sign-in; the requests above show the rest. */
   .admin-table { min-width: 0; }
-  .admin-table :is(th, td):is(:nth-child(3), :nth-child(5)) { display: none; }
+  .admin-table :is(th, td):is(:nth-child(3), :nth-child(6)) { display: none; }
 }
 @media (max-width: 599px) {
   .account-details div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   /* Phones: each table keeps the columns that fit, so nothing runs off the edge. */
   .account-table :is(th, td) { padding-right: 16px; }
   .block-account-reports .account-table :is(th, td):nth-child(n + 4) { display: none; }
-  .admin-table :is(th, td):is(:nth-child(2), :nth-child(6)) { display: none; }
+  .admin-table :is(th, td):is(:nth-child(2), :nth-child(7)) { display: none; }
   .admin-person-org { display: block; }
   .account-event { padding-right: 0; }
   .account-badge { position: static; margin-top: 8px; }
@@ -205,6 +211,17 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
    place and zoom it in a square, or remove it. */
 .avatar-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .account-initials, .masthead-account-initials { position: relative; }
+
+/* The badges on a photo: KIASA's leaf at its bottom right, as a verified mark,
+ * and an admin's crown tilted on its top left. Both grow with the photo. On a
+ * photo wearing the leaf, the online dot and the camera move to the bottom left. */
+.rank-leaf { position: absolute; z-index: 2; right: -12%; bottom: -10%; width: 46%; min-width: 15px; height: auto; aspect-ratio: 1;
+  object-fit: contain; filter: drop-shadow(0 0 1px rgb(3 8 7 / 0.9)) drop-shadow(0 1px 2px rgb(3 8 7 / 0.6)); }
+.rank-crown { position: absolute; z-index: 2; top: -30%; left: -16%; width: 52%; min-width: 15px; transform: rotate(-24deg); color: #f6c945;
+  filter: drop-shadow(0 1px 1px rgb(3 8 7 / 0.7)); }
+.rank-crown > svg.rank-art { display: block; width: 100%; height: auto; fill: currentColor; }
+[data-rank] > .chat-online { right: auto; left: 1px; }
+[data-rank][data-rank] > .photo-button-mark { right: auto; left: -5px; }
 .photo-control { position: relative; display: inline-flex; flex: none; }
 /* The square, with their name beside it where there is room: one button. */
 .photo-button { display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer; }

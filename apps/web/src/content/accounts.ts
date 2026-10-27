@@ -37,6 +37,8 @@ export type Account = {
   decided?: string;
   /** Approved accounts: the last time they signed in, an ISO day. */
   lastSignIn?: string;
+  /** An admin has made them a top manager: KIASA's leaf shows on their photo. */
+  top?: boolean;
 };
 
 /** The person the account page is drawn for: a client, signed in. */

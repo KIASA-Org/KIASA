@@ -142,7 +142,8 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
       <button type="button" className="chat-head-who" aria-label={`About ${title}`} onClick={() => setInfo(true)}>
         {chat.kind === "saved"
           ? <span className="chat-avatar" data-kind="saved" aria-hidden="true"><Bookmark /></span>
-          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={chat.kind === "direct" ? photoOf(others[0]?.user_id) : null} className="chat-avatar" kind={chat.kind} />}
+          : <Avatar initials={chat.kind === "notices" ? "K" : initialsOf(title)} photo={chat.kind === "direct" ? photoOf(others[0]?.user_id) : null} className="chat-avatar" kind={chat.kind}
+            who={chat.kind === "direct" ? others[0]?.user_id : null} />}
         <span className="chat-head-text">
           <span className="chat-head-title">{title}{chat.muted && <BellOff className="chat-row-mark" />}</span>
           <span className="chat-head-status" data-online={status === "online" || undefined}>{status}</span>
@@ -326,7 +327,7 @@ function Bubble({ message, me, chat, members, run, last, inBrowser, supabase, ph
     <div className="chat-bubble-row">
       {choosing && <span className="chat-choose" aria-hidden="true" />}
       {group && <span className="chat-gutter" aria-hidden="true">
-        {last && <Avatar initials={initialsOf(author)} photo={photoOf(message.sender_id)} className="chat-avatar chat-gutter-avatar" />}
+        {last && <Avatar initials={initialsOf(author)} photo={photoOf(message.sender_id)} className="chat-avatar chat-gutter-avatar" who={message.sender_id} />}
       </span>}
       <div className="chat-bubble" tabIndex={-1} data-media={media || undefined} data-emoji={big || undefined} data-failed={message.pending === "failed" || undefined} {...(choosing || !ready ? {} : press)}
         onContextMenu={event => {

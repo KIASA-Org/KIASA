@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LeafMark } from "@/components/site/brand";
+import { RanksProvider } from "@/components/site/ranks";
 import { YourPhoto } from "@/components/site/your-photo";
 import { ChatApp } from "@/components/chat/chat-app";
 import { signOut } from "@/lib/accounts/actions";
-import { accountsLive, publicSupabase, signedIn } from "@/lib/accounts/server";
+import { accountsLive, publicSupabase, ranks, signedIn } from "@/lib/accounts/server";
+import type { Ranks } from "@/lib/accounts/viewer";
 import { chatPeople, chatViewer, myChats } from "@/lib/chat/server";
 import type { ChatMe } from "@/lib/chat/types";
 
@@ -30,22 +32,23 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
     <div className="chat-empty"><p>KIASA Chat opens once accounts are connected.</p></div>
   </ChatFrame>;
   if (!(await signedIn())) redirect("/sign-in");
-  const [me, { setup, chats, members }, people, asked] = await Promise.all([chatViewer(), myChats(), chatPeople(), searchParams]);
+  const [me, { setup, chats, members }, people, badges, asked] = await Promise.all([chatViewer(), myChats(), chatPeople(), ranks(), searchParams]);
   if (!me) redirect("/sign-in");
-  if (setup) return <ChatFrame me={me}>
+  if (setup) return <ChatFrame me={me} ranks={badges}>
     <div className="chat-empty"><p>{me.admin ? SETUP[setup] : "KIASA Chat is being updated. Please try again a little later."}</p></div>
   </ChatFrame>;
   const opening = typeof asked.c === "string" && chats.some(chat => chat.id === asked.c) ? asked.c : null;
-  return <ChatFrame me={me}>
+  return <ChatFrame me={me} ranks={badges}>
     <ChatApp me={me} initialChats={chats} initialMembers={members} people={people} realtime={publicSupabase} initialChat={opening} />
   </ChatFrame>;
 }
 
 /** The chat's frame: its own bar (the firm's leaf, a rule, "Chat", who is
  * signed in, with their photo to change), then the chat filling the rest of
- * the window. */
-function ChatFrame({ me, children }: { me?: ChatMe; children: React.ReactNode }) {
-  return <div className="site chat-page">
+ * the window. `ranks`: who wears a badge on their photo. */
+function ChatFrame({ me, ranks, children }: { me?: ChatMe; ranks?: Ranks; children: React.ReactNode }) {
+  return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={me ? publicSupabase : undefined} me={me?.id}>
+    <div className="site chat-page">
     <a href="#main-content" className="skip-link">Skip to content</a>
     <header className="practice-header admin-header chat-bar">
       <div className="admin-bar wrap wrap-wide">
@@ -66,5 +69,6 @@ function ChatFrame({ me, children }: { me?: ChatMe; children: React.ReactNode })
       </div>
     </header>
     <main id="main-content" tabIndex={-1} className="chat-main">{children}</main>
-  </div>;
+    </div>
+  </RanksProvider>;
 }

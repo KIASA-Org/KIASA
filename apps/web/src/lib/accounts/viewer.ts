@@ -4,8 +4,14 @@
  * real session with Supabase. */
 export const VIEWER_COOKIE = "kiasa-viewer";
 
-/** `photo`: the address of their profile photo, if they have set one. */
-export type ViewerBadge = { name: string; initials: string; href: string; photo?: string };
+/** A badge on someone's photo: `owner`, one of KIASA's admins (the leaf and a
+ * crown); `top`, a top manager (the leaf). */
+export type Rank = "owner" | "top";
+/** Who wears one: admins' and top managers' user ids. */
+export type Ranks = { owners: string[]; top: string[] };
+
+/** `photo`: the address of their profile photo, if they have set one; `rank`, the badge on it. */
+export type ViewerBadge = { name: string; initials: string; href: string; photo?: string; rank?: Rank };
 
 export const initialsOf = (name: string) => {
   const parts = name.split(/\s+/).filter(Boolean);
@@ -27,7 +33,10 @@ export function readBadge(cookies: string): ViewerBadge | null {
     if (text.startsWith("%")) text = decodeURIComponent(text);
     const badge = JSON.parse(text) as Partial<ViewerBadge>;
     if (typeof badge.name !== "string" || typeof badge.initials !== "string" || (badge.href !== "/account" && badge.href !== "/admin")) return null;
-    return { name: badge.name, initials: badge.initials, href: badge.href, photo: typeof badge.photo === "string" && PHOTO.test(badge.photo) ? badge.photo : undefined };
+    return {
+      name: badge.name, initials: badge.initials, href: badge.href, photo: typeof badge.photo === "string" && PHOTO.test(badge.photo) ? badge.photo : undefined,
+      rank: badge.rank === "owner" || badge.rank === "top" ? badge.rank : undefined,
+    };
   } catch {
     return null;
   }

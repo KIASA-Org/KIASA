@@ -67,7 +67,7 @@ export function Leaderboard({ me, board, team, currency, zone, today, now }: {
               return <tr key={row.user_id} data-me={row.user_id === me.id || undefined}>
                 <td><span className="jobs-place" data-top={places[index] <= 3 && by.of(row) > 0 ? "" : undefined}>{places[index]}</span></td>
                 <th scope="row"><span className="jobs-person">
-                  <Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" />
+                  <Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" who={row.user_id} />
                   <span>{row.name}{row.user_id === me.id && <span className="jobs-you">You</span>}</span>
                 </span></th>
                 {cell("jobs", String(row.jobs_held))}

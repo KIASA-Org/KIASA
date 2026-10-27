@@ -23,6 +23,7 @@
 /* One's own face in the chat's bar is round, as every face in the chat. */
 .chat-bar .account-initials { border-radius: 50%; }
 .chat-bar .photo-button-mark { right: -3px; bottom: -3px; border-radius: 50%; }
+.chat-bar [data-rank] > .photo-button-mark { right: auto; left: -3px; }
 
 /* Buttons the chat uses throughout. */
 .chat-icon { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; color: var(--ink-soft); cursor: pointer; transition: color 0.15s, background-color 0.15s; }
@@ -377,6 +378,7 @@ button.chat-file:hover { background: rgb(3 8 7 / 0.45); }
 .chat-profile .chat-profile-photo:not(.chat-avatar) { background: linear-gradient(150deg, #cdf7ac, #8fd065); color: var(--night); }
 .chat-profile .chat-profile-photo > svg { width: 48px; height: 48px; }
 .chat-profile .photo-button-mark { right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 50%; }
+.chat-profile [data-rank] > .photo-button-mark { right: auto; left: 8px; }
 .chat-profile .photo-button-mark svg { width: 16px; height: 16px; }
 .chat-profile .photo-control { margin-bottom: 6px; }
 .chat-profile-name { font-size: 20px; font-weight: 650; }

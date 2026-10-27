@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { MemberAccountView, RequestStatusView, SampleAccountView } from "@/components/site/account";
+import { RanksProvider } from "@/components/site/ranks";
 import { SiteShell } from "@/components/site/shell";
 import { member as sample } from "@/content/accounts";
 import { pushPublicKey } from "@/lib/accounts/push";
@@ -27,13 +28,16 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   if (!viewer) redirect("/sign-in");
   const member = viewer.member;
   if (!member) redirect(viewer.admin ? "/admin" : "/sign-in");
-  const badge = { name: member.name, initials: initialsOf(member.name), href: "/account", photo: viewer.photo ?? undefined };
+  const badge = { name: member.name, initials: initialsOf(member.name), href: "/account", photo: viewer.photo ?? undefined, rank: viewer.admin ? "owner" as const : viewer.top ? "top" as const : undefined };
   if (member.status !== "approved") return <SiteShell viewer={badge}>
     <RequestStatusView member={member} realtime={publicSupabase} pushKey={pushPublicKey} />
   </SiteShell>;
   // Just approved, while watching, or signing in for the first time since.
   const welcome = (await searchParams).welcome === "1";
+  // Their own photo wears their badge; it comes and goes live as an admin changes it.
   return <SiteShell viewer={badge}>
-    <MemberAccountView member={member} photo={viewer.photo} realtime={publicSupabase} welcome={welcome} />
+    <RanksProvider initial={{ owners: viewer.admin ? [viewer.id] : [], top: viewer.top ? [viewer.id] : [] }} realtime={publicSupabase} me={viewer.id}>
+      <MemberAccountView member={member} photo={viewer.photo} realtime={publicSupabase} welcome={welcome} />
+    </RanksProvider>
   </SiteShell>;
 }
