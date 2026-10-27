@@ -34,7 +34,7 @@ export function Recognition() {
           <h3 className="recog-name">{item.title}</h3>
           <div className="recog-more"><div>
             <p>{item.body}</p>
-            <Link href={item.cta.href} prefetch={false} className="more">{item.cta.label}<ChevronRight /></Link>
+            <Link href={item.cta.href} className="more">{item.cta.label}<ChevronRight /></Link>
           </div></div>
         </div>
       </li>)}

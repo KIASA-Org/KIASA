@@ -23,7 +23,7 @@ export function ArtView({ art, sizes }: { art: Art; sizes: string }) {
 
 /** The arrow link used across the site. */
 export function Cta({ link, className }: { link: LinkData; className?: string }) {
-  return <Link href={link.href} prefetch={false} className={`cta${className ? ` ${className}` : ""}`}><CtaContent>{link.label}</CtaContent></Link>;
+  return <Link href={link.href} className={`cta${className ? ` ${className}` : ""}`}><CtaContent>{link.label}</CtaContent></Link>;
 }
 
 /** One section of a page, in the wide column. Light tones bring their own ground. */

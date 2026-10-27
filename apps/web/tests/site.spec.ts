@@ -2,7 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 import type { HeroBlock, JobsBlock } from "../src/content/blocks";
 import { findDoc, pageDocs } from "../src/content/docs";
 import { plannedPages, searchPages } from "../src/content/pages";
-import { careers, footer, hero, navigation, news, popularSearches, recognition, regions, spotlight, stories } from "../src/content/site";
+import { careers, footer, hero, navigation, news, popularSearches, recognition, regions, signUp, spotlight, stories } from "../src/content/site";
+import { accounts, member } from "../src/content/accounts";
 
 const HEADLINE = hero.headline.join(" ");
 
@@ -262,6 +263,22 @@ test.describe("header", () => {
     await expect(page.locator("#panel-search")).toBeHidden();
   });
 
+  test("Sign up sits just before Search, and opens the page where a visitor makes an account", async ({ page }) => {
+    await open(page);
+    const button = page.getByRole("banner").getByRole("link", { name: signUp.label, exact: true });
+    const search = page.getByRole("button", { name: "Search", exact: true });
+    await expect(button).toBeVisible();
+    // On the line of the tools, a short step before Search.
+    const [a, b] = [(await button.boundingBox())!, (await search.boundingBox())!];
+    const step = b.x - (a.x + a.width);
+    expect(step).toBeGreaterThanOrEqual(0);
+    expect(step).toBeLessThan(24);
+    expect(Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))).toBeLessThan(2);
+    await button.click();
+    await expect(page).toHaveURL(new RegExp(`${signUp.href}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText((findDoc(signUp.href)!.blocks[0] as HeroBlock).title);
+  });
+
   test("the region menu lists the regional sites and marks the current one", async ({ page, isMobile }) => {
     test.skip(isMobile, "The wide header");
     await open(page);
@@ -423,6 +440,23 @@ test.describe("every page", () => {
     await expect(page.getByRole("status").filter({ hasText: "Thank you" })).toContainText("nothing was sent");
   });
 
+  test("the sign-up form asks for what it needs, says a person approves the request, and that nothing is sent yet", async ({ page }) => {
+    await open(page, signUp.href);
+    const form = page.locator("form.b-form");
+    const create = form.getByRole("button", { name: "Send request" });
+    await create.click();
+    await expect(page.getByRole("status").filter({ hasText: "Thank you" })).toHaveCount(0);
+    await form.getByLabel("First name").fill("Ada");
+    await form.getByLabel("Last name").fill("Byron");
+    await form.getByLabel("Work email").fill("ada@example.com");
+    await form.getByLabel("Choose a password").fill("a-test-password-only");
+    await form.getByRole("checkbox", { name: /^I agree/ }).check();
+    await create.click();
+    const thanks = page.getByRole("status").filter({ hasText: "Thank you" });
+    await expect(thanks).toContainText("once yours is approved");
+    await expect(thanks).toContainText("nothing was sent");
+  });
+
   test("an accordion row opens and closes", async ({ page }) => {
     await open(page, "/what-we-do/capabilities/cybersecurity");
     const folds = page.locator("details.b-fold");
@@ -438,5 +472,98 @@ test.describe("every page", () => {
     expect(response?.status()).toBe(404);
     await expect(page.getByRole("heading", { level: 1, name: "Nothing has taken root here" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Back to the homepage" })).toHaveAttribute("href", "/");
+  });
+});
+
+test.describe("accounts", () => {
+  test("sign-in asks for email and password, and until accounts are connected says no one can sign in", async ({ page }) => {
+    await open(page, signUp.href);
+    await page.getByRole("link", { name: "Already approved? Sign in" }).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in");
+    await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /noindex/);
+    const form = page.locator("form.signin-form");
+    await form.getByLabel("Email").fill("ada@example.com");
+    await form.getByLabel("Password").fill("a-test-password-only");
+    await form.getByRole("button", { name: "Sign in" }).click();
+    await expect(form.getByRole("alert")).toContainText("Accounts are not connected yet");
+  });
+
+  test("the account page shows a signed-in client what is theirs, and the header names them", async ({ page }) => {
+    await open(page, "/account");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Welcome back, ${member.name.split(" ")[0]}`);
+    // Signed in: the header leads to the account instead of offering Sign up.
+    const banner = page.getByRole("banner");
+    await expect(banner.getByRole("link", { name: `Your account, ${member.name}` })).toBeVisible();
+    await expect(banner.getByRole("link", { name: signUp.label, exact: true })).toHaveCount(0);
+    for (const heading of ["Your reports", "Saved for later", "Booked and coming up", "Your team at KIASA", "What you hear about", "Your account"]) {
+      await expect(page.getByRole("heading", { level: 2, name: heading, exact: true })).toBeVisible();
+    }
+    await expect(page.locator(".account-table tbody tr")).toHaveCount(member.reports.length);
+    // Saved reading leads to pages that exist.
+    const planned = new Set(plannedPages.map(planned => planned.href));
+    for (const item of member.saved) expect(planned.has(item.href), item.href).toBe(true);
+    await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /noindex/);
+
+    // Deleting asks first, offers the safe answer, and then says plainly that nothing happened.
+    await page.getByRole("button", { name: "Delete my account" }).click();
+    await expect(page.getByRole("button", { name: "Keep my account" })).toBeFocused();
+    await page.getByRole("button", { name: "Delete it" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "nothing was deleted" })).toBeVisible();
+  });
+
+  test("an admin approves or declines each request waiting, and finds anyone by name, email or organization", async ({ page }) => {
+    await page.goto("/admin");
+    await page.waitForFunction(() => {
+      const button = document.querySelector(".admin-request button");
+      return !!button && Object.keys(button).some(key => key.startsWith("__reactFiber"));
+    });
+    await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /noindex/);
+    const waiting = accounts.filter(person => person.status === "waiting");
+    const requests = page.locator(".admin-request");
+    await expect(requests).toHaveCount(waiting.length);
+
+    const [first, second] = waiting;
+    await page.getByRole("button", { name: `Approve ${first.name}` }).click();
+    const notice = page.getByRole("status").filter({ hasText: "nothing was saved" });
+    await expect(notice).toContainText(`${first.name} is approved`);
+    await expect(requests).toHaveCount(waiting.length - 1);
+    await page.getByRole("button", { name: `Decline ${second.name}` }).click();
+    await expect(notice).toContainText(`${second.name}'s request is declined`);
+    await expect(requests).toHaveCount(waiting.length - 2);
+    const row = (name: string) => page.locator(".admin-table tbody tr").filter({ hasText: name });
+    await expect(row(first.name).locator(".admin-status")).toHaveText("Approved");
+    await expect(row(second.name).locator(".admin-status")).toHaveText("Declined");
+
+    const search = page.getByRole("searchbox", { name: "Search accounts" });
+    await search.fill("osprey");
+    const matches = accounts.filter(person => `${person.name} ${person.email} ${person.organization ?? ""}`.toLowerCase().includes("osprey"));
+    await expect(page.locator(".admin-table tbody tr")).toHaveCount(matches.length);
+    await search.fill("zzzz");
+    await expect(page.getByText("Nothing found for “zzzz”")).toBeVisible();
+    await search.fill("");
+    await page.getByRole("button", { name: /^Waiting/ }).click();
+    await expect(page.locator(".admin-table tbody tr")).toHaveCount(waiting.length - 2);
+  });
+
+  test("an admin can delete someone, only after a second yes", async ({ page }) => {
+    await page.goto("/admin");
+    await page.waitForFunction(() => {
+      const button = document.querySelector(".admin-delete");
+      return !!button && Object.keys(button).some(key => key.startsWith("__reactFiber"));
+    });
+    const person = accounts[accounts.length - 1];
+    const rows = page.locator(".admin-table tbody tr");
+    await expect(rows).toHaveCount(accounts.length);
+    // Asked to confirm, the safe answer has the focus, and keeping changes nothing.
+    await page.getByRole("button", { name: `Delete ${person.name}` }).click();
+    const confirm = page.getByRole("group", { name: `Delete ${person.name}?` });
+    await expect(confirm.getByRole("button", { name: "Keep", exact: true })).toBeFocused();
+    await confirm.getByRole("button", { name: "Keep", exact: true }).click();
+    await expect(rows).toHaveCount(accounts.length);
+    await page.getByRole("button", { name: `Delete ${person.name}` }).click();
+    await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(rows).toHaveCount(accounts.length - 1);
+    await expect(page.getByRole("status").filter({ hasText: "nothing was deleted" })).toContainText(`${person.name}'s account is deleted`);
   });
 });

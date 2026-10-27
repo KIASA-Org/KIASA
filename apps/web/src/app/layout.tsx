@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Schibsted_Grotesk } from "next/font/google";
 import { bootstrapScript } from "@/components/intro/bootstrap";
+import { RouteProgress } from "@/components/site/route-progress";
 import { company } from "@/content/site";
 import "./globals.css";
 import "@/styles/site.css";
@@ -10,6 +11,10 @@ import "@/styles/site-featured.css";
 import "@/styles/site-sections.css";
 import "@/styles/site-pages.css";
 import "@/styles/site-blocks.css";
+import "@/styles/site-account.css";
+import "@/styles/chat.css";
+import "@/styles/jobs.css";
+import "@/styles/site-loading.css";
 
 // Self-hosted at build time: the browser makes no request to Google.
 const grotesk = Schibsted_Grotesk({ subsets: ["latin"], display: "swap", variable: "--font-grotesk" });
@@ -25,6 +30,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return <html lang="en" className={`${grotesk.variable} ${newsreader.variable}`} suppressHydrationWarning>
     {/* Runs before first paint, so the entrance never flashes the finished mark first. */}
     <head><script id="kiasa-intro-bootstrap" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: bootstrapScript() }} /></head>
-    <body>{children}</body>
+    <body><RouteProgress />{children}</body>
   </html>;
 }

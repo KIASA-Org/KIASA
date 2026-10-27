@@ -1,0 +1,50 @@
+/* ───────── Between pages ─────────
+   A thin leaf line along the top of the window while the next page comes, and,
+   for the private pages, a loading screen in the shape of the page the moment
+   one is asked for. */
+
+.route-progress { position: fixed; inset: 0 auto auto 0; z-index: 9999; width: 0; height: 3px; background: var(--leaf); box-shadow: 0 0 10px rgb(184 236 147 / 0.55); pointer-events: none; }
+.route-progress[data-state="going"] { animation: route-going 12s cubic-bezier(0.08, 0.7, 0.2, 1) forwards; }
+.route-progress[data-state="done"] { width: 100%; opacity: 0; transition: opacity 0.35s ease 0.15s; }
+@keyframes route-going { 0% { width: 0; } 8% { width: 32%; } 30% { width: 62%; } 100% { width: 92%; } }
+
+.page-loading { background: var(--night); }
+.page-loading-jobs, .page-loading-admin { min-height: 100dvh; }
+/* The chat fills the window exactly, as the chat itself does, whatever the bar measures. */
+.page-loading-chat { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.page-loading-site { min-height: calc(100dvh - var(--header)); padding-block: clamp(56px, 9vw, 120px); }
+.loading-said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.loading-block { display: block; height: 92px; border-radius: 18px; background: linear-gradient(90deg, #0c1712 0%, #142219 50%, #0c1712 100%) 0 0 / 200% 100%; animation: loading-shine 1.4s ease-in-out infinite; }
+.loading-block[data-size="tabs"] { height: 40px; max-width: 520px; border-radius: 20px; }
+.loading-block[data-size="tall"] { height: min(440px, 50vh); }
+.loading-block[data-size="eyebrow"] { width: 96px; height: 12px; border-radius: 6px; }
+.loading-block[data-size="title"] { width: min(440px, 85%); height: clamp(40px, 6vw, 64px); border-radius: 12px; }
+.loading-block[data-size="line"] { width: min(640px, 92%); height: 16px; border-radius: 8px; }
+.loading-block[data-size="line-short"] { width: min(400px, 60%); height: 16px; border-radius: 8px; }
+.loading-block[data-size="search"] { height: 42px; border-radius: 21px; }
+.loading-block[data-size="dot"] { flex: none; width: 50px; height: 50px; border-radius: 50%; }
+@keyframes loading-shine { to { background-position: -200% 0; } }
+
+.loading-text { display: grid; gap: 22px; }
+.loading-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; }
+.loading-jobs { display: grid; gap: 16px; width: 100%; max-width: 1240px; margin: 0 auto; padding: 18px clamp(12px, 3vw, 28px); }
+.loading-admin { display: grid; gap: 56px; padding-block: 72px; }
+
+.loading-chat { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+.loading-chat-list { display: grid; align-content: start; gap: 18px; padding: 12px 14px; border-right: 1px solid var(--line); }
+.loading-chat-row { display: flex; align-items: center; gap: 12px; }
+.loading-chat-lines { display: grid; flex: 1; gap: 10px; }
+.loading-chat-lines .loading-block { width: 85%; height: 12px; }
+.loading-chat-lines .loading-block[data-size="line-short"] { width: 60%; }
+.loading-chat-pane { background: radial-gradient(ellipse at 70% 80%, #0d2216 0%, #06100b 60%); }
+@media (max-width: 899px) {
+  .loading-chat { grid-template-columns: minmax(0, 1fr); }
+  .loading-chat-pane { display: none; }
+  .loading-chat-list { border-right: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-progress[data-state="going"] { animation: none; width: 60%; }
+  .loading-block { animation: none; }
+}

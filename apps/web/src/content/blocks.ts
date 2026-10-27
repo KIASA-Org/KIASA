@@ -218,7 +218,7 @@ export type FormBlock = Base & {
   type: "form";
   heading: string;
   intro?: string;
-  kind: "contact" | "preferences" | "cookies";
+  kind: "contact" | "preferences" | "cookies" | "sign-up";
 };
 
 /** Names in a grid, set as wordmarks: the platforms we build on. */

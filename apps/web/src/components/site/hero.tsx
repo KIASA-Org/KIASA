@@ -21,7 +21,7 @@ export function Hero() {
         <span className="hero-rule" aria-hidden="true" />
         <h2 className="hero-kicker">{hero.kicker}</h2>
         <p className="hero-body">{hero.body}</p>
-        <Link href={hero.cta.href} prefetch={false} className="cta"><CtaContent>{hero.cta.label}</CtaContent></Link>
+        <Link href={hero.cta.href} className="cta"><CtaContent>{hero.cta.label}</CtaContent></Link>
       </div>
     </div>
     <div className="wrap wrap-wide"><MotionToggle /></div>

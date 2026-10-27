@@ -10,11 +10,17 @@ it on the first visit.
   with panels of links, a hero, eight featured cards, a leader's words, client
   spotlight, recognition, careers, news, footer. All of its content is **sample
   content** for the design review, kept in one file.
-- **Every other page**, 75 of them, is designed on the matching page of the
+- **Every other page**, 76 of them, is designed on the matching page of the
   model site and filled with sample content: capabilities, industries, research,
-  case studies, news, careers with open roles, about, contact, legal, and the
-  KIASA Canopy practice page. Pages are data in `src/content/docs/`, drawn by
-  one renderer.
+  case studies, news, careers with open roles, about, contact, legal, sign-up,
+  and the KIASA Canopy practice page. Pages are data in `src/content/docs/`,
+  drawn by one renderer.
+- **Accounts, on Supabase.** Sign up is a request that a person at KIASA
+  approves: `/admin` (admins only, chrislim@kiasa.tech first) shows the requests
+  waiting, live, with Approve and Decline, and everyone who has asked, with a
+  search; approved people sign in at `/sign-in` with email and password and see
+  `/account`. Until Supabase is connected these pages show sample people; see
+  "Connecting accounts" in [the site plan](docs/site.md).
 
 Built with Next.js App Router, React, strict TypeScript, Tailwind CSS v4 and
 Motion. The plan, the list of pages and the photo credits are in

@@ -46,13 +46,13 @@ function PracticeHeader({ practice }: { practice: Practice }) {
   const [firm, ...rest] = practice.name.split(" ");
   return <header className="practice-header">
     <div className="practice-bar wrap wrap-wide">
-      <Link href="/" prefetch={false} className="practice-lockup" aria-label="KIASA home">
+      <Link href="/" className="practice-lockup" aria-label="KIASA home">
         <LeafMark className="practice-mark" weight={3.4} />
         <span className="practice-divider" aria-hidden="true" />
         <span className="practice-word">{firm} <span>{rest.join(" ")}</span></span>
       </Link>
       <nav className="practice-nav" aria-label={practice.name}>
-        <ul>{practice.nav.map(link => <li key={link.href}><Link href={link.href} prefetch={false} className="practice-link"><span>{link.label}</span></Link></li>)}</ul>
+        <ul>{practice.nav.map(link => <li key={link.href}><Link href={link.href} className="practice-link"><span>{link.label}</span></Link></li>)}</ul>
       </nav>
     </div>
   </header>;

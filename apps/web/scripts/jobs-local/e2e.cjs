@@ -1,0 +1,298 @@
+// End-to-end test of KIASA Jobs against the LOCAL Supabase copy: the admin, Ana
+// and Ben in their own browsers at once. Prints PASS/FAIL per step and how fast
+// changes reach the others. Usage, from apps/web: npx supabase start;
+// npm run chat:local:seed; npm run jobs:local:seed; serve a build made with the
+// local copy's keys on port 3002 (see docs/site.md); then npm run jobs:local:e2e.
+const { chromium } = require("playwright");
+const { createClient } = require("@supabase/supabase-js");
+const fs = require("fs");
+const { execSync } = require("child_process");
+const os = require("os");
+const path = require("path");
+function localEnv() {
+  const raw = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  const get = name => (raw.match(new RegExp(`^${name}="?([^"\\n]*)"?`, "m")) || [])[1] || "";
+  const env = { url: get("API_URL"), secret: get("SECRET_KEY") || get("SERVICE_ROLE_KEY") };
+  if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(env.url)) throw new Error("Refusing: this is only for the local Supabase copy");
+  return env;
+}
+const env = localEnv();
+const people = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), "kiasa-chat-people.json"), "utf8"));
+const out = path.join(os.tmpdir(), "kiasa-jobs-e2e");
+const BASE = "http://127.0.0.1:3002";
+fs.mkdirSync(out, { recursive: true });
+const results = [];
+const errors = [];
+async function step(name, fn) {
+  const started = Date.now();
+  try { const note = await fn(); results.push(`PASS  ${name}${note ? ` (${note})` : ""} [${Date.now() - started} ms]`); }
+  catch (error) {
+    const lines = error.message.split("\n").map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trim());
+    const waited = lines.find(line => /^- waiting for/.test(line)) ?? "";
+    results.push(`FAIL  ${name}: ${lines[0]}${waited ? ` | ${waited}` : ""}`);
+  }
+}
+const hydrated = (page, selector) => page.waitForFunction(selector => {
+  const node = document.querySelector(selector);
+  return !!node && Object.keys(node).some(key => key.startsWith("__react"));
+}, selector, { timeout: 20000 });
+
+async function signIn(browser, email, label, options = {}) {
+  const context = await browser.newContext({ viewport: { width: 1360, height: 900 }, ...options });
+  const page = await context.newPage();
+  page.on("pageerror", error => errors.push(`${label}: ${error.message}`));
+  page.on("console", message => { if (message.type() === "error" && !/favicon|Failed to load resource/.test(message.text())) errors.push(`${label} console: ${message.text().slice(0, 160)}`); });
+  await page.goto(BASE + "/sign-in");
+  await hydrated(page, "form");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(people[email].password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/\/(admin|account)/, { timeout: 20000 });
+  return { context, page };
+}
+async function openJobs(page, tab) {
+  await page.goto(`${BASE}/jobs${tab ? `?tab=${tab}` : ""}`);
+  await hydrated(page, ".jobs-app");
+}
+const tab = (page, name) => page.getByRole("navigation", { name: "KIASA Jobs" }).getByRole("button", { name });
+const row = (page, title) => page.locator(".jobs-row", { has: page.locator(".jobs-row-title", { hasText: title }) });
+const show = (page, name) => page.getByRole("group", { name: "Show" }).getByRole("button", { name });
+// For timings: looks every 10 ms.
+const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(([selector, text]) =>
+  [...document.querySelectorAll(selector)].some(node => node.textContent.includes(text)), [selector, text], { polling: 10, timeout });
+
+(async () => {
+  const site = createClient(env.url, env.secret, { auth: { persistSession: false } });
+  const zone = (await site.from("job_settings").select("timezone").eq("id", 1).single()).data?.timezone ?? "UTC";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(new Date());
+  const token = Date.now().toString(36);
+  const titles = [`E2E Frontend Engineer ${token}`, `E2E Platform Engineer ${token}`, `E2E Data Engineer ${token}`];
+  // Each with its title and a company the address does not say, so the bot has nothing to read (no request leaves this computer).
+  const links = [
+    `${titles[0]} | Testco Group | https://boards.greenhouse.io/testco/jobs/${token}1`,
+    `${titles[1]}\tPlatformco Ltd\thttps://jobs.lever.co/platformco/${token}2?utm_source=newsletter`,
+    `${titles[2]} | Dataco Labs | https://jobs.ashbyhq.com/dataco/${token}3`,
+  ].join("\n");
+  // Pasting, as the admin does: the bot saves what is pasted, with no button.
+  const paste = (page, text) => page.evaluate(text => {
+    const box = document.querySelector(".jobs-bot-input textarea");
+    box.focus();
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, text);
+  // Ben starts with no résumé, so the one he adds becomes his default (as a member's first does).
+  const benId = people["ben@example.com"].id;
+  const { data: kept } = await site.from("resumes").select("path").eq("user_id", benId);
+  if (kept?.length) {
+    await site.storage.from("resumes").remove(kept.map(resume => resume.path));
+    await site.from("resumes").delete().eq("user_id", benId);
+  }
+  const browser = await chromium.launch();
+  let admin, ana, ben;
+
+  await step("the admin, Ana and Ben open KIASA Jobs: the admin on Live, members on Today", async () => {
+    [admin, ana, ben] = await Promise.all([signIn(browser, "chrislim@kiasa.tech", "admin"), signIn(browser, "ana@example.com", "ana"), signIn(browser, "ben@example.com", "ben")]);
+    await Promise.all([openJobs(admin.page), openJobs(ana.page), openJobs(ben.page)]);
+    await admin.page.getByRole("heading", { name: "Today, member by member" }).waitFor();
+    await ana.page.getByRole("heading", { name: "Today's jobs" }).waitFor();
+    await ben.page.getByRole("heading", { name: "Today's jobs" }).waitFor();
+    // Members' photos stay in their circles (one once filled the screen).
+    await admin.page.locator(".jobs-avatar .avatar-photo").first().waitFor({ timeout: 10000 });
+    const sizes = await admin.page.evaluate(() => [...document.querySelectorAll(".jobs-avatar .avatar-photo")].map(photo => Math.round(photo.getBoundingClientRect().width)));
+    if (sizes.some(width => width > 40)) throw new Error(`photos ${sizes.join(", ")} px wide; their circles are 30`);
+    // The live channels join a moment after the page.
+    await ana.page.waitForTimeout(2500);
+  });
+
+  await step("each member has a card on the admin's Live", async () => {
+    await admin.page.locator(".jobs-member").first().waitFor({ timeout: 10000 });
+    const cards = await admin.page.locator(".jobs-member").count();
+    const members = await admin.page.locator(".jobs-table tbody tr").count();
+    if (cards !== members) throw new Error(`${cards} cards for ${members} members`);
+    return `${cards} cards`;
+  });
+
+  await step("the admin pastes three links into the jobs bot: saved at once, on Ana's and Ben's lists live", async () => {
+    await tab(admin.page, "Jobs").click();
+    await admin.page.getByRole("heading", { name: "Jobs bot" }).waitFor();
+    const started = Date.now();
+    await paste(admin.page, links);
+    await admin.page.locator(".jobs-bot-says", { hasText: "Saved 3 jobs for today" }).waitFor({ timeout: 10000 });
+    const saved = Date.now() - started;
+    await Promise.all([appears(ana.page, ".jobs-row-title", titles[0]), appears(ben.page, ".jobs-row-title", titles[0])]);
+    await admin.page.locator(".jobs-bot-says", { hasText: "Done: 3 jobs named" }).waitFor({ timeout: 15000 });
+    return `saved ${saved} ms after pasting, on their lists ${Date.now() - started} ms`;
+  });
+
+  await step("the same links again: nothing saved twice (tracking taken off the link)", async () => {
+    await paste(admin.page, links.replace("?utm_source=newsletter", "?utm_source=other"));
+    await admin.page.locator(".jobs-bot-says", { hasText: "All 3 are already on the list" }).waitFor({ timeout: 10000 });
+    const { count } = await site.from("jobs").select("id", { count: "exact", head: true }).like("url", `%${token}%`);
+    if (count !== 3) throw new Error(`${count} jobs with this run's links`);
+  });
+
+  await step("a paste taken back with Undo leaves everyone's list", async () => {
+    const spare = `E2E Spare Job ${token}`;
+    await paste(admin.page, `${spare} | Spare Holdings | https://jobs.example.com/spare/${token}`);
+    await admin.page.locator(".jobs-bot-says", { hasText: "Saved 1 job for today" }).waitFor({ timeout: 10000 });
+    await appears(ana.page, ".jobs-row-title", spare);
+    await admin.page.locator(".jobs-bot-says", { hasText: "Saved 1 job for today" }).getByRole("button", { name: "Undo" }).click();
+    await admin.page.getByRole("dialog").getByRole("button", { name: "Take them back" }).click();
+    await admin.page.locator(".jobs-bot-says", { hasText: "Taken back" }).waitFor({ timeout: 10000 });
+    await ana.page.waitForFunction(title => ![...document.querySelectorAll(".jobs-row-title")].some(node => node.textContent.includes(title)), spare, { timeout: 10000 });
+  });
+
+  await step("Ana marks one Applied: the admin's desk and Ben's list count her at once", async () => {
+    const started = Date.now();
+    await row(ana.page, titles[0]).getByRole("button", { name: `Applied: ${titles[0]}` }).click();
+    await show(ana.page, /^Applied/).click();
+    await row(ana.page, titles[0]).locator(".jobs-status select").waitFor();
+    const value = await row(ana.page, titles[0]).locator(".jobs-status select").inputValue();
+    if (value !== "applied") throw new Error(`her status reads ${value}`);
+    await admin.page.waitForFunction(title => [...document.querySelectorAll(".jobs-desk-row")].some(node =>
+      node.textContent.includes(title) && /^1\s*\//.test(node.querySelector(".jobs-meter-text")?.textContent ?? "")), titles[0], { polling: 10, timeout: 10000 });
+    const desk = Date.now() - started;
+    await appears(ben.page, ".jobs-row", "1 on the team applied");
+    return `the admin's desk ${desk} ms, Ben's list ${Date.now() - started} ms`;
+  });
+
+  await step("the résumé she used is kept with it", async () => {
+    const { data } = await site.from("applications").select("resume_id, resumes(title, is_default)").eq("user_id", people["ana@example.com"].id).eq("job_id",
+      (await site.from("jobs").select("id").eq("title", titles[0]).single()).data.id).single();
+    if (!data?.resume_id || !data.resumes?.is_default) throw new Error(`résumé: ${JSON.stringify(data)}`);
+    return data.resumes.title;
+  });
+
+  await step("Ana schedules an interview for it; it shows on the admin's calendar live", async () => {
+    await tab(admin.page, "Calendars").click();
+    await admin.page.getByRole("heading", { name: "This week" }).waitFor();
+    await row(ana.page, titles[0]).locator(".jobs-status select").selectOption("interview");
+    const dialog = ana.page.getByRole("dialog", { name: `Interview: ${titles[0]}` });
+    await dialog.getByLabel("Date").fill(today);
+    await dialog.getByLabel(/^Time/).fill("23:00");
+    await dialog.getByLabel("Stage (optional)").fill("First call");
+    await dialog.getByRole("button", { name: "Save interview" }).click();
+    const started = Date.now();
+    await dialog.waitFor({ state: "detached", timeout: 10000 });
+    await appears(admin.page, ".jobs-event, .jobs-agenda-item", titles[0]);
+    const status = await row(ana.page, titles[0]).locator(".jobs-status select").inputValue();
+    if (status !== "interview") throw new Error(`her status reads ${status}`);
+    return `on the admin's calendar ${Date.now() - started} ms after saving`;
+  });
+
+  await step("Ana got the job: it waits for the admin, who confirms it; her earnings and the leaderboard follow", async () => {
+    await tab(admin.page, /^Confirm/).click();
+    await row(ana.page, titles[0]).getByRole("button", { name: `More for ${titles[0]}` }).click();
+    await ana.page.getByRole("menuitem", { name: "I got the job…" }).click();
+    const dialog = ana.page.getByRole("dialog", { name: "You got the job" });
+    await dialog.getByLabel(/^Monthly salary/).fill("7000");
+    await dialog.getByRole("button", { name: "Send for confirming" }).click();
+    await ana.page.getByText("counts on the leaderboard once an admin confirms it").waitFor({ timeout: 10000 });
+    const waiting = admin.page.locator("tr", { hasText: titles[0] });
+    await waiting.waitFor({ timeout: 10000 });
+    await waiting.getByRole("button", { name: "Confirm" }).click();
+    await waiting.waitFor({ state: "detached", timeout: 10000 });
+    await tab(ana.page, "Earnings").click();
+    await ana.page.locator(".jobs-ledger li", { hasText: titles[0] }).locator(".jobs-chip", { hasText: "Confirmed" }).waitFor({ timeout: 10000 });
+    const board = (await createClient(env.url, env.secret, { auth: { persistSession: false } }).from("positions").select("monthly_salary, status").eq("title", titles[0]).single()).data;
+    if (board?.status !== "confirmed" || Number(board.monthly_salary) !== 7000) throw new Error(JSON.stringify(board));
+    await tab(ben.page, "Leaderboard").click();
+    await ben.page.locator(".jobs-board tr", { hasText: "Ana Silva" }).waitFor();
+    await tab(ana.page, "Today").click();
+  });
+
+  await step("the admin sets Ben's day: five applications and a note; Ben sees both live", async () => {
+    await tab(admin.page, "Plans").click();
+    await admin.page.getByLabel("applications for Ben Okoro").fill("5");
+    await admin.page.getByLabel("Note for Ben Okoro").fill(`Try the platform roles ${token}`);
+    await admin.page.getByRole("button", { name: "Save plans" }).click();
+    await admin.page.getByText("Saved for 1 member.").waitFor({ timeout: 10000 });
+    const started = Date.now();
+    await tab(ben.page, "Today").click();
+    await appears(ben.page, ".jobs-plan-notes", `Try the platform roles ${token}`);
+    await appears(ben.page, ".jobs-goal", "/ 5");
+    return `${Date.now() - started} ms`;
+  });
+
+  await step("Ben adds a résumé; it becomes his default and is offered above the list", async () => {
+    await tab(ben.page, "Résumés").click();
+    await ben.page.getByLabel("Title").fill(`Platform ${token}`);
+    await ben.page.getByLabel(/^File/).setInputFiles({ name: "ben-okoro.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+    await ben.page.getByRole("button", { name: "Add résumé" }).click();
+    await ben.page.locator(".jobs-ledger li", { hasText: `Platform ${token}` }).locator(".jobs-you", { hasText: "Default" }).waitFor({ timeout: 10000 });
+    await tab(ben.page, "Today").click();
+    const chosen = await ben.page.locator(".jobs-resume-pick select option:checked").textContent();
+    if (!chosen?.includes(`Platform ${token}`)) throw new Error(`applying with ${chosen}`);
+  });
+
+  await step("Ben applies to one and takes it back; skips another", async () => {
+    await row(ben.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).click();
+    await show(ben.page, /^All/).click();
+    await row(ben.page, titles[1]).getByRole("button", { name: `More for ${titles[1]}` }).click();
+    await ben.page.getByRole("menuitem", { name: "Not applied after all" }).click();
+    await row(ben.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).waitFor({ timeout: 10000 });
+    await row(ben.page, titles[2]).getByRole("button", { name: `More for ${titles[2]}` }).click();
+    await ben.page.getByRole("menuitem", { name: "Skip (not a fit)" }).click();
+    await show(ben.page, /^Skipped/).click();
+    await row(ben.page, titles[2]).waitFor({ timeout: 10000 });
+    const { data } = await site.from("applications").select("job_id, status, applied_at").eq("user_id", people["ben@example.com"].id).in("job_id",
+      ((await site.from("jobs").select("id").in("title", [titles[1], titles[2]])).data ?? []).map(job => job.id));
+    if (data.length !== 1 || data[0].status !== "skipped" || data[0].applied_at !== null) throw new Error(JSON.stringify(data));
+  });
+  await ben.page.screenshot({ path: path.join(out, "ben-today.png"), fullPage: false });
+  await admin.page.screenshot({ path: path.join(out, "admin-plans.png"), fullPage: false });
+
+  await step("on a phone: Ana's day fits the screen, and Applied works with a tap", async () => {
+    const phone = await signIn(browser, "ana@example.com", "ana-phone", { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await openJobs(phone.page);
+    await row(phone.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).tap();
+    await show(phone.page, /^Applied/).tap();
+    await row(phone.page, titles[1]).locator(".jobs-status select").waitFor({ timeout: 10000 });
+    const wide = await phone.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    await phone.page.screenshot({ path: path.join(out, "phone-today.png") });
+    if (wide > 0) throw new Error(`the page is ${wide}px wider than the phone`);
+  });
+
+  await step("Ana edits her details: the new name reaches her chats; then her password, a wrong current one refused (both put back)", async () => {
+    const anaId = people["ana@example.com"].id;
+    const editName = async name => {
+      await ana.page.getByRole("button", { name: "Edit details" }).click();
+      await ana.page.getByLabel("Name", { exact: true }).fill(name);
+      await ana.page.getByRole("button", { name: "Save details" }).click();
+      await ana.page.getByText("Your details are saved.").waitFor({ timeout: 10000 });
+    };
+    // Her name has to show in a chat to be seen changing there: one with Ben, if she has none yet.
+    const { data: had } = await site.from("chat_members").select("chat_id").eq("user_id", anaId).limit(1);
+    if (!had?.length) {
+      const { data: made, error } = await site.from("chats").insert({ kind: "direct", created_by: anaId }).select("id").single();
+      if (error) throw new Error(`no chat for Ana: ${error.message}`);
+      await site.from("chat_members").insert([{ chat_id: made.id, user_id: anaId, name: "Ana Silva" }, { chat_id: made.id, user_id: people["ben@example.com"].id, name: "Ben Okoro" }]);
+    }
+    await ana.page.goto(BASE + "/account");
+    await editName("Ana Silva-Moreno");
+    await ana.page.locator(".account-details dd", { hasText: "Ana Silva-Moreno" }).waitFor({ timeout: 10000 });
+    const { data: names } = await site.from("chat_members").select("name").eq("user_id", anaId);
+    if (!names?.length || names.some(row => row.name !== "Ana Silva-Moreno")) throw new Error(`her chats show ${JSON.stringify(names)}`);
+    await editName("Ana Silva");
+    const password = people["ana@example.com"].password;
+    const changeTo = async (current, next) => {
+      await ana.page.getByRole("button", { name: "Change password" }).click();
+      await ana.page.getByLabel("Current password").fill(current);
+      await ana.page.getByLabel(/^New password \(/).fill(next);
+      await ana.page.getByLabel("New password again").fill(next);
+      await ana.page.locator("form[aria-label='Change your password']").getByRole("button", { name: "Change password" }).click();
+    };
+    await changeTo("not her password at all", "a brand new password 1");
+    await ana.page.getByText("That is not your current password.").waitFor({ timeout: 10000 });
+    await ana.page.getByRole("button", { name: "Cancel" }).click();
+    await changeTo(password, "a brand new password 1");
+    await ana.page.getByText("Your password is changed").waitFor({ timeout: 10000 });
+    await changeTo("a brand new password 1", password);
+    await ana.page.getByText("Your password is changed").waitFor({ timeout: 10000 });
+  });
+
+  console.log(results.join("\n"));
+  console.log("page errors:", errors.length ? errors.join(" | ") : "none");
+  await browser.close();
+})().catch(error => { console.error(error); process.exit(1); });

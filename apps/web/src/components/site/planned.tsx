@@ -11,7 +11,7 @@ function Rows({ label, pages }: { label: string; pages: readonly { href: string;
     <h2 className="planned-list-label">{label}</h2>
     <ul>
       {pages.map(page => <li key={page.href}>
-        <Link href={page.href} prefetch={false} className="planned-row">
+        <Link href={page.href} className="planned-row">
           <span className="planned-row-title">{page.title}</span>
           <span className="planned-row-text">{page.summary}</span>
           <ArrowRight />

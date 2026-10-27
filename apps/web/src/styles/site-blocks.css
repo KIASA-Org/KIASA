@@ -370,6 +370,11 @@
 .b-fieldset legend { margin-bottom: 12px; font-size: 14px; font-weight: 600; color: var(--fg-soft); }
 .b-check { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; font-size: 15px; line-height: 1.5; color: var(--fg-soft); cursor: pointer; }
 .b-check input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--leaf); }
+.b-field-hint { margin-top: -12px; font-size: 14px; line-height: 1.45; color: var(--fg-mute); }
+/* A field only robots fill in: kept out of sight and out of reach. */
+.b-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.b-form-error { padding: 14px 18px; border-left: 3px solid #ffb4a2; background: var(--tile); font-size: 15px; line-height: 1.5; }
+.b-form[aria-busy="true"] .b-submit { opacity: 0.7; cursor: progress; }
 .b-submit { display: inline-flex; align-items: center; gap: 14px; justify-self: start; height: 52px; padding-inline: 24px 18px; margin-top: 8px; background: var(--leaf); color: var(--night); font: inherit; font-size: 16px; font-weight: 650; transition: background-color 0.25s; }
 .b-submit:hover { background: var(--ink); }
 .b-submit .cta-chip { background: var(--night); color: var(--leaf); }

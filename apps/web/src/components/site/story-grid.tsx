@@ -12,7 +12,7 @@ export type StoryItem = { story: StoryCardData; art: ReactNode };
  * "Expand" come up in its place. */
 export function StoryCard({ story, art, headingLevel = 3 }: StoryItem & { headingLevel?: 2 | 3 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
-  return <Link href={story.href} prefetch={false} className="story" data-surface={story.surface}>
+  return <Link href={story.href} className="story" data-surface={story.surface}>
     <div className="story-art" aria-hidden="true">{art}</div>
     <div className="story-text">
       <p className="eyebrow">{story.kind}</p>

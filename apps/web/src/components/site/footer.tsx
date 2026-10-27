@@ -11,7 +11,7 @@ export function SiteFooter() {
     </Link>
     <nav aria-label="Footer">
       <ul className="footer-links">
-        {footer.links.map(link => <li key={link.label}><Link href={link.href} prefetch={false}>{link.label}</Link></li>)}
+        {footer.links.map(link => <li key={link.label}><Link href={link.href}>{link.label}</Link></li>)}
       </ul>
     </nav>
     <p className="footer-legal">{footer.legal}</p>

@@ -1,5 +1,6 @@
 import type { PageDoc } from "../blocks";
 import { aboutPages } from "./about";
+import { accountPages } from "./account";
 import { canopyPages } from "./canopy";
 import { capabilitiesPages } from "./capabilities";
 import { careersPages } from "./careers";
@@ -22,6 +23,7 @@ export const pageDocs: PageDoc[] = [
   ...newsroomPages,
   ...careersPages,
   ...legalPages,
+  ...accountPages,
 ];
 
 export const findDoc = (href: string) => pageDocs.find(doc => doc.href === href);
