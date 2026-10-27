@@ -78,6 +78,12 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
   await fresh.from("chats").delete().not("id", "is", null);
   const { data: listed } = await fresh.auth.admin.listUsers({ page: 1, perPage: 1000 });
   for (const user of listed?.users ?? []) if (/^dan\.\d+@example\.com$/.test(user.email ?? "")) await fresh.auth.admin.deleteUser(user.id);
+  // The local realtime server sleeps when no one is connected, and what the
+  // database says in its first seconds awake can be lost: woken first.
+  const wake = fresh.channel("wake").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {});
+  await new Promise(resolve => wake.subscribe(status => { if (status !== "CLOSED") resolve(); }));
+  await new Promise(done => setTimeout(done, 3000));
+  await fresh.removeChannel(wake);
   const browser = await chromium.launch();
   const picture = path.join(out, "leaf.png");
   await sharp({ create: { width: 320, height: 200, channels: 3, background: "#b8ec93" } }).png().toFile(picture);
@@ -459,6 +465,118 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
     await page.screenshot({ path: path.join(out, "phone-conversation.png") });
   });
 
+  // Alerts need a browser as the real one is: only the window in front has focus,
+  // and the computer's notifications show. (Playwright's default build makes every
+  // page focused and refuses notifications; its "chromium" channel does not.)
+  const realBen = async browserForAlerts => {
+    const context = await browserForAlerts.newContext({ viewport: { width: 1280, height: 860 } });
+    const page = await context.newPage();
+    page.on("pageerror", error => errors.push(`ben (alerts): ${error.message}`));
+    await page.goto(BASE + "/sign-in");
+    await hydrated(page);
+    await page.getByLabel("Email").fill("ben@example.com");
+    await page.getByLabel("Password").fill(people["ben@example.com"].password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/account/, { timeout: 20000 });
+    return { context, page };
+  };
+
+  await step("Ben, at the jobs desk with the chat in another tab, gets one alert on his computer and the count on both tabs; opening it clears them", async () => {
+    const real = await chromium.launch({ channel: "chromium" });
+    try {
+      const { context, page: chat } = await realBen(real);
+      await context.grantPermissions(["notifications"], { origin: BASE });
+      await openChat(chat);
+      if (await chat.locator(".chat-alerts-ask").count()) throw new Error("asked to turn alerts on, though they are on");
+      const worker = context.serviceWorkers()[0] ?? await context.waitForEvent("serviceworker", { timeout: 15000 });
+      // Each time the worker shows an alert, counted.
+      await worker.evaluate(() => {
+        self.__alerts = 0;
+        const show = self.registration.showNotification.bind(self.registration);
+        self.registration.showNotification = (...args) => { self.__alerts += 1; return show(...args); };
+      });
+      // Ben's other window looks at the group, so Ana's chat is read nowhere meanwhile.
+      await row(ben.page, "Platform team").click();
+      const jobs = await context.newPage();
+      jobs.on("pageerror", error => errors.push(`ben jobs (alerts): ${error.message}`));
+      await jobs.goto(BASE + "/jobs");
+      await jobs.locator(".jobs-app").waitFor({ timeout: 20000 });
+      await jobs.bringToFront();
+      await jobs.waitForTimeout(2500);
+      // What each tab says: the count before its title, and whether the leaf has the badge.
+      const tab = page => page.evaluate(() => ({
+        title: document.title, count: Number((/^\((\d+)\+?\) /.exec(document.title) ?? [0, 0])[1]),
+        badge: [...document.querySelectorAll('link[rel~="icon"]')].every(icon => icon.getAttribute("href").startsWith("data:image/png")),
+      }));
+      const tabSays = async (page, count, what) => {
+        let now;
+        for (const until = Date.now() + 10000; Date.now() < until; await page.waitForTimeout(50)) {
+          now = await tab(page);
+          if (now.count === count && now.badge === count > 0) return;
+        }
+        throw new Error(`${what} says “${now.title}”, ${now.badge ? "with" : "without"} the badge, not ${count}`);
+      };
+      // Whatever Ben had not read yet, from earlier steps, both tabs count alike.
+      const before = (await tab(chat)).count;
+      await tabSays(jobs, before, "the jobs tab, before");
+
+      const started = Date.now();
+      await row(ana.page, "Ben Okoro").click();
+      await ana.page.getByRole("textbox", { name: "Message" }).fill("Are you free at three?");
+      await ana.page.getByRole("textbox", { name: "Message" }).press("Enter");
+      const shownFor = words => worker.evaluate(text => self.registration.getNotifications().then(list => list
+        .filter(alert => alert.body.includes(text)).map(alert => ({ title: alert.title, body: alert.body, chat: alert.data && alert.data.chat }))), words);
+      let shown = [];
+      while (!shown.length && Date.now() - started < 10000) {
+        shown = await shownFor("Are you free at three?");
+        if (!shown.length) await jobs.waitForTimeout(50);
+      }
+      const after = Date.now() - started;
+      if (shown.length !== 1 || shown[0].title !== "Ana Silva") throw new Error(`alerts: ${JSON.stringify(shown)}`);
+      // Both tabs count it, once: on the leaf, and before the title.
+      await tabSays(jobs, before + 1, "the jobs tab");
+      await tabSays(chat, before + 1, "the chat tab");
+      await jobs.waitForTimeout(1000);
+      const times = await worker.evaluate(() => self.__alerts);
+      if (times !== 1) throw new Error(`the alert was shown ${times} times`);
+
+      // The alert clicked, as the worker answers a click: Ben's chat tab opens Ana's chat in place, and reads it.
+      await chat.bringToFront();
+      await worker.evaluate(chatId => self.clients.matchAll({ type: "window" })
+        .then(pages => pages.forEach(page => page.postMessage({ type: "open-chat", chat: chatId }))), shown[0].chat);
+      await chat.locator(".chat-text", { hasText: "Are you free at three?" }).waitFor({ timeout: 10000 });
+      await tabSays(chat, before, "the chat tab, once read");
+      await tabSays(jobs, before, "the jobs tab, once read");
+
+      // With the chat in front, the next message shows there, not as an alert.
+      await ana.page.getByRole("textbox", { name: "Message" }).fill("Or at four");
+      await ana.page.getByRole("textbox", { name: "Message" }).press("Enter");
+      await chat.locator(".chat-text", { hasText: "Or at four" }).waitFor({ timeout: 10000 });
+      await chat.waitForTimeout(1000);
+      if ((await shownFor("Or at four")).length) throw new Error("an alert showed while the chat was in front");
+      return `the alert ${after} ms after sending, shown once though two tabs heard it`;
+    } finally {
+      await real.close();
+    }
+  });
+
+  await step("someone who has not answered is asked above the chat list; “Not now” puts it away, and it stays away", async () => {
+    const real = await chromium.launch({ channel: "chromium" });
+    try {
+      const { page } = await realBen(real);
+      await openChat(page);
+      const ask = page.locator(".chat-alerts-ask");
+      await ask.waitFor({ timeout: 10000 });
+      await ask.getByRole("button", { name: "Not now" }).click();
+      await ask.waitFor({ state: "detached", timeout: 5000 });
+      await openChat(page);
+      await page.waitForTimeout(1000);
+      if (await ask.count()) throw new Error("asked again after Not now");
+    } finally {
+      await real.close();
+    }
+  });
+
   // Last: Ben goes, so this comes after everything he takes part in.
   await step("when Ben leaves, Ana sees “last seen just now”", async () => {
     await row(ana.page, "Ben Okoro").click();
@@ -474,4 +592,6 @@ const appears = (page, selector, text) => page.waitForFunction(([selector, text]
   console.log(results.join("\n"));
   console.log("page errors:", errors.length ? errors.join(" | ") : "none");
   await browser.close();
+  // Done: nothing left open (a realtime connection, a browser's child) keeps the run waiting.
+  process.exit(results.some(line => line.startsWith("FAIL")) ? 1 : 0);
 })().catch(error => { console.log(results.join("\n")); console.error("stopped:", error.message); process.exit(1); });

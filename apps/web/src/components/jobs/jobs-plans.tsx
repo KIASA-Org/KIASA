@@ -6,7 +6,7 @@ import type { BoardRow, JobSettings, JobsMe, Period, Plan, TeamPerson } from "@/
 import { Avatar } from "../site/avatar";
 import { ArrowLeft } from "../site/icons";
 import { Meter } from "./jobs-charts";
-import { initialsOf, monthStart, nextPeriod, periodName, periodStart, planFor, weekStart } from "./jobs-format";
+import { DAILY_GOAL, initialsOf, monthStart, nextPeriod, periodName, periodStart, planFor, weekStart } from "./jobs-format";
 
 type Goal = { label: string; value: number; target: number | null };
 
@@ -15,7 +15,7 @@ type Goal = { label: string; value: number; target: number | null };
 export function PlanStrip({ me, plans, mine, today }: { me: JobsMe; plans: Plan[]; mine: BoardRow | null; today: string }) {
   const day = planFor(plans, me.id, "day", today), week = planFor(plans, me.id, "week", weekStart(today)), month = planFor(plans, me.id, "month", monthStart(today));
   const all: Goal[] = [
-    { label: "Applications today", value: mine?.apps_day ?? 0, target: day.applications },
+    { label: "Applications today", value: mine?.apps_day ?? 0, target: day.applications ?? DAILY_GOAL },
     { label: "Interviews today", value: mine?.interviews_day ?? 0, target: day.interviews },
     { label: "Offers today", value: mine?.offers_day ?? 0, target: day.offers },
     { label: "Applications this week", value: mine?.apps_week ?? 0, target: week.applications },
@@ -106,7 +106,8 @@ export function PlansView({ supabase, team, plans, board, today, settings, onSet
         <button type="button" className="chat-icon jobs-next" aria-label="After" onClick={() => move(1)}><ArrowLeft /></button>
         {!current && <button type="button" className="chat-pill" onClick={() => setStart(null)}>{period === "day" ? "Today" : period === "week" ? "This week" : "This month"}</button>}
       </div>
-      <p className="jobs-hint">Targets carry on to later {period === "day" ? "days" : period === "week" ? "weeks" : "months"} until you change them; a note is for {period === "day" ? "that day" : period === "week" ? "that week" : "that month"} only.</p>
+      <p className="jobs-hint">Targets carry on to later {period === "day" ? "days" : period === "week" ? "weeks" : "months"} until you change them; a note is for {period === "day" ? "that day" : period === "week" ? "that week" : "that month"} only.
+        {period === "day" && ` Every member's goal is ${DAILY_GOAL} applications a day unless you set another here.`}</p>
       <div className="jobs-table-wrap">
         <table className="jobs-table jobs-plans-table">
           <thead><tr>
@@ -133,13 +134,14 @@ export function PlansView({ supabase, team, plans, board, today, settings, onSet
               return <tr key={person.id} data-changed={drafts[key(person.id)] ? "" : undefined}>
                 <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" />{person.name}</span></th>
                 {(["applications", "interviews", "offers"] as const).map(field => <td key={field}>
-                  <input className="jobs-number" inputMode="numeric" aria-label={`${field} for ${person.name}`} value={draft[field]} placeholder="–"
+                  <input className="jobs-number" inputMode="numeric" aria-label={`${field} for ${person.name}`} value={draft[field]}
+                    placeholder={period === "day" && field === "applications" ? String(DAILY_GOAL) : "–"}
                     onChange={event => edit(person.id, { [field]: event.target.value.replace(/\D/g, "") })} />
                 </td>)}
                 <td><input className="jobs-note-input" aria-label={`Note for ${person.name}`} value={draft.note} maxLength={1000} placeholder="Add a note"
                   onChange={event => edit(person.id, { note: event.target.value })} /></td>
                 <td className="jobs-plans-done">
-                  {current && <Meter value={done[0]} target={asNumber(draft.applications)} label={`Applications, ${person.name}`} compact />}
+                  {current && <Meter value={done[0]} target={asNumber(draft.applications) ?? (period === "day" ? DAILY_GOAL : null)} label={`Applications, ${person.name}`} compact />}
                 </td>
               </tr>;
             })}

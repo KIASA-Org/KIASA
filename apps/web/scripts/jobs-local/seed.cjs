@@ -138,13 +138,15 @@ const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
   payments.push({ user_id: team[0].id, position_id: madePositions.find(row => row.user_id === team[0].id)?.id, amount: 3100, paid_on: new Date(dayStart(1)).toISOString().slice(0, 10), status: "pending", note: "Half-month" });
   { const { error } = await site.from("payments").insert(payments); if (error) throw error; }
 
-  // Plans: thirty applications a day, three interviews a week, an offer a month; today's notes.
+  // Plans: a hundred applications a day (the team's rule), three interviews a
+  // week, an offer a month; today's notes. The last member has none: the team's
+  // daily goal stands for them.
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(new Date());
   const monday = (() => { const at = new Date(`${today}T00:00:00Z`); at.setUTCDate(at.getUTCDate() - ((at.getUTCDay() + 6) % 7)); return at.toISOString().slice(0, 10); })();
-  const plans = team.flatMap((member, who) => [
-    { user_id: member.id, period: "day", starts_on: today, applications: 30, note: who === 0 ? "Focus on React and TypeScript roles today." : who === 2 ? "Finish the Kestrel take-home first." : null },
-    { user_id: member.id, period: "week", starts_on: monday, interviews: 3, applications: 150, note: who === 0 ? "Two final rounds this week: prepare system design." : null },
-    { user_id: member.id, period: "month", starts_on: `${today.slice(0, 7)}-01`, offers: 1, applications: 600 },
+  const plans = team.slice(0, -1).flatMap((member, who) => [
+    { user_id: member.id, period: "day", starts_on: today, applications: 100, note: who === 0 ? "Focus on React and TypeScript roles today." : who === 2 ? "Finish the Kestrel take-home first." : null },
+    { user_id: member.id, period: "week", starts_on: monday, interviews: 3, applications: 500, note: who === 0 ? "Two final rounds this week: prepare system design." : null },
+    { user_id: member.id, period: "month", starts_on: `${today.slice(0, 7)}-01`, offers: 1, applications: 2000 },
   ]);
   { const { error } = await site.from("plans").insert(plans); if (error) throw error; }
 

@@ -8,7 +8,7 @@ import { Archive, ArrowLeft, BellOff, Bookmark, Check, Gear, Menu as MenuIcon, P
 import { chatTitle, findable, initialsOf, shortWhen, useInBrowser } from "./chat-format";
 import { Menu, useLongPress, type MenuItem, type MenuPlace } from "./chat-menu";
 import { ChatPicker } from "./chat-picker";
-import { EditProfile, SettingsPanel } from "./chat-settings";
+import { AlertsPrompt, EditProfile, SettingsPanel } from "./chat-settings";
 import type { ChatDraft } from "./chat-state";
 
 type View = "chats" | "archived" | "settings" | "profile";
@@ -86,6 +86,7 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
             <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search chats" aria-label="Search chats" autoComplete="off" />
           </label>
         </div>}
+      {view === "chats" && <AlertsPrompt />}
       {/* Said only while the chat is not live, as Telegram does. */}
       <p className="chat-live" role="status" data-state={live} title={live === "paused" ? "Checking every 30 seconds" : undefined}>
         <span aria-hidden="true" />{live === "live" ? "Live" : live === "connecting" ? "Connecting…" : "Reconnecting…"}

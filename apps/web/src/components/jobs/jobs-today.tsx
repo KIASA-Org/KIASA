@@ -26,8 +26,23 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
   const resume = resumes.some(entry => entry.id === picked) ? picked : (resumes.find(entry => entry.is_default) ?? resumes[0])?.id ?? null;
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const done = jobs.filter(job => job.status).length;
-  const count = (id: Filter) => jobs.filter(job => id === "todo" ? !job.status : id === "applied" ? job.status && job.status !== "skipped" : id === "skipped" ? job.status === "skipped" : true).length;
-  const shown = jobs.filter(job => (filter === "todo" ? !job.status : filter === "applied" ? job.status && job.status !== "skipped" : filter === "skipped" ? job.status === "skipped" : true) && matches(job, words));
+  const inFilter = (job: Job, id: Filter) => id === "todo" ? !job.status : id === "applied" ? !!job.status && job.status !== "skipped" : id === "skipped" ? job.status === "skipped" : true;
+  const count = (id: Filter) => jobs.filter(job => inFilter(job, id)).length;
+  // A job marked here stays in sight in this list (with its new status) until
+  // the list changes, so a click made by mistake is put right from its dropdown.
+  const view = `${filter}|${day}`;
+  const [kept, setKept] = useState<{ view: string; ids: string[] }>({ view: "", ids: [] });
+  const keep = (id: string) => setKept(current => ({ view, ids: current.view === view ? [...current.ids.filter(other => other !== id), id] : [id] }));
+  const here: JobActions = {
+    ...act,
+    apply: async (job, chosen) => { keep(job.id); await act.apply(job, chosen); },
+    status: async (job, status) => { keep(job.id); await act.status(job, status); },
+    undo: async job => { keep(job.id); await act.undo(job); },
+    interview: async (job, form) => { if (job) keep(job.id); return act.interview(job, form); },
+    hired: async (job, form) => { keep(job.id); return act.hired(job, form); },
+  };
+  const stays = kept.view === view ? kept.ids : [];
+  const shown = jobs.filter(job => (inFilter(job, filter) || stays.includes(job.id)) && matches(job, words));
 
   return <div className="jobs-view">
     {me.member && <PlanStrip me={me} plans={plans} mine={mine} today={today} />}
@@ -62,7 +77,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
           : me.member && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
       </div>
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
-        {shown.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={act} />)}
+        {shown.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
       </ul>
       {!loading && !shown.length && <p className="jobs-empty-line">
         {!jobs.length ? day === today ? "No jobs yet today. They appear here the moment an admin posts them." : `No jobs were posted ${dayName(day, today).toLowerCase() === "yesterday" ? "yesterday" : `on ${dayName(day, today)}`}.`

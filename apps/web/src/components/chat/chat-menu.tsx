@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export type MenuItem = { label: string; icon: ReactNode; danger?: boolean; onSelect: () => void };
+/** `checked`: one of a set of choices (true for the one in force), as a radio button is. */
+export type MenuItem = { label: string; icon: ReactNode; danger?: boolean; checked?: boolean; onSelect: () => void };
 /** Where a menu opens: a point (a right-click, a long press) or under a button.
  * `end`: the point is where its right edge goes (for a button at the right). */
 export type MenuPlace = { x: number; y: number; end?: boolean };
@@ -58,7 +59,8 @@ export function Menu({ at, items, top, label, onClose }: {
   return createPortal(<div ref={place} className="chat-menu" role="menu" aria-label={label} style={{ visibility: "hidden" }} onKeyDown={keys}
     onContextMenu={event => event.preventDefault()}>
     {top}
-    {items.map(item => <button key={item.label} type="button" role="menuitem" className="chat-menu-item" data-danger={item.danger || undefined}
+    {items.map(item => <button key={item.label} type="button" role={item.checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={item.checked}
+      className="chat-menu-item" data-danger={item.danger || undefined} data-checked={item.checked || undefined}
       onClick={() => { onClose(); item.onSelect(); }}>
       {item.icon}<span>{item.label}</span>
     </button>)}

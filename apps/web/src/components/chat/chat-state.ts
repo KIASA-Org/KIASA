@@ -64,7 +64,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // A chat opened here that the database's list does not have yet (one
       // deleted from the list earlier, until its next message) stays.
       const drafts = state.chats.filter(chat => chat.draft && !action.chats.some(next => next.id === chat.id));
-      return { ...state, chats: sortChats([...action.chats, ...drafts]), members: { ...state.members, ...members } };
+      // The list counted every message up to its chat's latest: one of those
+      // still on its way by the live route is not counted again.
+      const listed = action.chats.map(chat => ({ ...chat, counted_to: chat.last_message_at }));
+      return { ...state, chats: sortChats([...listed, ...drafts]), members: { ...state.members, ...members } };
     }
     case "draft":
       if (state.chats.some(chat => chat.id === action.draft.chat.id)) return state;
@@ -82,8 +85,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const seen = known.some(entry => entry.id === message.id);
       const chats = state.chats.map(chat => {
         if (chat.id !== message.chat_id) return chat;
-        // One more unread the first time someone else's arrives while the chat is not being read.
-        const unread = !seen && !reading && message.sender_id !== me && !message.pending ? chat.unread + 1 : chat.unread;
+        // One more unread the first time someone else's arrives while the chat is
+        // not being read, unless the list, asked for since, counted it already
+        // (the database's own copy, timed by the database as the list is).
+        const counted = !message.provisional && !!chat.counted_to && message.created_at <= chat.counted_to;
+        const unread = !seen && !counted && !reading && message.sender_id !== me && !message.pending ? chat.unread + 1 : chat.unread;
         // Only the newest message speaks for the chat in the list.
         if (message.created_at < chat.last_message_at) return { ...chat, unread };
         return {

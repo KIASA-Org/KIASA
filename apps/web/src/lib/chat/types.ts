@@ -21,6 +21,8 @@ export type ChatSummary = {
   pinned_at: string | null; muted: boolean; archived: boolean; marked_unread: boolean;
   /** On this page only: opened or made here, and not yet in the database's list. */
   draft?: boolean;
+  /** On this page only: the newest message the database's list had counted when it came. */
+  counted_to?: string;
 };
 
 export type ChatMember = { chat_id: string; user_id: string; name: string; role: "owner" | "member"; last_read_at: string };

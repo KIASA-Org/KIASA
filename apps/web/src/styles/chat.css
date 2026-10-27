@@ -92,9 +92,12 @@
 .chat-picker { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 12px; padding: 14px 12px; background: var(--night); }
 .chat-picker-head { display: flex; align-items: center; justify-content: space-between; padding-left: 6px; }
 .chat-picker-title { font-size: 18px; font-weight: 650; }
-.chat-field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
-.chat-field input { height: 44px; padding: 0 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: inherit; font-size: 15px; font-weight: 400; }
-.chat-field input:focus { outline: none; border-color: var(--leaf); }
+/* A field fills its place and may be narrower than its text: two side by side
+   never push past the dialog. Focused, it keeps its round corners (the site's
+   own focus ring, square, is for links and buttons). */
+.chat-field { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.chat-field input { width: 100%; min-width: 0; height: 44px; padding: 0 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: inherit; font-size: 15px; font-weight: 400; }
+.chat-field input:focus { outline: none; border-color: var(--leaf); border-radius: 12px; }
 .chat-people { flex: 1; min-height: 0; overflow-y: auto; }
 .chat-person { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 10px; border-radius: 12px; text-align: left; cursor: pointer; transition: background-color 0.15s; }
 .chat-person:hover { background: rgb(236 255 243 / 0.05); }
@@ -308,6 +311,9 @@ button.chat-file:hover { background: rgb(3 8 7 / 0.45); }
 .chat-menu-item:is(:hover, :focus-visible) { background: rgb(236 255 243 / 0.07); outline: none; }
 .chat-menu-item svg { flex: none; width: 18px; height: 18px; color: var(--ink-soft); }
 .chat-menu-item[data-danger], .chat-menu-item[data-danger] svg { color: #ffb4a2; }
+.chat-menu-item[data-checked], .chat-menu-item[data-checked] svg { color: var(--leaf); }
+.chat-menu-blank { flex: none; width: 18px; height: 18px; }
+.chat-menu-line { height: 1px; margin: 5px 8px; background: rgb(236 255 243 / 0.08); }
 .chat-menu-reactions { display: flex; flex-wrap: wrap; gap: 2px; max-width: 322px; margin-bottom: 6px; padding: 2px 2px 8px; border-bottom: 1px solid rgb(236 255 243 / 0.08); }
 .chat-menu-reactions button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; font-size: 21px; cursor: pointer; transition: transform 0.12s, background-color 0.12s; }
 .chat-menu-reactions button:is(:hover, :focus-visible) { background: rgb(236 255 243 / 0.08); transform: scale(1.18); outline: none; }
@@ -388,6 +394,15 @@ button.chat-file:hover { background: rgb(3 8 7 / 0.45); }
 .chat-panel-items button:disabled:hover { background: none; }
 .chat-panel-items svg { flex: none; width: 20px; height: 20px; color: var(--ink-soft); }
 .chat-panel-note { margin-left: auto; padding-left: 8px; font-size: 13px; font-weight: 400; color: var(--ink-mute); white-space: nowrap; }
+.chat-panel-hint { padding: 0 14px 13px 48px; font-size: 13px; line-height: 1.45; color: var(--ink-mute); }
+
+/* Alerts on this computer: asked above the chat list until answered. */
+.chat-alerts-ask { display: flex; align-items: center; gap: 10px; padding: 7px 6px 7px 12px; border: 1px solid rgb(184 236 147 / 0.22); border-radius: 16px; background: #10221a; font-size: 13.5px; line-height: 1.35; color: var(--ink-soft); }
+.chat-alerts-ask > svg { flex: none; width: 18px; height: 18px; color: var(--leaf); }
+.chat-alerts-ask p { flex: 1; min-width: 0; }
+.chat-alerts-on { flex: none; height: 30px; padding: 0 13px; border-radius: 15px; background: var(--leaf); color: var(--night); font-size: 13px; font-weight: 700; cursor: pointer; }
+.chat-alerts-ask .chat-alerts-later { width: 30px; height: 30px; }
+.chat-alerts-ask .chat-alerts-later svg { width: 16px; height: 16px; }
 .chat-edit .chat-field textarea { padding: 10px 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: inherit; font-size: 15px; font-weight: 400; resize: vertical; }
 .chat-edit .chat-field textarea:focus { outline: none; border-color: var(--leaf); }
 .chat-field small { font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--ink-mute); }

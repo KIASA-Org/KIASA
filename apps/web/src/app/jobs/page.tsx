@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LeafMark } from "@/components/site/brand";
 import { YourPhoto } from "@/components/site/your-photo";
+import { ChatWatch } from "@/components/chat/chat-watch";
 import { JobsApp } from "@/components/jobs/jobs-app";
 import { signOut } from "@/lib/accounts/actions";
 import { accountsLive, publicSupabase, signedIn } from "@/lib/accounts/server";
@@ -64,5 +65,6 @@ function JobsFrame({ me, children }: { me?: JobsMe; children: React.ReactNode })
       </div>
     </header>
     <main id="main-content" tabIndex={-1} className="jobs-main">{children}</main>
+    {me && <ChatWatch me={me.id} realtime={publicSupabase} />}
   </div>;
 }

@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardRow, HourRow, Plan, TeamPerson, TrendRow } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
 import { Columns, Meter, Sparkline, StatTile, type Column } from "./jobs-charts";
-import { addDays, ago, compact, initialsOf, partsIn, planFor, shortDay, weekdayOf } from "./jobs-format";
+import { addDays, ago, compact, dayGoal, initialsOf, partsIn, shortDay, weekdayOf } from "./jobs-format";
 
 /** The admins' live view of the team's job search: today's applications per
  * member against their plan, when each last applied, their last two weeks, the
@@ -37,13 +37,17 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
     value: hours.filter(row => row.hour === hour).reduce((total, row) => total + Number(row.applications), 0),
   }));
   const rows = [...board].sort((a, b) => b.apps_day - a.apps_day || a.name.localeCompare(b.name));
-  // The members' cards share their scales: the busiest member's day, and hour.
-  const dayTop = Math.max(0, ...rows.flatMap(row => days.map(day => perDay(day, row.user_id))));
+  // Each member's goal for today (their plan's, or the team's daily goal), and the team's, all of them together.
+  const goals = new Map(rows.map(row => [row.user_id, dayGoal(plans, row.user_id, today)]));
+  const teamGoal = [...goals.values()].reduce((total, goal) => total + goal, 0);
+  // The members' cards share their scales: the busiest member's day (or the highest goal), and hour.
+  const dayTop = Math.max(0, ...goals.values(), ...rows.flatMap(row => days.map(day => perDay(day, row.user_id))));
   const hourTop = Math.max(0, ...hours.map(entry => Number(entry.applications)));
 
   return <div className="jobs-view">
     <section className="jobs-tiles" aria-label="Today, across the team">
-      <StatTile label="Applied today" value={compact(sum(row => row.apps_day))} detail={`${active} of ${board.length} members so far`} />
+      <StatTile label="Applied today" value={compact(sum(row => row.apps_day))}
+        detail={`${active} of ${board.length} members so far${teamGoal ? ` · goal ${compact(teamGoal)}` : ""}`} />
       <StatTile label="This week" value={compact(sum(row => row.apps_week))} detail={`${compact(sum(row => row.apps_month))} this month`} />
       <StatTile label="Interviews this week" value={compact(sum(row => row.interviews_week))} detail={`${sum(row => row.interviews_day)} today`} />
       <StatTile label="Offers this month" value={compact(sum(row => row.offers_month))} detail={`${sum(row => row.jobs_held)} jobs held`} />
@@ -63,7 +67,7 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
           <tbody>
             {rows.map(row => {
               const who = team.find(person => person.id === row.user_id);
-              const target = planFor(plans, row.user_id, "day", today).applications;
+              const target = goals.get(row.user_id) ?? null;
               const recent = days.slice(-14).map(day => perDay(day, row.user_id));
               return <tr key={row.user_id}>
                 <th scope="row"><span className="jobs-person"><Avatar initials={initialsOf(row.name)} photo={who?.photo ?? null} className="jobs-avatar" />{row.name}</span></th>
@@ -83,8 +87,8 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
     <div className="jobs-two">
       <section className="jobs-card" aria-labelledby="jobs-days-title">
         <h2 id="jobs-days-title" className="jobs-card-title">Applications a day, the team</h2>
-        <p className="jobs-card-sub">The last 30 days; today in leaf.</p>
-        <Columns items={dayColumns} accent={today} title="Applications a day by the team, the last 30 days" unit="applications" every={5} />
+        <p className="jobs-card-sub">The last 30 days; today in leaf; dashed, the team&apos;s goal for a day.</p>
+        <Columns items={dayColumns} accent={today} title="Applications a day by the team, the last 30 days" unit="applications" every={5} goal={teamGoal || undefined} />
       </section>
       <section className="jobs-card" aria-labelledby="jobs-hours-title">
         <h2 id="jobs-hours-title" className="jobs-card-title">Today, hour by hour</h2>
@@ -100,7 +104,7 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
       <div className="jobs-members">
         {rows.map(row => {
           const who = team.find(person => person.id === row.user_id);
-          const target = planFor(plans, row.user_id, "day", today).applications;
+          const target = goals.get(row.user_id) ?? null;
           const byDay: Column[] = days.map(day => ({ key: day, label: day.slice(8).replace(/^0/, ""), long: `${weekdayOf(day)} ${shortDay(day)}`, value: perDay(day, row.user_id) }));
           const byHour: Column[] = Array.from({ length: 24 }, (_, hour) => ({
             key: String(hour), label: String(hour), long: `${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:59`,
@@ -116,7 +120,7 @@ export function LiveView({ supabase, team, board, plans, zone, today, now, versi
               <Meter value={row.apps_day} target={target} label={`${row.name}, applied today`} compact />
             </header>
             <p className="jobs-mini-title">Applications a day, the last 30 days</p>
-            <Columns items={byDay} accent={today} max={dayTop} compact height={104} every={7}
+            <Columns items={byDay} accent={today} max={dayTop} compact height={112} every={7} goal={target ?? undefined}
               title={`${row.name}: applications a day, the last 30 days`} unit="applications" />
             <p className="jobs-mini-title">Today, hour by hour</p>
             <Columns items={byHour} accent={String(hourNow)} max={hourTop} compact height={88} every={6}

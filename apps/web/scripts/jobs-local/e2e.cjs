@@ -88,6 +88,12 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await site.storage.from("resumes").remove(kept.map(resume => resume.path));
     await site.from("resumes").delete().eq("user_id", benId);
   }
+  // The local realtime server sleeps when no one is connected, and what the
+  // database says in its first seconds awake can be lost: woken first.
+  const wake = site.channel("wake").on("postgres_changes", { event: "INSERT", schema: "public", table: "jobs" }, () => {});
+  await new Promise(resolve => wake.subscribe(status => { if (status !== "CLOSED") resolve(); }));
+  await new Promise(done => setTimeout(done, 3000));
+  await site.removeChannel(wake);
   const browser = await chromium.launch();
   let admin, ana, ben;
 
@@ -105,12 +111,22 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await ana.page.waitForTimeout(2500);
   });
 
-  await step("each member has a card on the admin's Live", async () => {
+  await step("each member has a card on the admin's Live, with the day's goal on it (100, as planned or by default); the team's goal on its chart", async () => {
     await admin.page.locator(".jobs-member").first().waitFor({ timeout: 10000 });
     const cards = await admin.page.locator(".jobs-member").count();
     const members = await admin.page.locator(".jobs-table tbody tr").count();
     if (cards !== members) throw new Error(`${cards} cards for ${members} members`);
-    return `${cards} cards`;
+    await admin.page.locator(".jobs-member .jobs-chart-goal text").first().waitFor({ timeout: 10000 });
+    const goals = (await admin.page.locator(".jobs-member .jobs-chart-goal text").allTextContents()).map(goal => Number(/^Goal (\d+)$/.exec(goal)?.[1]));
+    // (A run before this one may have left Ben's day at five: each card says its member's own.)
+    if (goals.length !== cards || goals.some(goal => !goal) || !goals.includes(100)) throw new Error(`the cards' goals: ${goals.join(", ")}`);
+    const team = await admin.page.locator("#jobs-days-title ~ .jobs-chart .jobs-chart-goal text").textContent();
+    const sum = goals.reduce((total, goal) => total + goal, 0);
+    if (team !== `Goal ${sum}`) throw new Error(`the team's chart says “${team}”, not Goal ${sum}`);
+    // Ana sees hers above her list.
+    const hers = await ana.page.locator(".jobs-plan .jobs-goal").first().locator(".jobs-meter-text").textContent();
+    if (!/\/\s*100/.test(hers ?? "")) throw new Error(`Ana's day reads “${hers}”`);
+    return `${cards} cards (goals ${goals.join(", ")}); the team's Goal ${sum}`;
   });
 
   await step("the admin pastes three links into the jobs bot: saved at once, on Ana's and Ben's lists live", async () => {
@@ -147,8 +163,8 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     const started = Date.now();
     await row(ana.page, titles[0]).getByRole("button", { name: `Applied: ${titles[0]}` }).click();
     await show(ana.page, /^Applied/).click();
-    await row(ana.page, titles[0]).locator(".jobs-status select").waitFor();
-    const value = await row(ana.page, titles[0]).locator(".jobs-status select").inputValue();
+    await row(ana.page, titles[0]).locator(".jobs-status").waitFor();
+    const value = await row(ana.page, titles[0]).locator(".jobs-status").getAttribute("data-status");
     if (value !== "applied") throw new Error(`her status reads ${value}`);
     await admin.page.waitForFunction(title => [...document.querySelectorAll(".jobs-desk-row")].some(node =>
       node.textContent.includes(title) && /^1\s*\//.test(node.querySelector(".jobs-meter-text")?.textContent ?? "")), titles[0], { polling: 10, timeout: 10000 });
@@ -167,7 +183,8 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
   await step("Ana schedules an interview for it; it shows on the admin's calendar live", async () => {
     await tab(admin.page, "Calendars").click();
     await admin.page.getByRole("heading", { name: "This week" }).waitFor();
-    await row(ana.page, titles[0]).locator(".jobs-status select").selectOption("interview");
+    await row(ana.page, titles[0]).locator(".jobs-status").click();
+    await ana.page.getByRole("menuitemradio", { name: "Interview…" }).click();
     const dialog = ana.page.getByRole("dialog", { name: `Interview: ${titles[0]}` });
     await dialog.getByLabel("Date").fill(today);
     await dialog.getByLabel(/^Time/).fill("23:00");
@@ -176,7 +193,7 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     const started = Date.now();
     await dialog.waitFor({ state: "detached", timeout: 10000 });
     await appears(admin.page, ".jobs-event, .jobs-agenda-item", titles[0]);
-    const status = await row(ana.page, titles[0]).locator(".jobs-status select").inputValue();
+    const status = await row(ana.page, titles[0]).locator(".jobs-status").getAttribute("data-status");
     if (status !== "interview") throw new Error(`her status reads ${status}`);
     return `on the admin's calendar ${Date.now() - started} ms after saving`;
   });
@@ -226,14 +243,19 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     if (!chosen?.includes(`Platform ${token}`)) throw new Error(`applying with ${chosen}`);
   });
 
-  await step("Ben applies to one and takes it back; skips another", async () => {
+  await step("Ben clicks Applied by mistake: the job stays in his To do list, and its dropdown takes it back; he skips another from the dropdown", async () => {
+    await show(ben.page, /^To do/).click();
     await row(ben.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).click();
-    await show(ben.page, /^All/).click();
-    await row(ben.page, titles[1]).getByRole("button", { name: `More for ${titles[1]}` }).click();
-    await ben.page.getByRole("menuitem", { name: "Not applied after all" }).click();
+    const status = row(ben.page, titles[1]).locator(".jobs-status");
+    await status.waitFor({ timeout: 10000 });
+    if (await status.getAttribute("data-status") !== "applied") throw new Error(`it reads ${await status.getAttribute("data-status")}`);
+    await status.click();
+    const options = await ben.page.getByRole("menu", { name: `Status of ${titles[1]}` }).getByRole("menuitemradio").allTextContents();
+    if (!options.join("|").includes("Applied")) throw new Error(`the dropdown offers ${options.join(", ")}`);
+    await ben.page.getByRole("menuitem", { name: "Not applied: back to To do" }).click();
     await row(ben.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).waitFor({ timeout: 10000 });
-    await row(ben.page, titles[2]).getByRole("button", { name: `More for ${titles[2]}` }).click();
-    await ben.page.getByRole("menuitem", { name: "Skip (not a fit)" }).click();
+    await row(ben.page, titles[2]).getByRole("button", { name: `Other status for ${titles[2]}` }).click();
+    await ben.page.getByRole("menuitemradio", { name: "Skipped (not a fit)" }).click();
     await show(ben.page, /^Skipped/).click();
     await row(ben.page, titles[2]).waitFor({ timeout: 10000 });
     const { data } = await site.from("applications").select("job_id, status, applied_at").eq("user_id", people["ben@example.com"].id).in("job_id",
@@ -248,7 +270,7 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await openJobs(phone.page);
     await row(phone.page, titles[1]).getByRole("button", { name: `Applied: ${titles[1]}` }).tap();
     await show(phone.page, /^Applied/).tap();
-    await row(phone.page, titles[1]).locator(".jobs-status select").waitFor({ timeout: 10000 });
+    await row(phone.page, titles[1]).locator(".jobs-status[data-status='applied']").waitFor({ timeout: 10000 });
     const wide = await phone.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     await phone.page.screenshot({ path: path.join(out, "phone-today.png") });
     if (wide > 0) throw new Error(`the page is ${wide}px wider than the phone`);
@@ -295,4 +317,6 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
   console.log(results.join("\n"));
   console.log("page errors:", errors.length ? errors.join(" | ") : "none");
   await browser.close();
+  // Done: nothing left open (a realtime connection, a browser's child) keeps the run waiting.
+  process.exit(results.some(line => line.startsWith("FAIL")) ? 1 : 0);
 })().catch(error => { console.error(error); process.exit(1); });

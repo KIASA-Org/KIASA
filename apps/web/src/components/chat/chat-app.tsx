@@ -6,6 +6,8 @@ import { browserClient } from "@/lib/accounts/browser";
 import { photoUrl } from "@/lib/accounts/viewer";
 import { splitChatList, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatRow, type ChatSummary, type Message } from "@/lib/chat/types";
 import { Archive, Bell, BellOff, Check, Eraser, Leave, NewTab, Pin, Trash, Unread } from "../site/icons";
+import { showTabBadge } from "../site/tab-badge";
+import { alertNewMessage, alertsWorker, messageAlert, useAlerts } from "./chat-alerts";
 import { Confirm } from "./chat-dialog";
 import { keepPreview } from "./chat-file";
 import { ForwardPicker } from "./chat-forward";
@@ -93,12 +95,16 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const activeRef = useRef<string | null>(initialChat ?? null);
   const channels = useRef(new Map<string, RealtimeChannel>());
 
-  const reading = useCallback((chatId: string) => activeRef.current === chatId && document.visibilityState === "visible", []);
+  // Read as it comes only in the chat open in the window in front: one that
+  // comes while the person is in another window waits for them, unread.
+  const reading = useCallback((chatId: string) => activeRef.current === chatId && document.visibilityState === "visible" && document.hasFocus(), []);
 
   /** The chat list again, in one answer, after a chat appears that this page did not know of. */
   const reloadChats = useCallback(async () => {
     const { data, error } = await supabase.rpc("inbox");
-    if (!error) dispatch({ type: "chats", ...splitChatList(data as ChatRow[] | null) });
+    if (error) return null;
+    dispatch({ type: "chats", ...splitChatList(data as ChatRow[] | null) });
+    return data as ChatRow[] | null;
   }, [supabase]);
 
   // A short word at the foot of the page, after something did not work.
@@ -109,13 +115,20 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   }, [notice]);
 
   /** A message, by either route: kept and counted; its writer no longer
-   * "typing"; and, while this tab is hidden and the chat not muted, the
-   * computer says so. One in a chat this page does not show (deleted here
-   * earlier) brings the chat back. */
+   * "typing"; and, from someone else in a chat not muted, an alert on this
+   * computer (shown unless this chat is the window in front). One in a chat
+   * this page does not show (new, or deleted here earlier) brings the chat back. */
   const arrived = useEffectEvent((message: Message) => {
     const chat = state.chats.find(entry => entry.id === message.chat_id);
-    if (!chat) void reloadChats();
     const fresh = !state.messages[message.chat_id]?.some(entry => entry.id === message.id);
+    const alert = (where: Pick<ChatSummary, "kind" | "title" | "muted">, members: ChatMember[]) => {
+      if (fresh && !where.muted && message.sender_id !== me.id) void alertNewMessage(messageAlert(message, where, members, me, photoOf));
+    };
+    if (chat) alert(chat, state.members[chat.id] ?? []);
+    else void reloadChats().then(rows => {
+      const found = rows?.find(row => row.id === message.chat_id);
+      if (found) alert(found, found.members ?? []);
+    });
     dispatch({ type: "message", message, me: me.id, reading: reading(message.chat_id) });
     if (message.sender_id) {
       const writer = message.sender_id;
@@ -126,7 +139,6 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
         return { ...current, [message.chat_id]: rest };
       });
     }
-    if (fresh && !chat?.muted && message.sender_id !== me.id && document.visibilityState !== "visible") alertComputer(message, me);
   });
 
   /** A change to a message, from the database: deleted ones leave the
@@ -149,6 +161,14 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
 
   /** Someone joined a chat: someone else, in a chat this page shows; or this
    * person, in a chat the page may not know of yet. */
+  /** A member's row changed: their name, or how far they have read. This
+   * person's own, read in another tab or on another device, and the count
+   * here follows (the chat list again, as the database counts it). */
+  const member = useEffectEvent((changed: ChatMember) => {
+    dispatch({ type: "member", member: changed });
+    if (changed.user_id === me.id && (state.chats.find(chat => chat.id === changed.chat_id)?.unread ?? 0) > 0) void reloadChats();
+  });
+
   const joined = useEffectEvent((member: ChatMember) => {
     if (member.user_id !== me.id) return dispatch({ type: "member", member });
     if (!state.chats.some(chat => chat.id === member.chat_id)) void reloadChats();
@@ -218,7 +238,7 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, payload => arrived(payload.new as Message))
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, payload => changed(payload.new as Message))
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_members" }, payload => joined(payload.new as ChatMember))
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_members" }, payload => dispatch({ type: "member", member: payload.new as ChatMember }))
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_members" }, payload => member(payload.new as ChatMember))
         .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_members" }, payload => gone(payload.old as { chat_id?: string; user_id?: string }))
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_settings" }, payload => viewed(payload.new))
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_settings" }, payload => viewed(payload.new))
@@ -330,9 +350,14 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
     };
   }, [supabase]);
 
-  // The unread count in the tab's title, so a glance at the tab says it (muted chats aside).
+  // The unread count on the tab, its icon and its title, so a glance says it (muted chats aside).
   const unread = state.chats.reduce((sum, chat) => sum + (chat.muted ? 0 : chat.unread), 0);
-  useEffect(() => { document.title = unread ? `(${unread}) KIASA Chat` : "KIASA Chat"; }, [unread]);
+  useEffect(() => { showTabBadge(unread); }, [unread]);
+  useEffect(() => () => showTabBadge(0), []);
+
+  // With alerts allowed, the service worker that shows them is made ready.
+  const alerts = useAlerts();
+  useEffect(() => { if (alerts === "granted") void alertsWorker(); }, [alerts]);
 
   const markRead = useCallback(async (chatId: string) => {
     if (document.visibilityState !== "visible") return;
@@ -369,6 +394,30 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   // The chat open from the start is loaded once the page is here.
   const loadFirst = useEffectEvent(() => { if (initialChat) void load(initialChat); });
   useEffect(() => { loadFirst(); }, []);
+
+  // An alert clicked: its chat opens here, in place (the service worker says which).
+  const fromAlert = useEffectEvent((chatId: string) => {
+    if (state.chats.some(chat => chat.id === chatId)) void open(chatId);
+    else void reloadChats().then(() => open(chatId));
+  });
+  // Back in the window: what came in the open chat meanwhile is read now.
+  const back = useEffectEvent(() => {
+    const chat = state.chats.find(entry => entry.id === activeRef.current);
+    if (chat && chat.unread > 0) void markRead(chat.id);
+  });
+  useEffect(() => {
+    const heard = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown; chat?: unknown } | null;
+      if (data?.type === "open-chat" && typeof data.chat === "string") fromAlert(data.chat);
+    };
+    const focused = () => back();
+    navigator.serviceWorker?.addEventListener("message", heard);
+    window.addEventListener("focus", focused);
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", heard);
+      window.removeEventListener("focus", focused);
+    };
+  }, []);
 
   /** A chat just made, or found: shown and opened at once; a new one's place
    * in the chat list is asked for again behind it. */
@@ -713,15 +762,4 @@ function isMessage(value: unknown, chatId: string): value is Message & { sender_
     && typeof message.body === "string" && message.body.length <= 4000 && typeof message.created_at === "string"
     && (message.reply_to === null || typeof message.reply_to === "string")
     && (file === null || (!!file && typeof file === "object" && !file.type && typeof file.path === "string" && typeof file.name === "string"));
-}
-
-/** A new message while this tab is hidden: the computer says so, if it may. */
-function alertComputer(message: Message, me: ChatMe) {
-  if (!("Notification" in window) || Notification.permission !== "granted" || message.sender_id === me.id) return;
-  const body = message.deleted_at ? "" : message.body || (message.attachment && !message.attachment.type ? `📎 ${message.attachment.name}` : "New message");
-  void navigator.serviceWorker?.getRegistration("/").then(registration => {
-    const options = { body, icon: "/icon.png", tag: `chat-${message.chat_id}`, data: { url: "/chat" } };
-    if (registration) return registration.showNotification("KIASA Chat", options);
-    new Notification("KIASA Chat", options);
-  });
 }
