@@ -2,13 +2,18 @@ import "server-only";
 import { cache } from "react";
 import { publicSupabase, siteClient, visitorClient } from "@/lib/accounts/server";
 import { photoUrl } from "@/lib/accounts/viewer";
-import type { SimHours } from "./hours";
+import type { Presence, SimHours } from "./hours";
 
-type SimRow = { user_id: string; active_from: string; active_to: string; days: number[]; pace_min: number; pace_max: number; paused: boolean; created_at: string };
+type SimRow = { user_id: string; active_from: string; active_to: string; days: number[]; pace_min: number; pace_max: number; paused: boolean; created_at: string; presence?: Presence };
 
 /** Every simulated member's hours, by who they are; none before their file has been run. */
 export const simRows = cache(async (): Promise<Map<string, SimRow>> => {
-  const { data, error } = await siteClient().from("sim_members").select("user_id, active_from, active_to, days, pace_min, pace_max, paused, created_at");
+  const site = siteClient();
+  const asked = await site.from("sim_members").select("user_id, active_from, active_to, days, pace_min, pace_max, paused, created_at, presence");
+  // Before the presence file is run, without it (each one then on auto).
+  const { data, error } = asked.error?.code === "42703"
+    ? await site.from("sim_members").select("user_id, active_from, active_to, days, pace_min, pace_max, paused, created_at")
+    : asked;
   return new Map(error ? [] : (data as SimRow[]).map(row => [row.user_id, row]));
 });
 
@@ -20,7 +25,7 @@ export const teamZone = cache(async (): Promise<string> => {
 
 /** A simulated member's hours, as the pages use them. */
 export const hoursOf = (row: SimRow, zone: string): SimHours =>
-  ({ from: row.active_from.slice(0, 5), to: row.active_to.slice(0, 5), days: row.days, paused: row.paused, zone });
+  ({ from: row.active_from.slice(0, 5), to: row.active_to.slice(0, 5), days: row.days, paused: row.paused, zone, presence: row.presence ?? "auto" });
 
 /** One simulated member, as the admin's page shows it. */
 export type SimMember = {

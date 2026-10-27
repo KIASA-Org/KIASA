@@ -87,6 +87,8 @@ const sections = page => page.getByRole("complementary", { name: "Members" }).lo
     for (const row of data ?? []) await site.auth.admin.deleteUser(row.user_id);
   };
   await clearSims();
+  // From no chats: a group an earlier run made would stand beside this run's.
+  await site.from("chats").delete().not("id", "is", null);
   await site.from("testers").delete().not("user_id", "is", null);
   await site.from("teams").delete().not("id", "is", null);
   await site.from("top_managers").delete().not("user_id", "is", null);
@@ -111,7 +113,12 @@ const sections = page => page.getByRole("complementary", { name: "Members" }).lo
       await admin.page.locator(".sims-table tbody tr").nth(2).waitFor({ timeout: 10000 });
       const { data } = await site.from("sim_members").select("user_id");
       simIds = data.map(row => row.user_id);
-      const { data: cards } = await site.from("messages").select("attachment").eq("attachment->>type", "request").in("attachment->>id", simIds);
+      // The cards are posted just after the page has its answer: looked for a few seconds.
+      let cards = [];
+      for (let tries = 0; tries < 50 && cards.length < 3; tries++) {
+        if (tries) await new Promise(done => setTimeout(done, 200));
+        cards = (await site.from("messages").select("attachment").eq("attachment->>type", "request").in("attachment->>id", simIds)).data ?? [];
+      }
       if (cards.length !== 3) throw new Error(`${cards.length} request cards`);
       return `${simIds.length} made`;
     });
@@ -132,6 +139,21 @@ const sections = page => page.getByRole("complementary", { name: "Members" }).lo
       await admin.page.getByRole("button", { name: "Set hours" }).click();
       await admin.page.locator(".admin-notice", { hasText: "Saved for 3." }).waitFor({ timeout: 10000 });
       await admin.page.locator(".sims-now", { hasText: "At work" }).nth(2).waitFor({ timeout: 10000 });
+    });
+    await step("online status: exactly one of three online, picked at random; then all online", async () => {
+      await admin.page.getByLabel("Choose everyone").check();
+      await admin.page.getByLabel("How many online").fill("1");
+      await admin.page.getByRole("button", { name: "Pick" }).click();
+      await admin.page.locator(".admin-notice", { hasText: "1 online and 2 offline, picked at random." }).waitFor({ timeout: 10000 });
+      const { data: picked } = await site.from("sim_members").select("presence").in("user_id", simIds);
+      const on = picked.filter(row => row.presence === "online").length;
+      if (on !== 1 || picked.length - on !== 2) throw new Error(`presence: ${picked.map(row => row.presence).join(", ")}`);
+      await admin.page.locator(".sims-online[data-online]").first().waitFor({ timeout: 10000 });
+      if ((await admin.page.locator(".sims-online[data-online]").count()) !== 1) throw new Error("the page does not show one online");
+      await admin.page.getByLabel("Choose everyone").check();
+      await admin.page.getByLabel("Online status of everyone chosen").selectOption("online");
+      await admin.page.locator(".admin-notice", { hasText: "Saved for 3." }).waitFor({ timeout: 10000 });
+      await admin.page.locator(".sims-online[data-online]").nth(2).waitFor({ timeout: 10000 });
     });
     await step("one renamed and given a photo", async () => {
       const first = admin.page.locator(".sims-name input").first();

@@ -389,3 +389,9 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .sims-work p { flex: 1 1 420px; }
 .sims-table { min-width: 1000px; }
 .sims-testers-all { display: flex; gap: 10px; margin-bottom: 14px; }
+.sims-online { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-weight: 650; color: var(--ink-mute); }
+.sims-online::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--ink-mute); }
+.sims-online[data-online] { color: var(--leaf); }
+.sims-online[data-online]::before { background: var(--leaf); }
+.sims-presence { height: 30px; font-size: 13px; }
+.sims-table { min-width: 1120px; }

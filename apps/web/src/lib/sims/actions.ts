@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { accountsLive, currentViewer, siteClient } from "@/lib/accounts/server";
 import { dayIn } from "@/lib/jobs/server";
 import { noticeDecision, noticeRequest } from "@/lib/chat/server";
+import type { Presence } from "./hours";
 import { freshNames, simEmail } from "./names";
 import { simRows, teamZone } from "./server";
 
@@ -111,7 +112,7 @@ export async function placeSims(ids: string[], teamId: string | null): Promise<D
 }
 
 /** Working hours, days, pace, and pausing, for one or many. Only what is given changes. */
-export async function setSims(ids: string[], change: { from?: string; to?: string; days?: number[]; paceMin?: number; paceMax?: number; paused?: boolean }): Promise<Done> {
+export async function setSims(ids: string[], change: { from?: string; to?: string; days?: number[]; paceMin?: number; paceMax?: number; paused?: boolean; presence?: Presence }): Promise<Done> {
   const who = await admin();
   if ("error" in who) return who;
   const sims = await onlySims(ids);
@@ -134,11 +135,43 @@ export async function setSims(ids: string[], change: { from?: string; to?: strin
     row.pace_max = Math.round(high * 100) / 100;
   }
   if (change.paused !== undefined) row.paused = !!change.paused;
+  if (change.presence !== undefined) {
+    if (!["auto", "online", "offline"].includes(change.presence)) return { error: RETRY };
+    row.presence = change.presence;
+  }
   if (!Object.keys(row).length) return {};
   const { error } = await siteClient().from("sim_members").update(row).in("user_id", sims);
-  if (error) return { error: RETRY };
+  if (error) return { error: error.code === "42703" ? PRESENCE_SETUP : RETRY };
   refresh();
   return { done: `Saved for ${sims.length}.` };
+}
+
+const PRESENCE_SETUP = "Online status is not set up in the database yet: run supabase/migrations/20261028190000_sims_presence.sql in Supabase's SQL Editor.";
+
+/** Exactly so many of those chosen online, picked at random, and the rest offline. */
+export async function onlineCount(ids: string[], count: number): Promise<Done> {
+  const who = await admin();
+  if ("error" in who) return who;
+  const sims = await onlySims(ids);
+  const wanted = Math.floor(Number(count));
+  if (!sims.length) return { error: "Choose someone first." };
+  if (!(wanted >= 0 && wanted <= sims.length)) return { error: `Choose a number from 0 to ${sims.length}.` };
+  // A fair shuffle, so any of them may be picked.
+  const order = [...sims];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const site = siteClient();
+  const on = order.slice(0, wanted), off = order.slice(wanted);
+  const results = await Promise.all([
+    on.length ? site.from("sim_members").update({ presence: "online" }).in("user_id", on) : null,
+    off.length ? site.from("sim_members").update({ presence: "offline" }).in("user_id", off) : null,
+  ]);
+  const failed = results.find(result => result?.error)?.error;
+  if (failed) return { error: failed.code === "42703" ? PRESENCE_SETUP : RETRY };
+  refresh();
+  return { done: `${on.length} online and ${off.length} offline, picked at random.` };
 }
 
 /** A daily plan for one or many, from today on: so many applications a day,

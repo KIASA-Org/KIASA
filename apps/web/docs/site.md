@@ -584,6 +584,16 @@ count hour by hour in Jobs (Live, the leaderboard) for those who see them. The
 page shows each one's day ("16 of 29"), and **Work a round now** runs a round
 at once.
 
+Online or offline (`supabase/migrations/20261028190000_sims_presence.sql`): each
+one is **Auto** (the default), **Online** or **Offline**, set one by one in the
+table's Online column, or for everyone chosen; or **exactly N of them online,
+picked at random**, the rest offline. On Auto each comes and goes as a person
+does (`onlineSpans` in `src/lib/sims/hours.ts`, the same on every page): in a
+little after its start, one to three breaks (a lunch among them), never away
+more than two hours at a stretch in its working hours, out around its end,
+sometimes back for a few minutes in the evening; a short visit or none on days
+off. Paused, one shows offline; set offline, it does no work.
+
 To test it on this computer: run the file on the local copy, serve the site
 against it on port 3002, and run `npm run sims:local:e2e`.
 
@@ -617,7 +627,8 @@ Once, in this order:
    `supabase/migrations/20261028090000_simulated_members.sql` (simulated members and testers), then
    `supabase/migrations/20261028120000_sims_work.sql` (their daily work, every five minutes), then
    `supabase/migrations/20261028150000_sims_in_groups.sql` (simulated members in groups), then
-   `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live).
+   `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live), then
+   `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto
