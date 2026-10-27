@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
+import { teamLedBy } from "@/lib/teams/rules";
+import { useRanks } from "../site/ranks";
 import type { BoardRow, Job, JobSettings, JobsMe, JobsStart, JobStatus, Plan, Resume } from "@/lib/jobs/types";
 import { Leaderboard } from "./jobs-board";
 import { CalendarView } from "./jobs-calendar";
@@ -15,7 +17,7 @@ import { Resumes } from "./jobs-resumes";
 import type { JobActions } from "./jobs-row";
 import { MyJobs, TodayView } from "./jobs-today";
 
-type Tab = "today" | "mine" | "calendar" | "board" | "money" | "resumes" | "live" | "post" | "plans" | "confirm";
+type Tab = "team" | "today" | "mine" | "calendar" | "board" | "money" | "resumes" | "live" | "post" | "plans" | "confirm";
 const MEMBER: { id: Tab; label: string }[] = [
   { id: "today", label: "Today" }, { id: "mine", label: "My jobs" }, { id: "calendar", label: "Calendar" },
   { id: "board", label: "Leaderboard" }, { id: "money", label: "Earnings" }, { id: "resumes", label: "Résumés" },
@@ -45,7 +47,10 @@ type Refresh = "jobs" | "board" | "plans" | "resumes" | "pending" | "live";
  * burst of changes is asked for once. */
 export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start: JobsStart; realtime: { url: string; key: string }; tab: string | null }) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
-  const tabs = me.admin ? ADMIN : MEMBER;
+  // A team's manager sees their team's day first, as the admin sees everyone's.
+  const ranks = useRanks();
+  const lead = me.admin ? null : teamLedBy(me.id, ranks);
+  const tabs = me.admin ? ADMIN : lead ? [{ id: "team" as Tab, label: "My team" }, ...MEMBER] : MEMBER;
   const [tab, setTab] = useState<Tab>(() => tabs.find(entry => entry.id === asked)?.id ?? tabs[0].id);
   const [settings, setSettings] = useState<JobSettings>(start.settings);
   const zone = settings.timezone ?? "UTC";
@@ -109,6 +114,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
       if (timers.has(what)) return;
       timers.set(what, window.setTimeout(() => { timers.delete(what); if (!stopped) refresh(what); }, wait));
     };
+    const leading = !!lead;
     // A member hears their own rows; an admin, everyone's.
     const mine = me.admin ? {} : { filter: `user_id=eq.${me.id}` };
     const changes = supabase.channel(`jobs-db:${me.id}`)
@@ -133,7 +139,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
     void supabase.realtime.setAuth().then(() => {
       if (stopped) return;
       team = supabase.channel("jobs:team", { config: { private: true } })
-        .on("broadcast", { event: "activity" }, () => { soon("board", 1000); soon("jobs", 700); })
+        .on("broadcast", { event: "activity" }, () => { soon("board", 1000); soon("jobs", 700); if (leading) soon("live", 1100); })
         .subscribe();
     });
     return () => {
@@ -142,7 +148,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
       void supabase.removeChannel(changes);
       if (team) void supabase.removeChannel(team);
     };
-  }, [supabase, me.id, me.admin, bump]);
+  }, [supabase, me.id, me.admin, bump, lead]);
 
   // The team's days follow one time zone: on an admin's first visit, theirs.
   useEffect(() => {
@@ -245,7 +251,10 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
   const mine = board.find(row => row.user_id === me.id) ?? null;
   const loading = list.day !== day;
   const team = start.team;
+  const mates = lead ? team.filter(person => person.id !== me.id && ranks.placed?.[person.id] === lead).map(person => person.id) : [];
   const views: Record<Tab, () => ReactNode> = {
+    team: () => <LiveView supabase={supabase} team={team} board={board} plans={plans} zone={zone} today={today} now={now} version={versions.live}
+      only={mates} teamName={ranks.teams?.find(entry => entry.id === lead)?.name} />,
     today: () => <TodayView me={me} zone={zone} today={today} day={day} jobs={list.jobs} loading={loading} resumes={resumes} plans={plans} mine={mine}
       currency={settings.currency} act={act} onDay={setPicked} onResumes={() => choose("resumes")} />,
     mine: () => <MyJobs me={me} supabase={supabase} zone={zone} today={today} resumes={resumes} currency={settings.currency} act={act} version={versions.applications} />,
