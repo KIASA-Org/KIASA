@@ -145,6 +145,15 @@ const sections = page => page.getByRole("complementary", { name: "Members" }).lo
       await admin.page.getByRole("button", { name: "Photo of Maya Chen" }).locator(".avatar-photo").waitFor({ timeout: 10000 });
       await shot(admin.page, "1-admin-simulated");
     });
+    await step("a name already someone's is refused (case aside); the three made have three different names", async () => {
+      const first = admin.page.getByRole("textbox", { name: "Name of Maya Chen" });
+      await first.fill("ana silva");
+      await first.press("Enter");
+      await admin.page.locator(".admin-notice[data-failed]", { hasText: "is already someone's name" }).waitFor({ timeout: 10000 });
+      await admin.page.getByRole("textbox", { name: "Name of Maya Chen" }).waitFor({ timeout: 10000 });
+      const { data } = await site.from("profiles").select("name").in("id", simIds);
+      if (new Set(data.map(row => row.name.toLowerCase())).size !== 3) throw new Error(`names: ${data.map(row => row.name).join(", ")}`);
+    });
     await step("Ana, a real member, sees none of them: not beside the chat, not in Jobs, not in the database", async () => {
       await openChat(ana.page);
       const listed = await sections(ana.page);
