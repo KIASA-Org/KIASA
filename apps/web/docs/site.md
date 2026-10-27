@@ -552,6 +552,16 @@ approved, a team group renamed with a photo, the admin reading unseen, the
 database's refusals, and leaving a team). `npm run chat:local:e2e` puts Ana
 and Ben in one team first, so they may message each other.
 
+### A manager's view of their team
+
+A top manager who leads a team gets **My team** first on the Job desk: the
+admin's Live view (today, member by member, against each one's plan; the
+last 30 days; today hour by hour; a card for each) for their own team only,
+live, with nothing to confirm. The database gives them their team's days and
+plans and no one else's (`leads()`, in
+`supabase/migrations/20261028210000_manager_view.sql`); simulated members only
+if they are a tester. `npm run jobs:local:e2e` checks it.
+
 ### Simulated members
 
 **Admin → Simulated** (`/admin/simulated`) makes accounts that fill KIASA while it
@@ -628,7 +638,8 @@ Once, in this order:
    `supabase/migrations/20261028120000_sims_work.sql` (their daily work, every five minutes), then
    `supabase/migrations/20261028150000_sims_in_groups.sql` (simulated members in groups), then
    `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live), then
-   `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline).
+   `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline), then
+   `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

@@ -12,7 +12,7 @@ const path = require("path");
 function localEnv() {
   const raw = execSync("npx supabase status -o env", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const get = name => (raw.match(new RegExp(`^${name}="?([^"\\n]*)"?`, "m")) || [])[1] || "";
-  const env = { url: get("API_URL"), secret: get("SECRET_KEY") || get("SERVICE_ROLE_KEY") };
+  const env = { url: get("API_URL"), secret: get("SECRET_KEY") || get("SERVICE_ROLE_KEY"), publishable: get("PUBLISHABLE_KEY") || get("ANON_KEY") };
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(env.url)) throw new Error("Refusing: this is only for the local Supabase copy");
   return env;
 }
@@ -155,6 +155,39 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await ben.page.locator(".jobs-bar .account-initials .rank-leaf").waitFor({ state: "detached", timeout: 10000 });
     await desk.close();
     return `his card gone ${gone} ms after the choice, his own leaf ${seen} ms`;
+  });
+
+  await step("Ben, made Sales' manager with Ana in it, gets My team: Ana's day as the admin sees it, and no one else's", async () => {
+    await site.from("teams").delete().not("id", "is", null);
+    const { data: sales } = await site.from("teams").insert({ name: "Sales", color: "#e5484d" }).select("id").single();
+    await site.from("top_managers").insert({ user_id: benId, granted_by: "jobs test" });
+    await site.from("team_members").insert([{ user_id: benId, team_id: sales.id }, { user_id: people["ana@example.com"].id, team_id: sales.id }]);
+    try {
+      // Live: the tab comes the moment he leads a team.
+      await ben.page.getByRole("button", { name: "My team" }).click({ timeout: 10000 });
+      await ben.page.getByRole("heading", { name: "Sales today, member by member" }).waitFor({ timeout: 10000 });
+      const names = (await ben.page.locator(".jobs-table tbody th").allTextContents()).map(name => name.trim());
+      // (Each row starts with the photo's initials and badge letter.)
+      if (names.length !== 1 || !names[0].endsWith("Ana Silva")) throw new Error(`My team lists: ${names.join(", ")}`);
+      const cards = await ben.page.locator(".jobs-member-name").allTextContents();
+      if (cards.join() !== "Ana Silva") throw new Error(`cards: ${cards.join(", ")}`);
+      if (await ben.page.getByText("Waiting to confirm").count()) throw new Error("a manager has things to confirm");
+      // The database gives him his team's days and plans, and no one else's.
+      const asBen = createClient(env.url, env.publishable, { auth: { persistSession: false } });
+      await asBen.auth.signInWithPassword({ email: "ben@example.com", password: people["ben@example.com"].password });
+      const [trend, plans] = await Promise.all([asBen.rpc("team_trend", { days: 30 }), asBen.from("plans").select("user_id")]);
+      const allowed = [benId, people["ana@example.com"].id];
+      if ((trend.data ?? []).some(row => !allowed.includes(row.user_id))) throw new Error("Ben reads someone else's days");
+      if (!(trend.data ?? []).some(row => row.user_id === people["ana@example.com"].id)) throw new Error("Ben cannot read Ana's days");
+      if ((plans.data ?? []).some(row => !allowed.includes(row.user_id))) throw new Error("Ben reads someone else's plan");
+      await ben.page.screenshot({ path: path.join(out, "manager-my-team.png"), fullPage: true });
+      return `${(trend.data ?? []).length} days of Ana's`;
+    } finally {
+      await site.from("teams").delete().eq("id", sales.id);
+      await site.from("top_managers").delete().eq("user_id", benId);
+      await ben.page.goto(BASE + "/jobs");
+      await hydrated(ben.page, ".jobs-app");
+    }
   });
 
   await step("the admin pastes three links into the jobs bot: saved at once, on Ana's and Ben's lists live", async () => {
