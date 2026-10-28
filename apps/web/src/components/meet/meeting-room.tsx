@@ -126,20 +126,22 @@ const elapsed = (from: string, now: number) => {
 /** A KIASA meeting, in its own window: first a waiting screen (how you look,
  * your microphone and camera, who is already in), then the meeting: everyone's
  * faces, a shared screen large, who is speaking, raised hands, the people in
- * it, and for admins, recording to their own computer and ending it for all. */
+ * it, and for whoever runs it (an admin, or the manager who called it),
+ * letting people in and ending it for all; for admins, recording to their own computer. */
 export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: { url: string; key: string } }) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
   const [joinedHere, setJoined] = useState(false);
   const [left, setLeft] = useState(false);
   const [meeting, setMeeting] = useState<Meeting>(start.meeting);
-  // Who asked to join, and whom an admin let in (live). Admins need no letting in.
+  // Who asked to join, and whom a host let in (live). Hosts (admins, and the one who called it) need no letting in.
   const [admissions, setAdmissions] = useState<Admission[]>(start.admissions);
   const [asked, setAsked] = useState(false);
-  const allowed = useMemo(() => [...start.admins, ...admissions.filter(entry => entry.status === "admitted").map(entry => entry.user_id)], [start.admins, admissions]);
+  const allowed = useMemo(() => [...start.hosts, ...admissions.filter(entry => entry.status === "admitted").map(entry => entry.user_id)], [start.hosts, admissions]);
   const mine = admissions.find(entry => entry.user_id === start.me.id);
-  const letIn = start.me.admin || mine?.status === "admitted";
-  // In once joined, or, having asked, once let in.
-  const joined = joinedHere || (asked && letIn);
+  const letIn = start.me.host || mine?.status === "admitted";
+  // In once joined, or, having asked, once let in; and only while let in (someone
+  // taken out of the meeting while in it is back in the lobby, which says so).
+  const joined = letIn && (joinedHere || asked);
   const call = useMeeting({ supabase, start, joined, allowed });
   // The panel beside the call: the people in it, or its chat.
   const [panel, setPanel] = useState<"people" | "chat" | null>(null);
@@ -196,8 +198,8 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
   }, [over, left, recorder]);
 
   const waiting = admissions.filter(entry => entry.status === "waiting").sort((a, b) => a.asked_at.localeCompare(b.asked_at));
-  // Someone new waiting: the admins in the meeting hear a soft ping.
-  const waitingCount = me.admin && joined ? waiting.length : 0;
+  // Someone new waiting: the hosts in the meeting hear a soft ping.
+  const waitingCount = me.host && joined ? waiting.length : 0;
   const lastCount = useRef(0);
   useEffect(() => {
     if (waitingCount > lastCount.current) ping();
@@ -298,23 +300,24 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
           </div>
         </div>
         <div className="meet-lobby-text">
-          <p className="eyebrow">{state === "scheduled" ? `Planned for ${time(meeting.starts_at)}` : "Meeting"}</p>
+          <p className="eyebrow">{meeting.approval === "waiting" ? "Waiting for an admin's OK" : state === "scheduled" ? `Planned for ${time(meeting.starts_at)}` : "Meeting"}</p>
           <h1 className="meet-lobby-title">{meeting.title}</h1>
           <p className="meet-lobby-who">
             {inside.length ? `In the meeting: ${[...new Set(inside.map(entry => entry.name))].join(", ")}`
-              : state === "scheduled" ? (me.admin ? "No one is in yet. Starting it rings everyone in the chat." : "No one is in yet. You can wait inside until it starts.")
+              : state === "scheduled" ? (me.host ? "No one is in yet. Starting it rings everyone invited." : "No one is in yet. You can wait inside until it starts.")
                 : "No one is in yet."}
           </p>
           {!letIn && mine?.status === "waiting" && <p className="meet-lobby-wait" role="status">
             <span aria-hidden="true" />
-            {inside.some(entry => start.admins.includes(entry.user)) ? "Waiting for an admin to let you in…" : "Waiting: no admin is in the meeting yet. You will be let in once one joins."}
+            {inside.some(entry => start.hosts.includes(entry.user)) ? "Waiting to be let in…" : "Waiting: no one who runs the meeting is in yet. You will be let in once they join."}
           </p>}
-          {!letIn && mine?.status === "denied" && <p className="b-form-error" role="alert">An admin did not let you in this time.</p>}
+          {!letIn && mine?.status === "denied" && <p className="b-form-error" role="alert">You were not let in, or were taken out of this meeting.</p>}
           {call.problem && <p className="b-form-error" role="alert">{call.problem}</p>}
           {notice && <p className="b-form-error" role="alert">{notice}</p>}
           <div className="meet-lobby-actions">
-            {state === "scheduled" && me.admin
-              ? <button type="button" className="admin-approve" disabled={!call.local || working} onClick={begin}>{working ? "Starting…" : "Start the meeting"}</button>
+            {state === "scheduled" && me.host
+              ? <button type="button" className="admin-approve" disabled={!call.local || working || meeting.approval === "waiting"} onClick={begin}>
+                {meeting.approval === "waiting" ? "Waiting for an admin's OK" : working ? "Starting…" : "Start the meeting"}</button>
               : letIn
                 ? <button type="button" className="admin-approve" disabled={!call.local || call.connection !== "live"} onClick={() => setJoined(true)}>
                   {!call.local ? "Getting your camera…" : call.connection !== "live" ? "Connecting…" : "Join now"}
@@ -385,7 +388,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
             {waiting.map(person => <li key={person.user_id} className="meet-person">
               <Avatar initials={initialsOf(person.name)} photo={start.people.find(entry => entry.id === person.user_id)?.photo ?? null} className="chat-avatar meet-person-photo" who={person.user_id} />
               <span className="meet-person-name">{person.name}</span>
-              {me.admin && <span className="meet-person-marks">
+              {me.host && <span className="meet-person-marks">
                 <button type="button" className="meet-mini" disabled={working} onClick={() => decide(person, true)}>Admit</button>
               </span>}
             </li>)}
@@ -414,7 +417,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
       {others.map(remote => { const stream = cameraOf(remote); return stream && <Voice key={remote.peer} stream={stream} peer={remote.peer} />; })}
     </div>
 
-    {me.admin && waiting.length > 0 && <div className="meet-knocks" role="region" aria-label="Asking to join">
+    {me.host && waiting.length > 0 && <div className="meet-knocks" role="region" aria-label="Asking to join">
       {waiting.map(person => <div key={person.user_id} className="meet-knock">
         <Avatar initials={initialsOf(person.name)} photo={start.people.find(entry => entry.id === person.user_id)?.photo ?? null} className="chat-avatar meet-person-photo" who={person.user_id} />
         <p className="meet-knock-text"><strong>{person.name}</strong> wants to join</p>
@@ -445,8 +448,8 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
       <ControlButton on={!!call.hand} active label={call.hand ? "Lower your hand" : "Raise your hand"} onClick={call.raiseHand}><Hand /></ControlButton>
       {me.admin && <ControlButton on={!!recorder} active danger label={recorder ? "Stop recording" : "Record to this computer"} onClick={record}><Record /></ControlButton>}
       <div className="meet-leave-wrap" ref={leaveWrap}>
-        <button type="button" className="meet-leave" aria-label="Leave the meeting" title="Leave" aria-expanded={me.admin ? leaving : undefined}
-          onClick={() => (me.admin ? setLeaving(!leaving) : leave())}><PhoneOff /></button>
+        <button type="button" className="meet-leave" aria-label="Leave the meeting" title="Leave" aria-expanded={me.host ? leaving : undefined}
+          onClick={() => (me.host ? setLeaving(!leaving) : leave())}><PhoneOff /></button>
         {leaving && <div className="meet-leave-menu" role="menu" aria-label="Leave">
           <button type="button" role="menuitem" className="meet-leave-item" onClick={leave}><PhoneOff /><span>Leave the meeting<small>The others carry on</small></span></button>
           <button type="button" role="menuitem" className="meet-leave-item" data-danger="" disabled={working} onClick={endForAll}><Close /><span>{working ? "Ending…" : "End for everyone"}<small>Everyone leaves now</small></span></button>
@@ -454,7 +457,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
       </div>
       </div>
       <div className="meet-controls-panels">
-        <ControlButton plain on={panel === "people"} active label={`People (${count})${me.admin && waiting.length ? `, ${waiting.length} waiting` : ""}`} count={me.admin ? waiting.length : 0}
+        <ControlButton plain on={panel === "people"} active label={`People (${count})${me.host && waiting.length ? `, ${waiting.length} waiting` : ""}`} count={me.host ? waiting.length : 0}
           onClick={() => setPanel(panel === "people" ? null : "people")}><People /></ControlButton>
         <ControlButton plain on={panel === "chat"} active label={`Chat with everyone${unread ? `, ${unread} new` : ""}`} count={panel === "chat" ? 0 : unread}
           onClick={() => { setPanel(panel === "chat" ? null : "chat"); setUnread(0); setLatest(null); }}><ChatBubble /></ControlButton>

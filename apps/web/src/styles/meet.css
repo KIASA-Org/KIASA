@@ -132,6 +132,32 @@
 .meet-when button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 1.5px solid var(--line-strong); border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
 .meet-when button[aria-checked="true"] { border-color: var(--leaf); color: var(--leaf); background: rgb(184 236 147 / 0.08); }
 .meet-when svg { width: 20px; height: 20px; }
+/* Who is in a meeting: ticked from a list (a manager's team first, anyone else apart). */
+.meet-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.meet-dialog .chat-dialog-actions { margin-top: 0; }
+.meet-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -6px -8px 0 0; }
+.meet-choose { display: grid; gap: 8px; min-width: 0; }
+.meet-choose-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.meet-choose-all { padding: 4px 8px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--leaf); cursor: pointer; }
+.meet-choose-all:hover { background: rgb(184 236 147 / 0.08); }
+.meet-choose .chat-search { height: 38px; }
+.meet-choose-list { max-height: min(300px, 38dvh); margin: 0 -10px; overflow-y: auto; }
+.meet-choose-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
+.meet-choose-group[data-out] { color: var(--dew); }
+.meet-choose-loading { font-size: 14px; color: var(--ink-mute); }
+.meet-outside-note { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgb(69 200 255 / 0.08); box-shadow: inset 3px 0 0 var(--dew); font-size: 14px; line-height: 1.45; color: var(--ink-soft); }
+.meet-people-dialog { width: min(460px, calc(100vw - 32px)); }
+.meet-roster { max-height: min(260px, 32dvh); margin: 0 -10px; overflow-y: auto; }
+.meet-roster-row { cursor: default; }
+.meet-roster-row .chat-person-text { flex: 1; }
+.meet-roster-out { width: 34px; height: 34px; }
+.meet-roster-out:hover { color: var(--warn); background: rgb(255 180 162 / 0.1); }
+.meet-roster-out svg { width: 16px; height: 16px; }
+.chat-meeting .account-button svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.chat-meeting[data-status="waiting"] { box-shadow: inset 3px 0 0 var(--dew); }
+.chat-meeting[data-status="waiting"] .chat-request-kicker { color: var(--dew); }
+.chat-meeting[data-status="refused"] { box-shadow: inset 3px 0 0 var(--ink-mute); }
+.chat-meeting[data-status="refused"] .chat-request-kicker { color: var(--ink-mute); }
 .chat-ringing { position: fixed; right: 20px; bottom: 20px; z-index: 30; display: flex; align-items: center; gap: 12px; width: min(420px, calc(100% - 40px)); padding: 14px 14px 14px 16px; border-radius: 18px;
   background: var(--night-raised); box-shadow: 0 0 0 1px var(--line-strong), 0 16px 40px rgb(0 0 0 / 0.55); animation: chat-ringing-in 0.3s var(--ease); }
 @keyframes chat-ringing-in { from { opacity: 0; transform: translateY(12px); } }

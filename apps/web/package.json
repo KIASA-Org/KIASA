@@ -16,6 +16,7 @@
     "jobs:local:seed": "node scripts/jobs-local/seed.cjs",
     "jobs:local:e2e": "node scripts/jobs-local/e2e.cjs",
     "meet:local:e2e": "node scripts/meet-local/e2e.cjs",
+    "meet:people:e2e": "node scripts/meet-local/people.cjs",
     "teams:local:e2e": "node scripts/teams-local/e2e.cjs",
     "sims:local:e2e": "node scripts/sims-local/e2e.cjs",
     "sims:presence:check": "node --no-warnings scripts/sims-local/presence-check.mjs"

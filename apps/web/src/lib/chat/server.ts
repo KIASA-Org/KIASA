@@ -108,8 +108,19 @@ async function requestsChat(title = REQUESTS): Promise<string | null> {
   return id;
 }
 
+/** The admins' chat for requests to talk, and to meet people outside one's team. */
+export const contactsChat = () => requestsChat(CONTACTS);
+
+/** The own chats with KIASA of these people (those who have one). */
+export async function personalChats(personIds: string[]): Promise<string[]> {
+  if (!personIds.length) return [];
+  const { data } = await siteClient().from("chat_members").select("chat_id, chats!inner(kind, title)")
+    .in("user_id", personIds).eq("chats.kind", "notices").eq("chats.title", KIASA);
+  return [...new Set((data ?? []).map(row => row.chat_id as string))];
+}
+
 /** A person's own chat with KIASA, where their account notices arrive. */
-async function personalChat(personId: string, name: string): Promise<string | null> {
+export async function personalChat(personId: string, name: string): Promise<string | null> {
   const site = siteClient();
   const { data: found } = await site.from("chat_members").select("chat_id, chats!inner(kind, title)")
     .eq("user_id", personId).eq("chats.kind", "notices").eq("chats.title", KIASA).limit(1);

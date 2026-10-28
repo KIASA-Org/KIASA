@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** A KIASA meeting, in its own window: for the members of its chat (the
+/** A KIASA meeting, in its own window: for the people invited to it (the
  * database's rules decide). Anyone else signed in is told it is not theirs;
  * anyone signed out is sent to sign in. */
 export default async function MeetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +22,7 @@ export default async function MeetPage({ params }: { params: Promise<{ id: strin
   const [{ id }, me, badges] = await Promise.all([params, chatViewer(), ranks()]);
   if (!me) redirect("/sign-in");
   const start = await meetingFor(id, me);
-  if (!start) return <Outside text="This meeting is not one you are in, or it is gone. Meetings are for the people of their chat." />;
+  if (!start) return <Outside text="This meeting is not one you are in, or it is gone. Meetings are for the people invited to them." />;
   return <RanksProvider initial={badges} realtime={publicSupabase} me={me.id}>
     <MeetingRoom start={start} realtime={publicSupabase} />
   </RanksProvider>;

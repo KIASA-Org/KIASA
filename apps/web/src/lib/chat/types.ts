@@ -53,8 +53,14 @@ export function splitChatList(rows: ChatRow[] | null): { chats: ChatSummary[]; m
 export type Attachment =
   | { type?: undefined; path: string; name: string; mime: string; size: number }
   | { type: "request"; id: string; name: string; email: string; organization: string | null; reason: string; status: "waiting" | "approved" | "declined" | "deleted"; decided_by?: string }
-  /** A meeting's card: planned for `starts_at`, live, or over; `by`, the admin who called it. */
-  | { type: "meeting"; id: string; title: string; starts_at: string; status: "scheduled" | "live" | "ended" | "cancelled"; by: string; ended_at?: string }
+  /** A meeting's card: planned for `starts_at`, live, or over; `by`, who called it (`by_id`);
+   * `people`, who is in it (older cards: everyone in the chat). A manager's
+   * meeting with people outside their team is "waiting" for an admin's OK,
+   * then planned, or "refused". */
+  | { type: "meeting"; id: string; title: string; starts_at: string; status: "scheduled" | "live" | "ended" | "cancelled" | "waiting" | "refused"; by: string; by_id?: string;
+    people?: string[]; ended_at?: string }
+  /** For the admins: a manager asks to meet people outside their team (`people`, by name). */
+  | { type: "meeting_request"; id: string; title: string; starts_at: string; by: string; people: string[]; status: "waiting" | "allowed" | "refused"; decided_by?: string }
   /** A request to message someone outside one's team, for the admin to decide on. */
   | { type: "contact"; id: string; from: { id: string; name: string }; to: { id: string; name: string }; reason: string; status: ContactStatus; decided_by?: string };
 

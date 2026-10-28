@@ -70,13 +70,13 @@ async function askIn(page, admin, name, { shot, deny } = {}) {
   await page.waitForFunction(() => { const b = [...document.querySelectorAll(".meet-lobby-actions button")][0]; return b && !b.disabled; }, null, { timeout: 20000 });
   if (shot) await page.screenshot({ path: path.join(out, shot) });
   await page.getByRole("button", { name: /^(Ask to join|Ask again)$/ }).click();
-  await page.locator(".meet-lobby-wait", { hasText: "Waiting for an admin to let you in" }).waitFor({ timeout: 10000 });
+  await page.locator(".meet-lobby-wait", { hasText: "Waiting to be let in" }).waitFor({ timeout: 10000 });
   const knock = admin.locator(".meet-knock", { hasText: name });
   await knock.waitFor({ timeout: 10000 });
   if (shot) await admin.screenshot({ path: path.join(out, "asking.png") });
   if (deny) {
     await knock.getByRole("button", { name: "Deny" }).click();
-    await page.getByText("An admin did not let you in this time.").waitFor({ timeout: 10000 });
+    await page.getByText("You were not let in, or were taken out of this meeting.").waitFor({ timeout: 10000 });
     return;
   }
   await knock.getByRole("button", { name: "Admit" }).click();

@@ -40,8 +40,8 @@ async function iceServers(): Promise<Ice> {
   return [...servers, ...await cloudflareRelay()];
 }
 
-/** A meeting, as the person signed in may see it (the database's rules: a
- * member of its chat), with everyone who may join it. Null if they may not. */
+/** A meeting, as the person signed in may see it (the database's rules: one
+ * of the people invited), with everyone in it. Null if they may not. */
 export async function meetingFor(id: string, me: ChatMe): Promise<MeetStart | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   // Asked for at once, beside everything else.
@@ -51,20 +51,25 @@ export async function meetingFor(id: string, me: ChatMe): Promise<MeetStart | nu
   if (!meeting) return null;
   const chatId = (meeting as Meeting).chat_id;
   const site = siteClient();
-  const [chat, members, avatars, admins, admissions] = await Promise.all([
-    visitor.from("chats").select("kind, title").eq("id", chatId).maybeSingle(),
-    visitor.from("chat_members").select("user_id, name").eq("chat_id", chatId),
+  const [chat, invited, avatars, admins, admissions] = await Promise.all([
+    chatId ? visitor.from("chats").select("kind, title").eq("id", chatId).maybeSingle() : null,
+    visitor.from("meeting_people").select("user_id, name").eq("meeting_id", id).eq("status", "in").order("added_at"),
     site.from("avatars").select("user_id, path"),
     site.rpc("admin_users"),
     visitor.from("meeting_admissions").select("user_id, name, status, asked_at").eq("meeting_id", id),
   ]);
+  const rows = (invited.data ?? []) as { user_id: string; name: string }[];
+  // Admins see every meeting; only those invited may be in one.
+  if (!rows.some(row => row.user_id === me.id)) return null;
   const photos = new Map(((avatars.data ?? []) as { user_id: string; path: string }[]).map(row => [row.user_id, photoUrl(publicSupabase.url, row.path)]));
-  const people = ((members.data ?? []) as { user_id: string; name: string }[]).map(row => ({ id: row.user_id, name: row.name, photo: photos.get(row.user_id) ?? null }));
-  const others = people.filter(person => person.id !== me.id);
-  const chatTitle = (chat.data?.title as string | null) ?? (others.map(person => person.name).join(", ") || "Meeting");
+  const people = rows.map(row => ({ id: row.user_id, name: row.name, photo: photos.get(row.user_id) ?? null }));
+  const others = people.filter(person => person.id !== me.id).map(person => person.name);
+  const named = others.length > 3 ? `${others.slice(0, 3).join(", ")} and ${others.length - 3} more` : others.join(", ");
+  const chatTitle = (chat?.data?.title as string | null) ?? (named || "Meeting");
+  const hosts = [...new Set([...((admins.data ?? []) as { id: string }[]).map(admin => admin.id), ...((meeting as Meeting).created_by ? [(meeting as Meeting).created_by!] : [])])];
   return {
-    meeting: meeting as Meeting, chatTitle, people,
-    admins: ((admins.data ?? []) as { id: string }[]).map(admin => admin.id),
-    admissions: (admissions.data ?? []) as Admission[], me: { id: me.id, name: me.name, admin: me.admin, photo: me.photo }, ice: await ice,
+    meeting: meeting as Meeting, chatTitle, people, hosts,
+    admissions: (admissions.data ?? []) as Admission[],
+    me: { id: me.id, name: me.name, admin: me.admin, host: hosts.includes(me.id), photo: me.photo }, ice: await ice,
   };
 }
