@@ -444,22 +444,43 @@ own, changeable under Plans).
 
 ### Meetings (voice and video)
 
-KIASA's own calls, in its own window (`/meet/<id>`), for the people of a chat.
-Only admins organize: the camera button in a group or one-to-one chat's bar
-starts a meeting now (everyone in the chat gets its card, their chat alert, and
-a ringing on an open chat) or schedules one (its card waits in the chat, with
-Start now and Call off for admins). Members ask to join from the card or the
-ringing; an admin in the meeting admits them or turns them away (a box at the
-top right, with a soft ping, and the people panel's "Waiting to join"). Someone
-let in may leave and come back without asking again. Only the site's server
-records who is let in (`meeting_admissions`), after checking an admin, and the
-browsers in a meeting connect only to admins and people let in.
+KIASA's own calls, in its own window (`/meet/<id>`), for the people chosen
+for each (`meeting_people`, `supabase/migrations/20261029150000_meeting_people.sql`).
+- **Who organizes**: admins, with anyone; and a team's top manager, with their
+  own team freely. A manager's meeting with anyone else (another team, no team,
+  another manager, or an admin) waits for an admin's OK: no one but the manager
+  sees it, and the admins get a "Request to meet" card in their Contact
+  requests chat (who asks, who is outside the team, when) with Allow and
+  Refuse. Allowed, everyone chosen gets the meeting; refused, it is off. The
+  manager hears of it from KIASA either way.
+- **Where**: the camera button beside the chat list's search (**New meeting**:
+  anyone, ticked from a list; a manager sees their team first and everyone else
+  apart, marked as needing the admin's OK), or the camera button in a chat's
+  bar (admins in any group or one-to-one chat; a manager in their team's groups
+  and one-to-one with their team's people), where the chat's people start
+  ticked and can be unticked. Now rings everyone chosen; Later plans it.
+- **Its card**: in the chat it was called from; called from the list, in each
+  person's own chat with KIASA. A card says how many are in it; only they can
+  join, and only they are rung. Whoever runs it (any admin, or the manager who
+  called it) has Start now, **People** and Call off (End, once on).
+- **People, after it is called**: who is in it (who called it, who is invited,
+  who waits for the admin's OK); × takes someone out (their card goes, and a
+  call they are in drops them back to the waiting screen); Add people gives
+  the newly chosen its card (ringing, if it is on). A manager adding someone
+  outside the team asks the admin first.
+- **Letting in**: those invited ask to join from the card or the ringing; an
+  admin in the meeting, or the manager who called it, admits them or turns them
+  away (a box at the top right, with a soft ping, and the people panel's
+  "Waiting to join"). Someone let in may leave and come back without asking
+  again. Only the site's server records who is let in (`meeting_admissions`),
+  after checking who runs it, and the browsers in a meeting connect only to
+  admins, the one who called it, and people let in.
 
 - **In the meeting**: a waiting screen (how you look, microphone and camera,
   who is in), then everyone's faces sharing the window, the speaker outlined in
   leaf, mute, camera off, screen sharing (shown large, the faces beside it),
-  raised hands, the people in it and those not yet in, and for admins, Record
-  and End for everyone.
+  raised hands, the people in it and those not yet in; for whoever runs it,
+  End for everyone; for admins, Record.
 - **Calls go straight between browsers** (WebRTC, one connection per pair):
   best for up to about six people on video. Browsers find each other on the
   meeting's private live channel (`meet:<id>`, members of its chat only); each
@@ -484,15 +505,18 @@ browsers in a meeting connect only to admins and people let in.
   (Chrome and Edge; other browsers download it at the end). Nothing is uploaded;
   everyone in the meeting sees that it is being recorded. Chrome keeps the file
   in a ".crswap" beside it until the recording stops; the file appears then.
-- **By the database** (`supabase/migrations/20261027120000_meetings.sql`): only
-  the site's server writes meetings, after checking an admin; a chat's members
-  read its meetings and join its channel; no one else.
+- **By the database** (`supabase/migrations/20261027120000_meetings.sql`, then
+  the people file): only the site's server writes meetings and who is in them,
+  after checking who asks; those invited read a meeting and join its channel
+  (one waiting for an admin's OK, only the manager who called it); admins read
+  every meeting; no one else.
 
 To test it on this computer: after the chat's steps, `npx supabase migration up
 --local`, serve the site against the local copy on port 3002, and run `npm run
 meet:local:e2e` (three browsers with Chrome's made-up camera and microphone
 calling each other; screen sharing, recording, ending, scheduling, and the
-database's rules).
+database's rules) and `npm run meet:people:e2e` (choosing people, changing
+them later, a manager's meetings with and without the admin's OK).
 
 ### Top managers and badges
 
@@ -681,7 +705,8 @@ Once, in this order:
    `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work), then
    `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat), then
    `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it), then
-   `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once).
+   `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once), then
+   `supabase/migrations/20261029150000_meeting_people.sql` (who is in a meeting; managers' meetings and the admin's OK).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

@@ -203,7 +203,7 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
     // A meeting starting now, called by someone else: it rings.
     const card = message.attachment?.type === "meeting" ? message.attachment : null;
     const ring = (where: ChatSummary, members: ChatMember[]) => {
-      if (fresh && card && message.kind === "notice" && card.status === "live" && card.by !== me.name && Date.now() - Date.parse(message.created_at) < 90_000) {
+      if (fresh && card && message.kind === "notice" && card.status === "live" && card.by !== me.name && (!card.people || card.people.includes(me.id)) && Date.now() - Date.parse(message.created_at) < 90_000) {
         setRinging({ card, chatTitle: chatTitle(where, members, me) });
       }
     };

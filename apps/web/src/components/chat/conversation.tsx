@@ -13,7 +13,7 @@ import type { MessageActions } from "./chat-app";
 import { ChatFile, downloadFile, openFile, UploadingFile } from "./chat-file";
 import { authorColor, bigEmoji, chatTitle, clock, dayKey, dayLabel, gist, initialsOf, lastSeen, useInBrowser } from "./chat-format";
 import { ChatInfo } from "./chat-info";
-import { MeetingCard, MeetingDialog } from "./chat-meeting";
+import { MeetingCard, MeetingDialog, MeetingRequestCard } from "./chat-meeting";
 import { Menu, useLongPress, type MenuItem, type MenuPlace } from "./chat-menu";
 import { ChatPicker } from "./chat-picker";
 import { PREVIEWABLE, SendFile } from "./chat-send-file";
@@ -49,7 +49,7 @@ type Props = {
  * with reactions on top; several messages selected at once; the pinned
  * message above; searching the chat; and, from its name, all about it. */
 export function Conversation({ me, chat, members, people, messages, pinned, more, online, seenOf, supabase, photoOf, typing: typingNames, actions,
-  onBack, onEarlier, onRead, onTyping, onPerson, onSend, onEdit, watching = false, groupPhoto = null, canEdit = false, canAdd = false, reach = "free", onMembers }: Props) {
+  onBack, onEarlier, onRead, onTyping, onPerson, onSend, onEdit, watching = false, groupPhoto = null, canEdit = false, canAdd = false, reach = "free", onMembers, lead = null }: Props) {
   const ranks = useRanks();
   const inBrowser = useInBrowser();
   const scroller = useRef<HTMLDivElement>(null);
@@ -174,7 +174,9 @@ export function Conversation({ me, chat, members, people, messages, pinned, more
       </button>
       {watching && <span className="chat-pill chat-head-unseen" title="No one in this chat can see you here"><Eye /> Unseen</span>}
       {canAdd && <button type="button" className="chat-pill chat-head-add" onClick={() => setAdding(true)}><Plus /> Add people</button>}
-      {me.admin && !watching && (chat.kind === "group" || chat.kind === "direct") && !chat.draft
+      {/* Meetings: admins in any group or one-to-one chat; a team's manager in their team's groups and with their team's people. */}
+      {!watching && !chat.draft && (me.admin ? chat.kind === "group" || chat.kind === "direct"
+        : !!lead && (chat.kind === "group" ? chat.team_id === lead : chat.kind === "direct" && !!others[0] && ranks.placed?.[others[0].user_id] === lead))
         && <button type="button" className="chat-icon" aria-label="Start or schedule a meeting" title="Meeting" onClick={() => setMeeting(true)}><Video /></button>}
       <button type="button" className="chat-icon" aria-label="Search in this chat" title="Search" onClick={() => setSearching(true)}><Search /></button>
       {onMembers && <button type="button" className="chat-icon" aria-label="Members" title="Members" onClick={onMembers}><People /></button>}
@@ -419,13 +421,15 @@ function Notice({ message, me, choosing, chosen, onToggle, onMenu }: {
   const request = message.attachment?.type === "request" ? message.attachment : null;
   const meeting = message.attachment?.type === "meeting" ? message.attachment : null;
   const contact = message.attachment?.type === "contact" ? message.attachment : null;
+  const meetingAsk = message.attachment?.type === "meeting_request" ? message.attachment : null;
   const menuOn = {
     ...(choosing ? {} : press),
     onContextMenu: (event: MouseEvent) => { if (choosing) return; event.preventDefault(); onMenu({ x: event.clientX, y: event.clientY }); },
     onClick: choosing ? onToggle : undefined,
     "data-chosen": chosen || undefined,
   };
-  if (meeting) return <div id={`msg-${message.id}`} className="chat-meeting-wrap" {...menuOn}><MeetingCard card={meeting} admin={me.admin} /></div>;
+  if (meeting) return <div id={`msg-${message.id}`} className="chat-meeting-wrap" {...menuOn}><MeetingCard card={meeting} me={me} /></div>;
+  if (meetingAsk) return <MeetingRequestCard id={`msg-${message.id}`} card={meetingAsk} me={me} menuOn={menuOn} />;
   if (contact) return <ContactCard id={`msg-${message.id}`} card={contact} me={me} menuOn={menuOn} />;
   if (!request) return <p id={`msg-${message.id}`} className="chat-notice" {...menuOn}>{message.body}</p>;
   const act = (status: "approved" | "declined") => start(async () => {

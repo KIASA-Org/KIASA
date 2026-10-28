@@ -6,7 +6,8 @@ import { photoUrl } from "@/lib/accounts/viewer";
 import type { ChatMe, ChatMember, ChatPerson, ChatSummary, GroupEntry } from "@/lib/chat/types";
 import type { Reach } from "@/lib/teams/rules";
 import { Avatar } from "../site/avatar";
-import { Archive, ArrowLeft, BellOff, Bookmark, Check, Eye, Gear, Menu as MenuIcon, Pencil, People, Pin, Search, Ticks } from "../site/icons";
+import { Archive, ArrowLeft, BellOff, Bookmark, Check, Eye, Gear, Menu as MenuIcon, Pencil, People, Pin, Search, Ticks, Video } from "../site/icons";
+import { MeetingDialog } from "./chat-meeting";
 import { useRanks } from "../site/ranks";
 import { chatTitle, findable, initialsOf, shortWhen, useInBrowser } from "./chat-format";
 import { Menu, useLongPress, type MenuItem, type MenuPlace } from "./chat-menu";
@@ -40,6 +41,7 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
   const team = lead ? people.filter(person => ranks.placed?.[person.id] === lead).map(person => person.id) : undefined;
   const [query, setQuery] = useState("");
   const [picking, setPicking] = useState<"direct" | "group" | "contacts" | null>(null);
+  const [meeting, setMeeting] = useState(false);
   const [view, setView] = useState<View>("chats");
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -106,6 +108,8 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
             <Search />
             <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search chats" aria-label="Search chats" autoComplete="off" />
           </label>
+          {/* A meeting for the people one chooses: admins (anyone), a team's manager (their team; anyone else with an admin's OK). */}
+          {(me.admin || lead) && <button type="button" className="chat-icon chat-meet-new" aria-label="New meeting" title="New meeting" onClick={() => setMeeting(true)}><Video /></button>}
         </div>}
       {view === "chats" && <AlertsPrompt />}
       {view === "all" && <p className="chat-unseen-note"><Eye />Every group and chat you are not in. You read them unseen: no one in them can tell, and nothing you do here reaches them.</p>}
@@ -118,6 +122,7 @@ export function ChatList({ me, chats, members, people, online, active, live, sup
     {view === "chats" && <button type="button" className="chat-new" aria-label={me.admin || lead ? "New chat" : "New message"} title={me.admin || lead ? "New chat" : "New message"}
       aria-haspopup={me.admin || lead ? "menu" : undefined} onClick={newChat}><Pencil /></button>}
 
+    {meeting && <MeetingDialog onClose={() => setMeeting(false)} />}
     {picking && <ChatPicker mode={picking === "contacts" ? "direct" : picking} heading={picking === "contacts" ? "Contacts" : undefined}
       me={me} people={people} supabase={supabase} directWith={directWith} reach={reach} onAsk={person => { setPicking(null); onAsk(person); }}
       only={picking === "group" && !me.admin ? team : undefined} teamId={picking === "group" && !me.admin ? lead : null} onClose={() => setPicking(null)}
