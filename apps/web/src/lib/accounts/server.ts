@@ -163,13 +163,15 @@ export const ranks = cache(async (): Promise<Ranks> => {
  * manager, and their team. For the admin page only. */
 export async function everyone(): Promise<Member[]> {
   const site = siteClient();
-  const [{ data, error }, top, placed] = await Promise.all([
+  const [{ data, error }, top, placed, faces] = await Promise.all([
     site.from("profiles").select("*").order("asked_at", { ascending: false }),
     site.from("top_managers").select("user_id"),
     site.from("team_members").select("user_id, team_id"),
+    site.from("avatars").select("user_id, path"),
   ]);
   if (error) throw new Error(`The requests could not be read: ${error.message}`);
   const managers = new Set(((top.data ?? []) as { user_id: string }[]).map(row => row.user_id));
   const teams = new Map(((placed.data ?? []) as { user_id: string; team_id: string }[]).map(row => [row.user_id, row.team_id]));
-  return (data as ProfileRow[]).map(row => ({ ...toMember(row), top: managers.has(row.id), team: teams.get(row.id) }));
+  const photos = new Map(((faces.data ?? []) as { user_id: string; path: string }[]).map(row => [row.user_id, photoUrl(url, row.path)]));
+  return (data as ProfileRow[]).map(row => ({ ...toMember(row), top: managers.has(row.id), team: teams.get(row.id), photo: photos.get(row.id) ?? null }));
 }

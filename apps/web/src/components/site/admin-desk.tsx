@@ -31,6 +31,8 @@ export function AdminDesk({ people: given, teams = [], live, realtime }: { peopl
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [query, setQuery] = useState("");
   const [show, setShow] = useState<(typeof SHOW)[number]>("all");
+  // Which team's people: everyone, those in any team, those in none, or one team (its id).
+  const [teamShown, setTeamShown] = useState("everyone");
   const [notice, setNotice] = useState<{ text: string; sample?: boolean; failed?: boolean } | null>(null);
   const [removed, setRemoved] = useState<string[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -125,8 +127,14 @@ export function AdminDesk({ people: given, teams = [], live, realtime }: { peopl
 
   // Every word typed must appear in the person's name, email or organization.
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = people.filter(person => (show === "all" || person.status === show)
-    && words.every(word => `${person.name} ${person.email} ${person.organization ?? ""}`.toLowerCase().includes(word)));
+  const placedIn = (person: Account) => !!person.team && teams.some(team => team.id === person.team);
+  const inTeamShown = (person: Account) => teamShown === "everyone" || (teamShown === "teamed" ? placedIn(person)
+    : teamShown === "unteamed" ? person.status === "approved" && !placedIn(person) : person.team === teamShown);
+  // Those waiting for an answer first (newest first among them), then everyone else, newest first.
+  const shown = people.filter(person => (show === "all" || person.status === show) && inTeamShown(person)
+    && words.every(word => `${person.name} ${person.email} ${person.organization ?? ""}`.toLowerCase().includes(word)))
+    .sort((a, b) => Number(b.status === "waiting") - Number(a.status === "waiting") || b.asked.localeCompare(a.asked));
+  const approvedPeople = people.filter(person => person.status === "approved");
 
   return <>
     <section className="block admin-top" aria-labelledby="admin-title">
@@ -199,6 +207,15 @@ export function AdminDesk({ people: given, teams = [], live, realtime }: { peopl
               {option === "all" ? "All" : STATUS[option]} <span>{option === "all" ? people.length : count(option)}</span>
             </button>)}
           </div>
+          {teams.length > 0 && <select className="admin-team-filter" aria-label="Show by team" value={teamShown} data-on={teamShown !== "everyone" || undefined}
+            onChange={event => setTeamShown(event.target.value)}>
+            <option value="everyone">Every team</option>
+            <option value="teamed">In a team ({approvedPeople.filter(placedIn).length})</option>
+            <option value="unteamed">In no team ({approvedPeople.filter(person => !placedIn(person)).length})</option>
+            <optgroup label="One team">
+              {teams.map(team => <option key={team.id} value={team.id}>{team.name} ({people.filter(person => person.team === team.id).length})</option>)}
+            </optgroup>
+          </select>}
         </div>
         <div role="status">
           {removal && <p className="admin-notice admin-removal" data-failed={removal.failed ? "" : undefined}>

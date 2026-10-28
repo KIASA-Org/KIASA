@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from
 import type { Team } from "@/lib/accounts/viewer";
 import { initialsOf } from "@/lib/accounts/viewer";
 import { addSims, decideSims, deleteSims, onlineCount, placeSims, planSims, renameSim, setSimPhoto, setSims, setTester, setTesters, workNow } from "@/lib/sims/actions";
-import { atWork, DAY_NAMES, daysInWords, onlineAt, type Presence } from "@/lib/sims/hours";
+import { atWork, DAY_NAMES, daysInWords, onlineNow, type Presence } from "@/lib/sims/hours";
 import type { SimMember, TesterChoice } from "@/lib/sims/server";
 import { Avatar } from "./avatar";
 import { Close } from "./icons";
@@ -42,12 +42,14 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
     setNotice(result.error ? { text: result.error, failed: true } : result.done ? { text: result.done } : null);
   });
 
+  // Who of them is online now: worked out for all of them together, as every page that shows them does.
+  const online = minute ? onlineNow(sims.filter(sim => sim.status === "approved"), minute * 60_000) : new Set<string>();
   const stats = [
     { value: sims.length, label: "Simulated members" },
     { value: sims.filter(sim => sim.status === "waiting").length, label: "Waiting for approval" },
     { value: sims.filter(sim => sim.team).length, label: "In a team" },
     { value: minute ? sims.filter(sim => sim.status === "approved" && atWork(sim.hours, minute * 60_000)).length : "–", label: "At work now" },
-    { value: minute ? sims.filter(sim => sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000)).length : "–", label: "Online now" },
+    { value: minute ? online.size : "–", label: "Online now" },
     { value: sims.reduce((sum, sim) => sum + (sim.today?.done ?? 0), 0), label: "Applications today" },
   ];
 
@@ -122,8 +124,8 @@ export function SimsDesk({ sims, people, teams, zone, links }: { sims: SimMember
                   <td>{percent(sim.paceMin)}–{percent(sim.paceMax)}</td>
                   <td>{sim.today && sim.status === "approved" ? <>{sim.today.done} of {sim.today.target}<span className="admin-when">applications</span></> : <span className="admin-when">–</span>}</td>
                   <td>
-                    <span className="sims-online" data-online={minute && sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000) ? "" : undefined}>
-                      {!minute ? "–" : sim.status === "approved" && onlineAt(sim.id, sim.hours, minute * 60_000) ? "Online" : "Offline"}
+                    <span className="sims-online" data-online={minute && online.has(sim.id) ? "" : undefined}>
+                      {!minute ? "–" : online.has(sim.id) ? "Online" : "Offline"}
                     </span>
                     <select className="admin-role sims-presence" aria-label={`Online status of ${sim.name}`} value={sim.hours.presence} disabled={working}
                       onChange={event => run(() => setSims([sim.id], { presence: event.target.value as Presence }))}>

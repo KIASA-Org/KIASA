@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { BoardRow, JobsMe, TeamPerson } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
+import { useFaces } from "../site/ranks";
 import { StatTile } from "./jobs-charts";
 import { ago, compact, initialsOf, money } from "./jobs-format";
 
@@ -17,9 +18,11 @@ const RANKS: { id: Rank; label: string; of: (row: BoardRow) => number }[] = [
 
 /** The leaderboard: what everyone on the team has, earns and does, for
  * everyone to see. Jobs and pay count once an admin has confirmed them. */
-export function Leaderboard({ me, board, team, currency, zone, today, now }: {
+export function Leaderboard({ me, board: given, team, currency, zone, today, now }: {
   me: JobsMe; board: BoardRow[]; team: TeamPerson[]; currency: string; zone: string; today: string; now: number;
 }) {
+  const faces = useFaces();
+  const board = given.map(row => ({ ...row, name: faces.name(row.user_id, row.name) }));
   const [rank, setRank] = useState<Rank>("salary");
   const by = RANKS.find(entry => entry.id === rank)!;
   const rows = [...board].sort((a, b) => by.of(b) - by.of(a) || b.monthly_salary - a.monthly_salary || b.apps_month - a.apps_month || a.name.localeCompare(b.name));

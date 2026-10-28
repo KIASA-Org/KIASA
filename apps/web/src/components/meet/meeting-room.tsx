@@ -7,6 +7,7 @@ import { initialsOf } from "@/lib/accounts/viewer";
 import { askToJoin, beginMeeting, decideJoin, endMeeting } from "@/lib/meetings/actions";
 import { meetingState, type Admission, type Meeting, type MeetStart } from "@/lib/meetings/types";
 import { Avatar } from "../site/avatar";
+import { useFaces } from "../site/ranks";
 import { LeafMark } from "../site/brand";
 import { ChatBubble, Check, ChevronDown, Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
 import { MeetingChat, MessageToast, type MeetMessage } from "./meeting-chat";
@@ -583,7 +584,8 @@ function Details({ name, mic, peer, read }: { name: string; mic: boolean; peer?:
   </dl>;
 }
 
-function Person({ name, photo, user, state }: { name: string; photo: string | null; user: string; state?: Pick<PeerState, "mic" | "cam" | "hand"> }) {
+function Person({ name: given, photo, user, state }: { name: string; photo: string | null; user: string; state?: Pick<PeerState, "mic" | "cam" | "hand"> }) {
+  const name = useFaces().name(user, given);
   return <li className="meet-person">
     <Avatar initials={initialsOf(name)} photo={photo} className="chat-avatar meet-person-photo" who={user} />
     <span className="meet-person-name">{name}</span>

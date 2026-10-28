@@ -110,7 +110,9 @@ week if the computer is off; never in a private window, which blocks alerts). An
 `/sign-in` and is welcomed on their first visit since the approval. The private pages are not linked from the public site's navigation or
 listed in search or the sitemap, and they ask search engines not to index them.
 
-- **`/admin`** is for KIASA's admins only: the emails in the `admins` table,
+- **`/admin`** is for KIASA's admins only (in "Everyone who has asked", those
+  waiting for an answer come first; **Show by team** narrows it to one team, to
+  those in a team, or to those in none): the emails in the `admins` table,
   chrislim@kiasa.tech first. It has its own bar (KIASA Admin, who is signed in,
   back to the site, sign out). It counts the requests waiting, approved and
   declined; lists the requests waiting, newest first, with Approve and Decline;
@@ -518,7 +520,24 @@ nine colours, which make the team's shield (its first letter on its colour).
 The admin gives a team to a top manager, who leads it and wears its shield with
 a gold rim, and puts each approved person in one team (there, or in the Team
 column on the Users page). Everyone in a team wears its shield on their photo,
-live, everywhere (`supabase/migrations/20261027180000_teams.sql`).
+live, everywhere (`supabase/migrations/20261027180000_teams.sql`). A person made
+a top manager while in no team is given a team of their own at once, named for
+them ("Leon Team", in a colour no team wears yet), which they lead; made a member
+again, they keep it, for the admin to hand on (`setTopManager` in
+`src/lib/accounts/actions.ts`).
+
+The Teams page shows them at a glance: one bar of how everyone approved is split
+between the teams (striped: no team); every team in a list at the left, with its
+manager and a bar of its size; the chosen team at the right, with its manager,
+its members (found by name), Rename or recolour and Delete. "Not in a team" and
+"New team" are in the same list.
+
+**Names and photos, live.** A new name or photo reaches every open page at once:
+every Avatar, the chat's people, Jobs' cards and leaderboard, and a meeting's
+people. A photo travels through `public.avatars`; a name through `public.names`,
+written by the database when a profile's name changes
+(`supabase/migrations/20261029120000_live_names.sql`). Both are heard by
+`RanksProvider` (`useFaces` in `src/components/site/ranks.tsx`).
 
 In Chat, the database decides who may message whom
 (`supabase/migrations/20261027210000_team_chats.sql`; the page shows the same
@@ -610,11 +629,19 @@ Online or offline (`supabase/migrations/20261028190000_sims_presence.sql`): each
 one is **Auto** (the default), **Online** or **Offline**, set one by one in the
 table's Online column, or for everyone chosen; or **exactly N of them online,
 picked at random**, the rest offline. On Auto each comes and goes as a person
-does (`onlineSpans` in `src/lib/sims/hours.ts`, the same on every page): in a
-little after its start, one to three breaks (a lunch among them), never away
-more than two hours at a stretch in its working hours, out around its end,
-sometimes back for a few minutes in the evening; a short visit or none on days
-off. Paused, one shows offline; set offline, it does no work.
+does (`onlineNow` in `src/lib/sims/hours.ts`, worked out for all of them
+together, the same on every page):
+- At work: each has its own habit (early or late, up to 45 minutes either way)
+  and the day's own minutes, so they come in and leave over an hour or two, not
+  all at once; one to three breaks (a lunch among them), never away more than
+  two hours at a stretch.
+- Not at work (before or after their hours, on a break, on a day off): between
+  30% and 40% of them are online at every moment, taking turns. Each has turns
+  of its own length (25–90 minutes) at its own times; whoever just had one rests
+  for the next, so no one is on for hours and everyone is on some of the time.
+  `npm run sims:presence:check` checks this over a week, minute by minute.
+
+Paused, one shows offline; set offline, it does no work.
 
 To test it on this computer: run the file on the local copy, serve the site
 against it on port 3002, and run `npm run sims:local:e2e`.
@@ -653,7 +680,8 @@ Once, in this order:
    `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline), then
    `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work), then
    `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat), then
-   `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it).
+   `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it), then
+   `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

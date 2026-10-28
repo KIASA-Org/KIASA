@@ -1,7 +1,7 @@
 /** A simulated member's working hours, as the admin sets them, in the team's
  * time zone: from and to ("09:00"), on these days (1 Monday … 7 Sunday); and
  * whether it shows online: set so by the admin, or "auto", coming and going as
- * a person does (see `onlineAt`). */
+ * a person does (see `onlineNow`). */
 export type Presence = "auto" | "online" | "offline";
 export type SimHours = { from: string; to: string; days: number[]; paused: boolean; zone: string; presence: Presence };
 
@@ -37,17 +37,22 @@ function seeded(text: string) {
 }
 const between = (random: () => number, low: number, high: number) => Math.round(low + random() * (high - low));
 
-/** When it is online on a day, as minutes of the day [from, to): a person's day.
- * On a working day: in a little after its start and out a little around its
- * end, away for one to three short breaks between (a lunch among them, none
- * longer than LONGEST_BREAK), and perhaps back for a few minutes in the
- * evening. On a day off: a short visit or two, or none. */
+/** Each one's own habit, the same every day: some come in early and leave
+ * early, some come in late and stay late (minutes, either side of its hours). */
+const habitOf = (id: string) => between(seeded(`habit:${id}`), -45, 45);
+
+/** When it is at work on a day, as minutes of the day [from, to): a person's day.
+ * In around its start and out around its end, each at its own time (its habit,
+ * and the day's own minutes, so they come and go over an hour or two, not all
+ * at once), away for one to three short breaks between (a lunch among them,
+ * none longer than LONGEST_BREAK). On a day off: none. */
 export function onlineSpans(id: string, hours: SimHours, date: string, workday: boolean): [number, number][] {
   const random = seeded(`${id}:${date}`);
   const spans: [number, number][] = [];
   if (workday) {
-    const start = minutesOf(hours.from) + between(random, -10, 20);
-    const end = Math.min(24 * 60, minutesOf(hours.to) + between(random, -20, 15));
+    const habit = habitOf(id);
+    const start = Math.max(0, minutesOf(hours.from) + habit + between(random, -20, 30));
+    const end = Math.min(24 * 60, minutesOf(hours.to) + habit + between(random, -40, 60));
     const breaks: [number, number][] = [];
     const count = between(random, 1, 3);
     for (let n = 0; n < count && end - start > 120; n++) {
@@ -68,27 +73,53 @@ export function onlineSpans(id: string, hours: SimHours, date: string, workday: 
     for (let n = 1; n < spans.length; n++) {
       if (spans[n][0] - spans[n - 1][1] > LONGEST_BREAK) spans[n - 1][1] = spans[n][0] - LONGEST_BREAK;
     }
-    // An evening look in, some days.
-    if (random() < 0.45) {
-      const from = between(random, end + 60, Math.max(end + 60, 22 * 60));
-      spans.push([from, Math.min(24 * 60, from + between(random, 5, 25))]);
-    }
-  } else {
-    const visits = between(random, 0, 2);
-    for (let n = 0; n < visits; n++) {
-      const from = between(random, 10 * 60, 21 * 60);
-      spans.push([from, from + between(random, 10, 40)]);
-    }
   }
   return spans.filter(([from, to]) => to > from);
 }
 
-/** Whether it shows online at a moment: paused, never; otherwise as the admin set it, or, on auto, as its day goes. */
-export function onlineAt(id: string, hours: SimHours, at: number): boolean {
-  if (hours.paused) return false;
-  if (hours.presence !== "auto") return hours.presence === "online";
+/** Whether it is at work at a moment, as its day goes (breaks aside). */
+function working(id: string, hours: SimHours, at: number): boolean {
   const now = localAt(hours.zone, at);
   return onlineSpans(id, hours, now.date, hours.days.includes(now.day)).some(([from, to]) => now.minute >= from && now.minute < to);
+}
+
+/** Outside their hours, between 30% and 40% of them are online, taking turns. */
+export const OFF_HOURS_SHARE = [0.3, 0.4] as const;
+
+/** Where it stands in the queue for a turn online, at a moment: a number that
+ * holds through one of its own turns (25 to 90 minutes, starting at its own
+ * times) and is drawn anew for the next, so the turns pass from one to another,
+ * one by one. One that stood near the front for its last turn goes to the back
+ * for this one: a rest, so no one stays on for hours. */
+function turnScore(id: string, minute: number): number {
+  const own = seeded(`turns:${id}`);
+  const length = between(own, 25, 90);
+  const phase = Math.floor(own() * length);
+  const turn = Math.floor((minute + phase) / length);
+  const draw = (n: number) => seeded(`${id}:turn:${n}`)();
+  return draw(turn) * (draw(turn - 1) > 0.55 ? 0.25 : 1);
+}
+
+/** Who of them shows online at a moment. Paused, none; set online or offline
+ * by the admin, so; on auto, each at work as its day goes, and of those not at
+ * work (on a break, before or after their hours, or on a day off) between 30%
+ * and 40%, whichever stand first in the queue for a turn. The same for everyone
+ * who sees them. */
+export function onlineNow(sims: { id: string; hours: SimHours }[], at: number): Set<string> {
+  const online = new Set<string>();
+  const waiting: string[] = [];
+  for (const sim of sims) {
+    if (sim.hours.paused || sim.hours.presence === "offline") continue;
+    if (sim.hours.presence === "online" || working(sim.id, sim.hours, at)) online.add(sim.id);
+    else waiting.push(sim.id);
+  }
+  const minute = Math.floor(at / 60_000);
+  // How many take a turn: 30–40%, drifting every hour and a half.
+  const share = OFF_HOURS_SHARE[0] + seeded(`share:${Math.floor(minute / 90)}`)() * (OFF_HOURS_SHARE[1] - OFF_HOURS_SHARE[0]);
+  const turns = Math.round(share * waiting.length);
+  waiting.map(id => ({ id, score: turnScore(id, minute) })).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .slice(0, turns).forEach(entry => online.add(entry.id));
+  return online;
 }
 
 /** Its days in words: "Mon–Fri", "Every day", or each one ("Mon, Wed, Sat"). */

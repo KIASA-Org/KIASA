@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { reasons } from "@/content/accounts";
 import { noticeDecision, noticeRequest } from "@/lib/chat/server";
+import { TEAM_COLORS } from "@/lib/teams/colors";
 import { alertPerson, isAlertAddress, pushReady } from "./push";
 import { accountsLive, currentViewer, publicSupabase, siteClient, visitorClient } from "./server";
 import { VIEWER_COOKIE, initialsOf, photoUrl, type ViewerBadge } from "./viewer";
@@ -171,13 +172,15 @@ export async function decide(id: string, status: "approved" | "declined"): Promi
 
 /** An admin making an approved person a top manager, or a member again. Their
  * photo wears KIASA's leaf wherever it appears, from that moment, on every open
- * page. Admins wear theirs (and a crown) already. */
+ * page. Admins wear theirs (and a crown) already. A new top manager in no team
+ * is given one of their own, named for them ("Leon Team"), which they lead; a
+ * top manager made a member again keeps the team, for the admin to hand on. */
 export async function setTopManager(id: string, top: boolean): Promise<{ error?: string }> {
   if (!accountsLive) return {};
   const viewer = await currentViewer();
   if (!viewer?.admin) return { error: "Only KIASA's admins can name top managers." };
   const site = siteClient();
-  const { data: person } = await site.from("profiles").select("email, status").eq("id", id).maybeSingle();
+  const { data: person } = await site.from("profiles").select("email, name, status").eq("id", id).maybeSingle();
   if (!person) return { error: "That account is gone." };
   if (person.status !== "approved") return { error: "Only an approved person can be a top manager." };
   const { error } = top
@@ -186,7 +189,38 @@ export async function setTopManager(id: string, top: boolean): Promise<{ error?:
   if (error) return { error: error.code === "42P01" || error.code === "PGRST205"
     ? "Top managers are not set up in the database yet: an admin runs supabase/migrations/20261027090000_top_managers.sql in Supabase's SQL Editor."
     : "That could not be saved. Please try again." };
+  if (top) {
+    const made = await ownTeam(id, person.name as string | null, person.email as string, viewer.email);
+    if (made.error) { refresh(); return made; }
+  }
   refresh();
+  return {};
+}
+
+/** A top manager's own team, if they are in none yet: "<first name> Team" (or,
+ * if that is taken, with their whole name, then a number), in a colour no team
+ * wears yet where one is left; they are put in it, so they lead it. */
+async function ownTeam(id: string, name: string | null, email: string, by: string): Promise<{ error?: string }> {
+  const site = siteClient();
+  const [{ data: member }, { data: isAdmin }, { data: teams, error: missing }] = await Promise.all([
+    site.from("team_members").select("team_id").eq("user_id", id).maybeSingle(),
+    site.from("admins").select("email").eq("email", email).maybeSingle(),
+    site.from("teams").select("name, color"),
+  ]);
+  // Admins stand above the teams; without the teams set up, there is nothing to make.
+  if (member || isAdmin || missing) return {};
+  const whole = (name ?? "").replace(/\s+/g, " ").trim() || email.split("@")[0];
+  const first = whole.split(" ")[0];
+  const taken = new Set((teams ?? []).map(team => String(team.name).toLowerCase()));
+  const names = [`${first} Team`, `${whole} Team`, ...Array.from({ length: 20 }, (_, index) => `${first} Team ${index + 2}`)].map(entry => entry.slice(0, 40));
+  const teamName = names.find(entry => !taken.has(entry.toLowerCase()));
+  if (!teamName) return { error: "They are a top manager now, but a team could not be named for them: please make one on the Teams page." };
+  const worn = new Set((teams ?? []).map(team => team.color));
+  const color = (TEAM_COLORS.find(entry => !worn.has(entry.color)) ?? TEAM_COLORS[(teams ?? []).length % TEAM_COLORS.length]).color;
+  const { data: team, error } = await site.from("teams").insert({ name: teamName, color }).select("id").single();
+  if (error || !team) return { error: "They are a top manager now, but their team could not be made: please make one on the Teams page." };
+  const { error: joined } = await site.from("team_members").upsert({ user_id: id, team_id: team.id, assigned_at: new Date().toISOString(), assigned_by: by }, { onConflict: "user_id" });
+  if (joined) return { error: `They are a top manager now, and ${teamName} is made: please put them in it on the Teams page.` };
   return {};
 }
 
