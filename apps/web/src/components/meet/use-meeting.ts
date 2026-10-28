@@ -14,7 +14,11 @@ export type Remote = PeerState & { peer: string; streams: MediaStream[]; link: R
 export type Connection = "connecting" | "live" | "paused";
 /** How a connection is doing, for looking into a problem: by which way it goes,
  * and how much has come and gone over it (bytes); `level`, how loud their sound is now (0–1). */
-export type LinkDetails = { route: "relay" | "same network" | "internet" | "none yet"; heard: number; level: number | null; seen: number; sent: number };
+export type LinkDetails = {
+  route: "relay" | "same network" | "internet" | "none yet"; heard: number; level: number | null; seen: number; sent: number;
+  /** One's own microphone: its name, and whether sound comes from it ("no sound from it": the device gives none). */
+  micName: string | null; micState: "working" | "no sound from it" | "off" | "stopped" | "none";
+};
 
 /** `user`: who sends it, so a browser answers only those it may connect to. */
 /** `candidate`: a way to reach the sender found after its offer or answer went out. */
@@ -353,7 +357,34 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
       if (stat.type === "inbound-rtp" && stat.kind === "video") seen += Number(stat.bytesReceived ?? 0);
       if (stat.type === "outbound-rtp" && stat.kind === "audio") sent += Number(stat.bytesSent ?? 0);
     }
-    return { route, heard, level, seen, sent };
+    const track = localRef.current?.getAudioTracks()[0];
+    const micState = !track ? "none" : track.readyState === "ended" ? "stopped" : !track.enabled ? "off" : track.muted ? "no sound from it" : "working";
+    return { route, heard, level, seen, sent, micName: track?.label || null, micState };
+  };
+
+  /** The microphones on this computer, by name (once the browser has let the page use one). */
+  const microphones = async () => (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === "audioinput" && device.deviceId);
+
+  /** Another microphone, chosen by hand (as in Google Meet): in the old one's
+   * place, for everyone already here; and on. */
+  const chooseMic = async (deviceId: string) => {
+    try {
+      const [fresh] = (await navigator.mediaDevices.getUserMedia({ audio: { ...VOICE, deviceId: { exact: deviceId } } })).getAudioTracks();
+      fresh.contentHint = "speech";
+      const stream = localRef.current ?? new MediaStream();
+      for (const old of stream.getAudioTracks()) { old.stop(); stream.removeTrack(old); }
+      stream.addTrack(fresh);
+      localRef.current = stream;
+      for (const link of links.current.values()) {
+        if (link.voice) await link.voice.replaceTrack(fresh);
+        else link.voice = link.pc.addTrack(fresh, stream);
+      }
+      setMic(true);
+      setProblem("");
+      setLocal(new MediaStream(stream.getTracks()));
+    } catch (error) {
+      setProblem(micTrouble(error));
+    }
   };
 
   /** The microphone on or off; with none yet (refused, missing or busy when the meeting opened), asked for again. */
@@ -441,7 +472,7 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
 
   return {
     // Whether a relay is set up for calls that cannot go direct; and a connection's details.
-    relayed, details,
+    relayed, details, microphones, chooseMic,
     peerId, connection, present, remotes: Object.values(remotes), ended, problem, setProblem,
     local, screen, mic, cam, hand, recording,
     toggleMic, toggleCam, shareScreen, stopScreen,

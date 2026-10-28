@@ -8,7 +8,7 @@ import { askToJoin, beginMeeting, decideJoin, endMeeting } from "@/lib/meetings/
 import { meetingState, type Admission, type Meeting, type MeetStart } from "@/lib/meetings/types";
 import { Avatar } from "../site/avatar";
 import { LeafMark } from "../site/brand";
-import { Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
+import { Check, ChevronDown, Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
 import { startRecording, type Recording } from "./recorder";
 import { useMeeting, type LinkDetails, type PeerState, type Remote } from "./use-meeting";
 
@@ -253,6 +253,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
             : <div className="meet-nobody"><Avatar initials={initialsOf(me.name)} photo={me.photo} className="meet-avatar" who={me.id} /><span>Your camera is off</span></div>}
           <div className="meet-preview-controls">
             <ControlButton on={call.mic} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
+            <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
             <ControlButton on={call.cam} label={call.cam ? "Turn off camera" : "Turn on camera"} onClick={() => void call.toggleCam()}>{call.cam ? <Video /> : <VideoOff />}</ControlButton>
           </div>
         </div>
@@ -388,6 +389,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
 
     <footer className="meet-controls">
       <ControlButton on={call.mic} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
+      <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
       <ControlButton on={call.cam} label={call.cam ? "Turn off camera" : "Turn on camera"} onClick={() => void call.toggleCam()}>{call.cam ? <Video /> : <VideoOff />}</ControlButton>
       <ControlButton on={!!call.screen} active label={call.screen ? "Stop sharing your screen" : "Share your screen"} onClick={() => void call.shareScreen()}><Screen /></ControlButton>
       <ControlButton on={!!call.hand} active label={call.hand ? "Lower your hand" : "Raise your hand"} onClick={call.raiseHand}><Hand /></ControlButton>
@@ -421,6 +423,29 @@ function Frame({ title, chatTitle, children }: { title: string; chatTitle: strin
     </header>
     <main className="meet-outside-main">{children}</main>
   </div>;
+}
+
+/** Choosing the microphone, as in Google Meet: the computer's microphones, the one in use ticked. */
+function MicChoice({ current, list, choose }: { current: string | null; list: () => Promise<MediaDeviceInfo[]>; choose: (deviceId: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[] | null>(null);
+  const toggle = () => {
+    if (!open) void list().then(setDevices, () => setDevices([]));
+    setOpen(!open);
+  };
+  return <span className="meet-mic-choice">
+    <button type="button" className="meet-mic-more" aria-label="Choose microphone" title="Choose microphone" aria-haspopup="menu" aria-expanded={open} onClick={toggle}><ChevronDown /></button>
+    {open && <ul className="meet-mic-list" role="menu" aria-label="Microphones">
+      <li className="meet-mic-head">Microphone</li>
+      {devices === null ? <li className="meet-mic-none">…</li>
+        : devices.length ? devices.map(device => <li key={device.deviceId}>
+          <button type="button" role="menuitemradio" aria-checked={device.label === current} onClick={() => { setOpen(false); void choose(device.deviceId); }}>
+            <span className="meet-mic-tick">{device.label === current && <Check />}</span>{device.label || "Microphone"}
+          </button>
+        </li>)
+          : <li className="meet-mic-none">No microphone found on this computer</li>}
+    </ul>}
+  </span>;
 }
 
 function ControlButton({ on, active, danger, label, onClick, children }: {
@@ -485,6 +510,7 @@ function Details({ name, mic, peer, read }: { name: string; mic: boolean; peer?:
     <div><dt>Played here</dt><dd>{now ? (now.played ? "yes" : "no") : "…"}</dd></div>
     <div><dt>{first}&apos;s video arriving</dt><dd>{now ? (now.seen ? size(now.seen) : "none") : "…"}</dd></div>
     <div><dt>Your voice going to {first}</dt><dd>{now ? (now.sent ? size(now.sent) : "none") : "…"}</dd></div>
+    <div><dt>Your microphone</dt><dd>{now ? (now.micName ? `${now.micName} · ${now.micState}` : now.micState) : "…"}</dd></div>
   </dl>;
 }
 
