@@ -211,6 +211,57 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await adminMeet.waitForFunction(() => document.querySelectorAll('.meet-faces [data-speaking="true"]').length > 0, null, { timeout: 15000 });
   });
 
+  await step("the microphone's ring and each tile's bars move with the voice (the made-up microphone beeps)", async () => {
+    const highest = (page, selector) => page.evaluate(selector => Math.max(0, ...[...document.querySelectorAll(selector)].map(element => Number(element.style.getPropertyValue("--level") || 0))), selector);
+    let ring = 0, bars = 0;
+    for (let look = 0; look < 40 && (ring < 0.05 || bars < 0.05); look++) {
+      ring = Math.max(ring, await highest(adminMeet, '.meet-controls [data-level="me"]'));
+      bars = Math.max(bars, await highest(adminMeet, ".meet-faces .meet-bars"));
+      await adminMeet.waitForTimeout(100);
+    }
+    if (ring < 0.05) throw new Error(`the microphone's ring did not move (${ring})`);
+    if (bars < 0.05) throw new Error(`no tile's bars moved (${bars})`);
+    return `ring up to ${ring.toFixed(2)}, bars up to ${bars.toFixed(2)}`;
+  });
+
+  await step("the meeting's chat: Ana writes to everyone; the admin sees it counted, opens it and answers; Ben, coming back, reads both", async () => {
+    await anaMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    const anaChat = anaMeet.getByRole("complementary", { name: "Chat with everyone" });
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).fill("Hello everyone, can you hear me?");
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).press("Enter");
+    // Closed on the admin's side: a count on Chat, and the message shown for a moment.
+    await adminMeet.getByRole("button", { name: /^Chat with everyone, 1 new/ }).waitFor({ timeout: 10000 });
+    await adminMeet.locator(".meet-toast-message", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
+    await adminMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    const adminChat = adminMeet.getByRole("complementary", { name: "Chat with everyone" });
+    await adminChat.locator(".meet-chat-body", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
+    await adminChat.getByRole("textbox", { name: "Message to everyone" }).fill("Loud and clear, Ana.");
+    await adminChat.getByRole("button", { name: "Send" }).click();
+    await anaChat.locator(".meet-chat-body", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
+    await adminMeet.screenshot({ path: path.join(out, "meeting-chat.png") });
+    // Ben reloads the meeting: in again, he reads what was said before.
+    await benMeet.reload();
+    await join(benMeet);
+    await benMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    const benChat = benMeet.getByRole("complementary", { name: "Chat with everyone" });
+    await benChat.locator(".meet-chat-body", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
+    await benChat.locator(".meet-chat-body", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
+    await benMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 3, null, { timeout: 15000 });
+    // Someone not in the meeting reads and writes nothing.
+    const site = createClient(env.url, env.secret, { auth: { persistSession: false } });
+    const outsider = createClient(env.url, env.publishable, { auth: { persistSession: false } });
+    await outsider.auth.signInWithPassword({ email: "cara@example.com", password: people["cara@example.com"].password });
+    const [peek, sneak] = await Promise.all([
+      outsider.from("meeting_messages").select("id").eq("meeting_id", meetingId),
+      outsider.from("meeting_messages").insert({ meeting_id: meetingId, body: "sneaking in" }),
+    ]);
+    if (peek.data?.length) throw new Error("someone outside the meeting reads its chat");
+    if (!sneak.error) throw new Error("someone outside the meeting wrote in its chat");
+    const { data: names } = await site.from("meeting_messages").select("name").eq("meeting_id", meetingId).order("created_at");
+    return `by ${names.map(row => row.name).join(", ")}`;
+  });
+
   await step("Ana mutes and raises her hand; Ben turns his camera off: the others see each", async () => {
     await anaMeet.getByRole("button", { name: "Turn off microphone" }).last().click();
     await anaMeet.getByRole("button", { name: "Raise your hand" }).click();
