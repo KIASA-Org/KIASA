@@ -462,9 +462,14 @@ browsers in a meeting connect only to admins and people let in.
   says it came too fast. The voice comes first: its sending is marked high
   priority (the pictures give way while a new connection is still finding how
   much it can carry), each side asks for Opus at up to 64 kbit/s with lost
-  pieces made up, and the microphone is tuned for speech. A few strict networks let no direct call through: set
-  a relay (TURN) in Vercel as `MEETING_TURN_URLS` (comma-separated),
-  `MEETING_TURN_USERNAME` and `MEETING_TURN_CREDENTIAL`, and calls use it.
+  pieces made up, and the microphone is tuned for speech. Many networks let no direct call through (a call stays on
+  "Connecting…"): calls then need a relay (TURN). With Cloudflare's (free up to
+  1,000 GB a month), set `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN`
+  in Vercel (Cloudflare → Realtime → TURN Server → Create): as each meeting
+  opens, the server asks Cloudflare for relay passwords good for a day, and
+  calls go through it when they cannot go direct. Any other relay can be set
+  as `MEETING_TURN_URLS` (comma-separated), `MEETING_TURN_USERNAME` and
+  `MEETING_TURN_CREDENTIAL`. Without either, calls are direct only.
 - **Recording stays on the admin's computer**: the meeting as shown, with
   everyone's voices, is written as a WebM video to a file the admin chooses
   (Chrome and Edge; other browsers download it at the end). Nothing is uploaded;

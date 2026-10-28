@@ -242,6 +242,24 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 2, null, { timeout: 15000 });
   });
 
+  await step("Ben comes back with neither microphone nor camera (both refused): he still connects, and sees the others", async () => {
+    const bare = await ben.context.newPage();
+    watch(bare, "ben, no devices");
+    // As on a computer whose microphone and camera are blocked or missing.
+    await bare.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+    });
+    await bare.goto(`${BASE}/meet/${meetingId}`);
+    await join(bare);
+    await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 3, null, { timeout: 15000 });
+    // Connected to the admin, and the admin's and Ana's pictures moving on his page.
+    await adminMeet.waitForFunction(() => [...document.querySelectorAll(".meet-faces [data-tile]")].some(tile => tile.dataset.name === "Ben Okoro" && (tile.dataset.link ?? "").startsWith("connected")), null, { timeout: 20000 });
+    await waitMoving(bare, 2);
+    await bare.screenshot({ path: path.join(out, "no-devices.png") });
+    await bare.getByRole("button", { name: "Leave the meeting" }).click();
+    await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 2, null, { timeout: 15000 });
+  });
+
   await step("the admin ends it for everyone: Ana's window says so, and the card in the chat reads Ended", async () => {
     await adminMeet.getByRole("button", { name: "Leave the meeting" }).click();
     await adminMeet.getByRole("button", { name: "End for everyone" }).click();
