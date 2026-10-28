@@ -220,6 +220,10 @@ filters, the forms (which, except sign-up and sign-in, are not connected yet,
 and say so when sent), and the admin page's decisions, search and filter.
 Without JavaScript the whole page is still readable.
 
+### Motion
+
+How everything moves is set in one place, `src/styles/motion.css`, loaded last: a few timings (`--motion-quick` 140 ms to `--motion-move` 420 ms) and curves (arriving quick then settling, leaving quickly, a small spring for a press). A page's content (`#main-content`) fades and rises in each time a page opens while the bars stay still; a loading screen fades in a moment late, so a quick page never flashes one. Menus, dialogs and the photo panel pop open; side panels slide in; notices and toasts rise; another chat or Job desk tab fades in; cards and figures arrive one after another; buttons give a little when pressed; rows light as the pointer passes. Animations run only before and during an arrival (never leaving a transform on a page, which would carry its fixed menus with it). With reduce motion set on the computer, nothing moves. (React's `<ViewTransition>` was tried: page changes here never started one, so the arrival is plain CSS, which works in every browser.)
+
 ### Speed between pages
 
 A click on a link to another page starts a thin leaf line along the top of the
@@ -470,6 +474,8 @@ browsers in a meeting connect only to admins and people let in.
   calls go through it when they cannot go direct. Any other relay can be set
   as `MEETING_TURN_URLS` (comma-separated), `MEETING_TURN_USERNAME` and
   `MEETING_TURN_CREDENTIAL`. Without either, calls are direct only.
+- **The microphone's level, live**: a ring around one's own microphone button grows with one's voice (on the waiting screen too, to check it works), and three bars by each name on the tiles move with that person's voice; muted, nothing moves. One loop reads every voice each frame and sets `--level` on what shows it, without drawing the page again.
+- **The meeting's chat** (Chat with everyone): a panel beside the call that everyone in the meeting reads and writes, kept with the meeting (`supabase/migrations/20261028230000_meeting_chat.sql`), so whoever comes in later reads what was said. Only those in it (its chat's members who are admins or let in) read or write; the database sets each message's name and time. Closed, a new message is counted on the Chat button and shown for a moment.
 - **Recording stays on the admin's computer**: the meeting as shown, with
   everyone's voices, is written as a WebM video to a file the admin chooses
   (Chrome and Edge; other browsers download it at the end). Nothing is uploaded;
@@ -644,7 +650,8 @@ Once, in this order:
    `supabase/migrations/20261028150000_sims_in_groups.sql` (simulated members in groups), then
    `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live), then
    `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline), then
-   `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work).
+   `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work), then
+   `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

@@ -1,0 +1,97 @@
+/* ───────── Motion ─────────
+   How KIASA moves, in one place: a few timings and curves, used by everything
+   that appears, leaves or answers a touch, so nothing on any page jumps or
+   snaps. Things arrive softly (fast at first, settling at the end), leave
+   quickly, and a press is answered with a small spring. With "reduce motion"
+   set on the computer, everything appears and changes at once.
+
+   Pages: a page's content (#main-content) fades and rises in each time a page
+   opens, while KIASA's bars stay where they are; a loading screen fades in a
+   moment after it is asked for, so a quick page never flashes one. */
+
+:root {
+  --motion-quick: 140ms;
+  --motion-base: 220ms;
+  --motion-gentle: 320ms;
+  --motion-move: 420ms;
+  /* Arriving: quick, then settling. */
+  --motion-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Leaving: a short ease into going. */
+  --motion-in: cubic-bezier(0.4, 0, 1, 1);
+  /* A press, or a pop: a little past, then back. */
+  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes motion-fade { from { opacity: 0; } }
+@keyframes motion-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes motion-pop { from { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+@keyframes motion-from-right { from { opacity: 0; transform: translateX(28px); } }
+@keyframes motion-from-left { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes motion-from-below { from { opacity: 0; transform: translateY(24px); } }
+
+/* ── Between pages: the content arrives; the loading screen, a moment late. (Only
+   before and during the arrival, never after: a moved page would carry its
+   fixed menus and panels with it.) */
+#main-content { animation: var(--motion-gentle) var(--motion-out) backwards page-arrive; }
+.page-loading > :not(.route-progress) { animation: var(--motion-base) ease 120ms backwards motion-fade; }
+@keyframes page-arrive { from { opacity: 0; transform: translateY(12px); } }
+
+/* ── What answers a press: a small give, and back with a spring. */
+:is(.account-button, .admin-approve, .admin-delete, .b-submit, .chat-pill, .chat-dialog-button, .chat-send, .chat-new, .meet-mini, .jobs-tab, .photo-choose) {
+  transition: background-color var(--motion-quick) ease, color var(--motion-quick) ease, border-color var(--motion-quick) ease,
+    box-shadow var(--motion-base) ease, opacity var(--motion-quick) ease, transform var(--motion-base) var(--motion-spring);
+}
+:is(.account-button, .admin-approve, .admin-delete, .b-submit, .chat-pill, .chat-dialog-button, .meet-mini, .photo-choose):not(:disabled, [aria-disabled]):active { transform: scale(0.97); }
+:is(.chat-send, .chat-new):not(:disabled, [aria-disabled]):active { transform: scale(0.92); }
+.chat-icon { transition: color var(--motion-quick) ease, background-color var(--motion-quick) ease, transform var(--motion-base) var(--motion-spring); }
+.chat-icon:not(:disabled):active { transform: scale(0.9); }
+.chat-row { transition: background-color var(--motion-quick) ease, transform var(--motion-base) var(--motion-spring); }
+.chat-row:active { transform: scale(0.99); }
+
+/* ── Menus, dialogs and panels open softly; toasts rise into place. */
+.chat-menu, .app-menu, .photo-panel, .meet-mic-list { animation: var(--motion-base) var(--motion-out) both motion-pop; transform-origin: top center; }
+:is(.chat-dialog, .sims-photo)[open] { animation: var(--motion-gentle) var(--motion-out) both motion-pop; }
+:is(.chat-dialog, .sims-photo)[open]::backdrop { animation: var(--motion-base) ease both motion-fade; }
+.chat-info { animation: var(--motion-gentle) var(--motion-out) both motion-from-right; }
+.chat-picker { animation: var(--motion-gentle) var(--motion-out) both motion-from-left; }
+.chat-conversation > .chat-picker { animation-name: motion-from-right; }
+.chat-members { animation: var(--motion-gentle) var(--motion-out) both motion-from-right; }
+:is(.chat-notice-bar, .jobs-notice) { animation: var(--motion-gentle) var(--motion-out) both motion-rise; }
+.admin-notice { animation: var(--motion-gentle) var(--motion-out) both motion-rise; }
+.chat-ringing, .meet-knock { animation: var(--motion-gentle) var(--motion-out) both motion-from-below; }
+
+/* ── What changes in place comes in softly: another chat opened, another tab of the Job desk. */
+.chat-conversation { animation: var(--motion-base) var(--motion-out) both motion-fade; }
+.jobs-body > * { animation: var(--motion-gentle) var(--motion-out) both motion-rise; }
+.chat-message { animation: var(--motion-base) var(--motion-out) both motion-rise; }
+
+/* ── Cards and figures arrive one after another, a moment apart. */
+:is(.jobs-tile, .jobs-card, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request, .sims-bulk) { animation: var(--motion-gentle) var(--motion-out) both motion-rise; }
+:is(.jobs-tile, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request):nth-child(2) { animation-delay: 40ms; }
+:is(.jobs-tile, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request):nth-child(3) { animation-delay: 80ms; }
+:is(.jobs-tile, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request):nth-child(4) { animation-delay: 120ms; }
+:is(.jobs-tile, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request):nth-child(5) { animation-delay: 160ms; }
+:is(.jobs-tile, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request):nth-child(n+6) { animation-delay: 200ms; }
+:is(.teams-card, .jobs-member) { transition: transform var(--motion-base) var(--motion-out), box-shadow var(--motion-base) ease; }
+:is(.teams-card, .jobs-member):hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgb(0 0 0 / 0.28); }
+
+/* ── Tables and lists: a row lights as the pointer passes. */
+:is(.admin-table, .sims-table, .jobs-table) tbody tr { transition: background-color var(--motion-quick) ease; }
+:is(.admin-table, .sims-table, .jobs-table) tbody tr:hover { background-color: rgb(236 255 243 / 0.03); }
+
+/* ── Fields answer focus softly. */
+:is(input, textarea, select) { transition: border-color var(--motion-quick) ease, box-shadow var(--motion-base) ease, background-color var(--motion-quick) ease; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-content, .page-loading > :not(.route-progress) { animation: none; }
+  .chat-menu, .app-menu, .photo-panel, .meet-mic-list, :is(.chat-dialog, .sims-photo)[open], :is(.chat-dialog, .sims-photo)[open]::backdrop,
+  .chat-info, .chat-picker, .chat-members, .chat-notice-bar, .jobs-notice, .admin-notice, .chat-ringing, .meet-knock,
+  .chat-conversation, .jobs-body > *, .chat-message,
+  .jobs-tile, .jobs-card, .jobs-member, .teams-card, .admin-stats .b-stat, .admin-request, .sims-bulk { animation: none; }
+  :is(.account-button, .admin-approve, .admin-delete, .b-submit, .chat-pill, .chat-dialog-button, .meet-mini, .photo-choose, .chat-send, .chat-new, .chat-icon, .chat-row):active,
+  :is(.teams-card, .jobs-member):hover { transform: none; }
+}

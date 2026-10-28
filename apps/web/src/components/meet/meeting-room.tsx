@@ -8,7 +8,8 @@ import { askToJoin, beginMeeting, decideJoin, endMeeting } from "@/lib/meetings/
 import { meetingState, type Admission, type Meeting, type MeetStart } from "@/lib/meetings/types";
 import { Avatar } from "../site/avatar";
 import { LeafMark } from "../site/brand";
-import { Check, ChevronDown, Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
+import { ChatBubble, Check, ChevronDown, Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
+import { MeetingChat, MessageToast, type MeetMessage } from "./meeting-chat";
 import { startRecording, type Recording } from "./recorder";
 import { useMeeting, type LinkDetails, type PeerState, type Remote } from "./use-meeting";
 
@@ -38,33 +39,55 @@ function Voice({ stream, own, peer }: { stream: MediaStream; own?: boolean; peer
   return <audio ref={element} data-voice data-peer={peer} autoPlay muted={own} />;
 }
 
-/** Who is speaking now: each voice's loudness, heard a few times a second. */
+/** Sets how loud a voice is now (0–1) on everything that shows it ([data-level="<key>"]), as `--level`. */
+const showLevel = (key: string, level: number) => {
+  for (const element of document.querySelectorAll<HTMLElement>(`[data-level="${CSS.escape(key)}"]`)) element.style.setProperty("--level", level.toFixed(3));
+};
+
+/** Who is speaking now, and how loud each voice is: heard every frame. The
+ * loudness moves the microphone's ring and the bars on each tile straight
+ * away (`--level`, rising at once and falling softly, as a meter does),
+ * without drawing the page again; who is speaking is told a few times a second. */
 function useSpeaking(voices: { key: string; stream: MediaStream | null; on: boolean }[]) {
   const [speaking, setSpeaking] = useState<string[]>([]);
   const signature = voices.map(voice => `${voice.key}:${voice.on}:${voice.stream?.getAudioTracks().map(track => track.id).join(",") ?? ""}`).join("|");
   useEffect(() => {
+    // Silent first: a voice turned off shows no level.
+    for (const voice of voices) showLevel(voice.key, 0);
     const listening = voices.filter(voice => voice.on && voice.stream?.getAudioTracks().length);
     if (!listening.length) return;
     const audio = new AudioContext();
     const meters = listening.map(voice => {
       const analyser = audio.createAnalyser();
       analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
       audio.createMediaStreamSource(new MediaStream(voice.stream!.getAudioTracks())).connect(analyser);
-      return { key: voice.key, analyser, data: new Uint8Array(analyser.fftSize) };
+      return { key: voice.key, analyser, data: new Uint8Array(analyser.fftSize), loud: 0, level: 0 };
     });
-    let last = "";
-    const timer = window.setInterval(() => {
-      const now = meters.filter(meter => {
+    let frame = 0;
+    const listen = () => {
+      for (const meter of meters) {
         meter.analyser.getByteTimeDomainData(meter.data);
         let sum = 0;
         for (const value of meter.data) sum += ((value - 128) / 128) ** 2;
-        return Math.sqrt(sum / meter.data.length) > 0.04;
-      }).map(meter => meter.key);
+        meter.loud = Math.sqrt(sum / meter.data.length);
+        const target = Math.min(1, meter.loud * 6);
+        meter.level = target > meter.level ? target : meter.level * 0.84 + target * 0.16;
+        showLevel(meter.key, meter.level);
+      }
+      frame = window.requestAnimationFrame(listen);
+    };
+    frame = window.requestAnimationFrame(listen);
+    let last = "";
+    const timer = window.setInterval(() => {
+      const now = meters.filter(meter => meter.loud > 0.04).map(meter => meter.key);
       const key = now.join(",");
       if (key !== last) { last = key; setSpeaking(now); }
     }, 200);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.clearInterval(timer);
+      for (const meter of meters) showLevel(meter.key, 0);
       void audio.close();
     };
     // The voices themselves are described by their signature.
@@ -117,7 +140,11 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
   // In once joined, or, having asked, once let in.
   const joined = joinedHere || (asked && letIn);
   const call = useMeeting({ supabase, start, joined, allowed });
-  const [panel, setPanel] = useState(false);
+  // The panel beside the call: the people in it, or its chat.
+  const [panel, setPanel] = useState<"people" | "chat" | null>(null);
+  // Messages from others not yet seen (the chat closed), and the latest, shown for a moment.
+  const [unread, setUnread] = useState(0);
+  const [latest, setLatest] = useState<MeetMessage | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [recorder, setRecorder] = useState<Recording | null>(null);
   const [notice, setNotice] = useState("");
@@ -189,7 +216,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
 
   const others = call.remotes;
   const speaking = useSpeaking([
-    { key: "me", stream: call.local, on: call.mic && joined },
+    { key: "me", stream: call.local, on: call.mic },
     ...others.map(remote => ({ key: remote.peer, stream: cameraOf(remote), on: remote.mic })),
   ]);
   const recordingBy = others.find(remote => remote.recording)?.name ?? (recorder ? "You" : null);
@@ -252,7 +279,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
           {call.local && call.cam ? <StreamVideo stream={call.local} className="meet-video" />
             : <div className="meet-nobody"><Avatar initials={initialsOf(me.name)} photo={me.photo} className="meet-avatar" who={me.id} /><span>Your camera is off</span></div>}
           <div className="meet-preview-controls">
-            <ControlButton on={call.mic} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
+            <ControlButton on={call.mic} level={call.mic ? "me" : undefined} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
             <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
             <ControlButton on={call.cam} label={call.cam ? "Turn off camera" : "Turn on camera"} onClick={() => void call.toggleCam()}>{call.cam ? <Video /> : <VideoOff />}</ControlButton>
           </div>
@@ -322,19 +349,21 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
         </div>}
         <div className="meet-faces">
           <div className="meet-cell"><Tile name={`${me.name} (you)`} initials={initialsOf(me.name)} photo={me.photo} user={me.id} stream={call.local} camera={call.cam} mic={call.mic}
-            hand={!!call.hand} speaking={speaking.includes("me")} /></div>
+            hand={!!call.hand} speaking={speaking.includes("me")} level="me" /></div>
           {others.map(remote => {
             const person = start.people.find(entry => entry.id === remote.user);
             return <div key={remote.peer} className="meet-cell"><Tile name={remote.name} initials={initialsOf(remote.name)} photo={person?.photo ?? null} user={remote.user}
-              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} link={remote.link} relayed={call.relayed} peer={remote.peer} details={() => call.details(remote.peer)} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
+              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} level={remote.peer} link={remote.link} relayed={call.relayed} peer={remote.peer} details={() => call.details(remote.peer)} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
           })}
         </div>
       </main>
 
-      {panel && <aside className="meet-panel" aria-label="People">
+      {joined && <MeetingChat supabase={supabase} meetingId={meeting.id} me={me} open={panel === "chat"} onClose={() => setPanel(null)}
+        onArrived={message => { if (panel !== "chat") { setUnread(count => count + 1); setLatest(message); } }} />}
+      {panel === "people" && <aside className="meet-panel" aria-label="People">
         <div className="meet-panel-head">
           <p className="meet-panel-title">People ({count})</p>
-          <button type="button" className="chat-icon" aria-label="Close" onClick={() => setPanel(false)}><Close /></button>
+          <button type="button" className="chat-icon" aria-label="Close" onClick={() => setPanel(null)}><Close /></button>
         </div>
         {hands.length > 0 && <p className="meet-panel-hands">✋ {hands.map(entry => entry.name).join(", ")}</p>}
         {waiting.length > 0 && <>
@@ -384,17 +413,20 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
     <div role="status" className="meet-toasts">
       {notice && <p className="meet-toast">{notice}<button type="button" aria-label="Dismiss" onClick={() => setNotice("")}><Close /></button></p>}
       {call.problem && <p className="meet-toast">{call.problem}<button type="button" aria-label="Dismiss" onClick={() => call.setProblem("")}><Close /></button></p>}
+      {latest && panel !== "chat" && <MessageToast key={latest.id} message={latest} onOpen={() => { setPanel("chat"); setUnread(0); setLatest(null); }} onGone={() => setLatest(null)} />}
       {hands.length > 0 && !panel && <p className="meet-toast">✋ {hands.map(entry => entry.name).join(", ")} raised {hands.length > 1 ? "their hands" : hands[0].name === "You" ? "your hand" : "a hand"}</p>}
     </div>
 
     <footer className="meet-controls">
-      <ControlButton on={call.mic} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
+      <ControlButton on={call.mic} level={call.mic ? "me" : undefined} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
       <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
       <ControlButton on={call.cam} label={call.cam ? "Turn off camera" : "Turn on camera"} onClick={() => void call.toggleCam()}>{call.cam ? <Video /> : <VideoOff />}</ControlButton>
       <ControlButton on={!!call.screen} active label={call.screen ? "Stop sharing your screen" : "Share your screen"} onClick={() => void call.shareScreen()}><Screen /></ControlButton>
       <ControlButton on={!!call.hand} active label={call.hand ? "Lower your hand" : "Raise your hand"} onClick={call.raiseHand}><Hand /></ControlButton>
       {me.admin && <ControlButton on={!!recorder} active danger label={recorder ? "Stop recording" : "Record to this computer"} onClick={record}><Record /></ControlButton>}
-      <ControlButton on={panel} active label={`People (${count})${me.admin && waiting.length ? `, ${waiting.length} waiting` : ""}`} onClick={() => setPanel(!panel)}><People /></ControlButton>
+      <ControlButton on={panel === "chat"} active label={`Chat with everyone${unread ? `, ${unread} new` : ""}`} count={panel === "chat" ? 0 : unread}
+        onClick={() => { setPanel(panel === "chat" ? null : "chat"); setUnread(0); setLatest(null); }}><ChatBubble /></ControlButton>
+      <ControlButton on={panel === "people"} active label={`People (${count})${me.admin && waiting.length ? `, ${waiting.length} waiting` : ""}`} onClick={() => setPanel(panel === "people" ? null : "people")}><People /></ControlButton>
       <div className="meet-leave-wrap">
         <button type="button" className="meet-leave" aria-label="Leave the meeting" title="Leave" onClick={() => (me.admin ? setLeaving(!leaving) : leave())}><PhoneOff /></button>
         {leaving && <div className="meet-leave-menu" role="group" aria-label="Leave">
@@ -448,15 +480,24 @@ function MicChoice({ current, list, choose }: { current: string | null; list: ()
   </span>;
 }
 
-function ControlButton({ on, active, danger, label, onClick, children }: {
-  on: boolean; active?: boolean; danger?: boolean; label: string; onClick: () => void; children: React.ReactNode;
+function ControlButton({ on, active, danger, label, onClick, level, count, children }: {
+  on: boolean; active?: boolean; danger?: boolean; label: string; onClick: () => void;
+  /** Whose voice's level its ring shows, live. */
+  level?: string;
+  /** A count on its corner (new messages). */
+  count?: number;
+  children: React.ReactNode;
 }) {
   // Microphone and camera read "off" in red; the rest light up when on.
-  return <button type="button" className="meet-control" aria-label={label} title={label} aria-pressed={on}
-    data-state={active ? (on ? (danger ? "recording" : "lit") : undefined) : on ? undefined : "off"} onClick={onClick}>{children}</button>;
+  return <button type="button" className="meet-control" aria-label={label} title={label} aria-pressed={on} data-level={level}
+    data-state={active ? (on ? (danger ? "recording" : "lit") : undefined) : on ? undefined : "off"} onClick={onClick}>
+    {level && <span className="meet-control-level" aria-hidden="true" />}
+    {children}
+    {!!count && <span className="meet-control-count" aria-hidden="true">{count > 9 ? "9+" : count}</span>}
+  </button>;
 }
 
-function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, link, relayed, peer, details, state }: {
+function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, level, link, relayed, peer, details, state }: {
   name: string; initials: string; photo: string | null; user: string; stream: MediaStream | null; camera: boolean; mic: boolean; hand: boolean;
   speaking: boolean; link?: RTCPeerConnectionState;
   /** Whether a relay is set up, said while connecting: a call that cannot go direct needs one. */
@@ -465,6 +506,8 @@ function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking
   state?: string;
   /** Someone else's: their connection's details, a click away. */
   peer?: string; details?: () => Promise<LinkDetails | null>;
+  /** Whose voice's level the bars by the name show. */
+  level?: string;
 }) {
   const [open, setOpen] = useState(false);
   const showing = camera && !!stream?.getVideoTracks().length;
@@ -474,7 +517,7 @@ function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking
   return <div className="meet-tile" style={{ "--ratio": shape } as React.CSSProperties} data-tile="face" data-name={name} data-initials={initials} data-camera={showing ? "on" : "off"} data-speaking={speaking} data-link={state}>
     {showing ? <StreamVideo stream={stream!} className="meet-video" onShape={setRatio} />
       : <div className="meet-nobody"><Avatar initials={initials} photo={photo} className="meet-avatar" who={user} /></div>}
-    <span className="meet-name">{!mic && <MicOff aria-label="Microphone off" role="img" aria-hidden={false} />}{name}</span>
+    <span className="meet-name">{!mic ? <MicOff aria-label="Microphone off" role="img" aria-hidden={false} /> : level && <span className="meet-bars" data-level={level} aria-hidden="true"><i /><i /><i /></span>}{name}</span>
     {hand && <span className="meet-hand" role="img" aria-label="Hand raised">✋</span>}
     {details && <button type="button" className="meet-details-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close details" : "Details"}</button>}
     {details && open && <Details name={name} mic={mic} peer={peer} read={details} />}

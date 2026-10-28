@@ -16,6 +16,7 @@ import "@/styles/chat.css";
 import "@/styles/jobs.css";
 import "@/styles/meet.css";
 import "@/styles/site-loading.css";
+import "@/styles/motion.css";
 
 // Self-hosted at build time: the browser makes no request to Google.
 const grotesk = Schibsted_Grotesk({ subsets: ["latin"], display: "swap", variable: "--font-grotesk" });
