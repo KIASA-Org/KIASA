@@ -12,6 +12,9 @@ export type PeerState = { user: string; name: string; mic: boolean; cam: boolean
 /** `link`, `signaling` and `trouble`: how the connection to them stands, and the last thing that went wrong with it. */
 export type Remote = PeerState & { peer: string; streams: MediaStream[]; link: RTCPeerConnectionState; signaling: RTCSignalingState; trouble: string };
 export type Connection = "connecting" | "live" | "paused";
+/** How a connection is doing, for looking into a problem: by which way it goes,
+ * and how much has come and gone over it (bytes); `level`, how loud their sound is now (0–1). */
+export type LinkDetails = { route: "relay" | "same network" | "internet" | "none yet"; heard: number; level: number | null; seen: number; sent: number };
 
 /** `user`: who sends it, so a browser answers only those it may connect to. */
 /** `candidate`: a way to reach the sender found after its offer or answer went out. */
@@ -42,6 +45,15 @@ function clearVoice(description: RTCSessionDescriptionInit): RTCSessionDescripti
     sdp: sdp.replace(new RegExp(`a=fmtp:${opus} ([^\\r\\n]*)`), (line, params: string) =>
       /maxaveragebitrate/.test(params) ? line : `a=fmtp:${opus} ${params};maxaveragebitrate=${VOICE_BITRATE};useinbandfec=1`),
   };
+}
+
+/** Why the microphone could not be had, in words that say what to do. */
+function micTrouble(error: unknown): string {
+  const name = (error as DOMException | null)?.name;
+  if (name === "NotAllowedError" || name === "SecurityError") return "The microphone is blocked for kiasa.tech. Allow it from the icon left of the address (Site settings → Microphone), and in Windows (Settings → Privacy & security → Microphone), then click the microphone button again.";
+  if (name === "NotFoundError" || name === "OverconstrainedError") return "No microphone was found on this computer. Plug one in (or a headset), then click the microphone button again.";
+  if (name === "NotReadableError" || name === "AbortError") return "Another app is using the microphone (Zoom, Teams, Google Meet…). Close it, then click the microphone button again.";
+  return "The microphone could not be started. Please click the microphone button again.";
 }
 
 /** Waits until a connection has found the ways to be reached that matter:
@@ -293,10 +305,16 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE, video: CAMERA });
       } catch {
-        // No camera, or it was refused: the microphone alone, then nothing.
-        try { stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE }); setCam(false); } catch {
-          setMic(false); setCam(false);
-          setProblem("This browser was not allowed to use your camera or microphone. You can still join, and see and hear the others; allow them from the lock beside the address to be seen and heard.");
+        // No camera, or it was refused: the microphone alone; no microphone: the camera alone; then nothing.
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE }); setCam(false); } catch (micError) {
+          setMic(false);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: CAMERA });
+            setProblem(micTrouble(micError));
+          } catch {
+            setCam(false);
+            setProblem("This browser was not allowed to use your camera or microphone. You can still join, and see and hear the others; allow them from the lock beside the address to be seen and heard.");
+          }
         }
       }
       if (stopped) { stream?.getTracks().forEach(track => track.stop()); return; }
@@ -312,11 +330,58 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     };
   }, []);
 
-  const toggleMic = () => {
-    const track = localRef.current?.getAudioTracks()[0];
-    if (!track) return setProblem("No microphone is available to this page.");
-    track.enabled = !mic;
-    setMic(!mic);
+  /** A connection's details, from the browser's own figures. */
+  const details = async (peer: string): Promise<LinkDetails | null> => {
+    const pc = links.current.get(peer)?.pc;
+    if (!pc) return null;
+    const all = new Map<string, Record<string, unknown>>();
+    let chosen: string | undefined;
+    (await pc.getStats()).forEach((stat: Record<string, unknown>) => {
+      all.set(stat.id as string, stat);
+      if (stat.type === "transport" && typeof stat.selectedCandidatePairId === "string") chosen = stat.selectedCandidatePairId;
+    });
+    if (!chosen) for (const stat of all.values()) if (stat.type === "candidate-pair" && stat.nominated && stat.state === "succeeded") chosen = stat.id as string;
+    const pair = chosen ? all.get(chosen) : undefined;
+    const ends = [pair && all.get(pair.localCandidateId as string)?.candidateType, pair && all.get(pair.remoteCandidateId as string)?.candidateType];
+    const route = !pair ? "none yet" : ends.includes("relay") ? "relay" : ends.every(type => type === "host") ? "same network" : "internet";
+    let heard = 0, seen = 0, sent = 0, level: number | null = null;
+    for (const stat of all.values()) {
+      if (stat.type === "inbound-rtp" && stat.kind === "audio") {
+        heard += Number(stat.bytesReceived ?? 0);
+        if (typeof stat.audioLevel === "number") level = Math.max(level ?? 0, stat.audioLevel);
+      }
+      if (stat.type === "inbound-rtp" && stat.kind === "video") seen += Number(stat.bytesReceived ?? 0);
+      if (stat.type === "outbound-rtp" && stat.kind === "audio") sent += Number(stat.bytesSent ?? 0);
+    }
+    return { route, heard, level, seen, sent };
+  };
+
+  /** The microphone on or off; with none yet (refused, missing or busy when the meeting opened), asked for again. */
+  const toggleMic = async () => {
+    const stream = localRef.current;
+    const track = stream?.getAudioTracks()[0];
+    if (track) {
+      track.enabled = !mic;
+      setMic(!mic);
+      return;
+    }
+    try {
+      const [fresh] = (await navigator.mediaDevices.getUserMedia({ audio: VOICE })).getAudioTracks();
+      fresh.contentHint = "speech";
+      const into = stream ?? new MediaStream();
+      into.addTrack(fresh);
+      localRef.current = into;
+      // To everyone already here: in its place, or newly sent (each connection asks the other again).
+      for (const link of links.current.values()) {
+        if (link.voice) await link.voice.replaceTrack(fresh);
+        else link.voice = link.pc.addTrack(fresh, into);
+      }
+      setMic(true);
+      setProblem("");
+      setLocal(new MediaStream(into.getTracks()));
+    } catch (error) {
+      setProblem(micTrouble(error));
+    }
   };
 
   /** Camera off lets the camera go (its light goes out); on, a new picture is sent to everyone. */
@@ -375,8 +440,8 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   const announceEnd = () => { void channel.current?.send({ type: "broadcast", event: "ended", payload: {} }); };
 
   return {
-    // Whether a relay is set up for calls that cannot go direct.
-    relayed,
+    // Whether a relay is set up for calls that cannot go direct; and a connection's details.
+    relayed, details,
     peerId, connection, present, remotes: Object.values(remotes), ended, problem, setProblem,
     local, screen, mic, cam, hand, recording,
     toggleMic, toggleCam, shareScreen, stopScreen,

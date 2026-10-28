@@ -171,6 +171,22 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     return `every picture moving ${Date.now() - at} ms after he was in`;
   });
 
+  await step("Details on Ana's tile: the route, her sound arriving and played, the admin's voice going to her", async () => {
+    const face = tile(adminMeet, "Ana Silva");
+    await face.getByRole("button", { name: "Details" }).click();
+    const details = face.locator(".meet-details");
+    await details.locator("div", { hasText: "Route" }).locator("dd", { hasText: /direct|relay/ }).waitFor({ timeout: 10000 });
+    await details.locator("div", { hasText: "Played here" }).locator("dd", { hasText: "yes" }).waitFor({ timeout: 10000 });
+    await adminMeet.waitForFunction(() => {
+      const rows = Object.fromEntries([...document.querySelectorAll(".meet-details div")].map(row => [row.querySelector("dt").textContent, row.querySelector("dd").textContent]));
+      return /B|KB|MB/.test(rows["Ana's sound arriving"] ?? "") && /B|KB|MB/.test(rows["Your voice going to Ana"] ?? "");
+    }, null, { timeout: 10000 });
+    const text = (await details.innerText()).replace(/s+/g, " ");
+    await face.screenshot({ path: path.join(out, "details.png") });
+    await face.getByRole("button", { name: "Close details" }).click();
+    return text;
+  });
+
   await step("who is speaking shows (the made-up microphone beeps)", async () => {
     await adminMeet.waitForFunction(() => document.querySelectorAll('.meet-faces [data-speaking="true"]').length > 0, null, { timeout: 15000 });
   });
@@ -258,6 +274,32 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await bare.screenshot({ path: path.join(out, "no-devices.png") });
     await bare.getByRole("button", { name: "Leave the meeting" }).click();
     await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 2, null, { timeout: 15000 });
+  });
+
+  await step("Ben comes back with his camera but no microphone: seen, and told why; with one plugged in, the mic button sends his voice", async () => {
+    const page = await ben.context.newPage();
+    watch(page, "ben, no microphone");
+    // No microphone on this computer, until one is "plugged in" (window.micBack).
+    await page.addInitScript(() => {
+      const ask = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = constraints => constraints?.audio && !window.micBack
+        ? Promise.reject(new DOMException("Requested device not found", "NotFoundError")) : ask(constraints);
+    });
+    await page.goto(`${BASE}/meet/${meetingId}`);
+    await join(page);
+    await page.getByText("No microphone was found on this computer").waitFor({ timeout: 10000 });
+    await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 3, null, { timeout: 15000 });
+    await waitMoving(adminMeet, 2);
+    const voices = () => adminMeet.evaluate(() => [...document.querySelectorAll("audio[data-voice]")].reduce((sum, audio) => sum + (audio.srcObject?.getAudioTracks().filter(track => track.readyState === "live").length ?? 0), 0));
+    const before = await voices();
+    await page.evaluate(() => { window.micBack = true; });
+    await page.getByRole("button", { name: "Turn on microphone" }).click();
+    await page.getByRole("button", { name: "Turn off microphone" }).waitFor({ timeout: 10000 });
+    await adminMeet.waitForFunction(count => [...document.querySelectorAll("audio[data-voice]")].reduce((sum, audio) => sum + (audio.srcObject?.getAudioTracks().filter(track => track.readyState === "live").length ?? 0), 0) > count, before, { timeout: 20000 });
+    await tile(adminMeet, "Ben Okoro").locator(".meet-name svg").waitFor({ state: "detached", timeout: 10000 });
+    await page.getByRole("button", { name: "Leave the meeting" }).click();
+    await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 2, null, { timeout: 15000 });
+    return `voices on the admin's page: ${before} before, one more after`;
   });
 
   await step("the admin ends it for everyone: Ana's window says so, and the card in the chat reads Ended", async () => {
