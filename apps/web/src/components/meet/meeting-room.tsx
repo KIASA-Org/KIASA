@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { initialsOf } from "@/lib/accounts/viewer";
 import { askToJoin, beginMeeting, decideJoin, endMeeting } from "@/lib/meetings/actions";
@@ -10,7 +10,7 @@ import { Avatar } from "../site/avatar";
 import { LeafMark } from "../site/brand";
 import { Close, Hand, Mic, MicOff, People, PhoneOff, Record, Screen, Video, VideoOff } from "../site/icons";
 import { startRecording, type Recording } from "./recorder";
-import { useMeeting, type PeerState, type Remote } from "./use-meeting";
+import { useMeeting, type LinkDetails, type PeerState, type Remote } from "./use-meeting";
 
 /** A video element showing a stream, as the camera sees it (never mirrored),
  * silent (the sound plays elsewhere, or is one's own). `onShape`: the
@@ -29,13 +29,13 @@ function StreamVideo({ stream, className, onShape }: { stream: MediaStream; clas
 }
 
 /** Someone's voice: played (or, for one's own, only kept for the recording). */
-function Voice({ stream, own }: { stream: MediaStream; own?: boolean }) {
+function Voice({ stream, own, peer }: { stream: MediaStream; own?: boolean; peer?: string }) {
   const element = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     const audio = element.current;
     if (audio && audio.srcObject !== stream) audio.srcObject = stream;
   }, [stream]);
-  return <audio ref={element} data-voice autoPlay muted={own} />;
+  return <audio ref={element} data-voice data-peer={peer} autoPlay muted={own} />;
 }
 
 /** Who is speaking now: each voice's loudness, heard a few times a second. */
@@ -325,7 +325,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
           {others.map(remote => {
             const person = start.people.find(entry => entry.id === remote.user);
             return <div key={remote.peer} className="meet-cell"><Tile name={remote.name} initials={initialsOf(remote.name)} photo={person?.photo ?? null} user={remote.user}
-              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} link={remote.link} relayed={call.relayed} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
+              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} link={remote.link} relayed={call.relayed} peer={remote.peer} details={() => call.details(remote.peer)} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
           })}
         </div>
       </main>
@@ -368,7 +368,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
     {/* Every voice, played once (one's own kept silent, for the recording). */}
     <div hidden>
       {call.local && <Voice stream={call.local} own />}
-      {others.map(remote => { const stream = cameraOf(remote); return stream && <Voice key={remote.peer} stream={stream} />; })}
+      {others.map(remote => { const stream = cameraOf(remote); return stream && <Voice key={remote.peer} stream={stream} peer={remote.peer} />; })}
     </div>
 
     {me.admin && waiting.length > 0 && <div className="meet-knocks" role="region" aria-label="Asking to join">
@@ -431,14 +431,17 @@ function ControlButton({ on, active, danger, label, onClick, children }: {
     data-state={active ? (on ? (danger ? "recording" : "lit") : undefined) : on ? undefined : "off"} onClick={onClick}>{children}</button>;
 }
 
-function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, link, relayed, state }: {
+function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, link, relayed, peer, details, state }: {
   name: string; initials: string; photo: string | null; user: string; stream: MediaStream | null; camera: boolean; mic: boolean; hand: boolean;
   speaking: boolean; link?: RTCPeerConnectionState;
   /** Whether a relay is set up, said while connecting: a call that cannot go direct needs one. */
   relayed?: boolean;
   /** How the connection stands, for whoever looks into a problem (and the tests). */
   state?: string;
+  /** Someone else's: their connection's details, a click away. */
+  peer?: string; details?: () => Promise<LinkDetails | null>;
 }) {
+  const [open, setOpen] = useState(false);
   const showing = camera && !!stream?.getVideoTracks().length;
   // The tile takes the shape of the picture, so nothing of it is cut off.
   const [ratio, setRatio] = useState(16 / 9);
@@ -448,8 +451,41 @@ function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking
       : <div className="meet-nobody"><Avatar initials={initials} photo={photo} className="meet-avatar" who={user} /></div>}
     <span className="meet-name">{!mic && <MicOff aria-label="Microphone off" role="img" aria-hidden={false} />}{name}</span>
     {hand && <span className="meet-hand" role="img" aria-label="Hand raised">✋</span>}
+    {details && <button type="button" className="meet-details-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close details" : "Details"}</button>}
+    {details && open && <Details name={name} mic={mic} peer={peer} read={details} />}
     {link && link !== "connected" && link !== "new" && <span className="meet-link">{link === "connecting" ? "Connecting…" : link === "failed" ? "Can't connect" : "Reconnecting…"}{relayed !== undefined && ` · relay ${relayed ? "on" : "off"}`}</span>}
   </div>;
+}
+
+const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1_048_576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1_048_576).toFixed(1)} MB`;
+const ROUTES: Record<LinkDetails["route"], string> = { relay: "through the relay", "same network": "direct, same network", internet: "direct, over the internet", "none yet": "not found yet" };
+
+/** A connection's details, read again every two seconds while open: which way
+ * it goes, and whether sound and pictures come and go. For looking into a
+ * problem: a screenshot of it on each side says where something stops. */
+function Details({ name, mic, peer, read }: { name: string; mic: boolean; peer?: string; read: () => Promise<LinkDetails | null> }) {
+  const [now, setNow] = useState<(LinkDetails & { played: boolean }) | null>(null);
+  // The latest way to read them, whatever the page has drawn since: read only every two seconds.
+  const reading = useEffectEvent(read);
+  useEffect(() => {
+    let stopped = false;
+    const look = () => void reading().then(found => {
+      const voice = document.querySelector<HTMLAudioElement>(`audio[data-peer="${peer}"]`);
+      if (!stopped && found) setNow({ ...found, played: !!voice && !voice.paused && !voice.muted && !!(voice.srcObject as MediaStream | null)?.getAudioTracks().length });
+    });
+    look();
+    const timer = window.setInterval(look, 2000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [peer]);
+  const first = name.split(" ")[0];
+  return <dl className="meet-details">
+    <div><dt>Route</dt><dd>{now ? ROUTES[now.route] : "…"}</dd></div>
+    <div><dt>{first}&apos;s microphone</dt><dd>{mic ? "on" : "off (as they set it)"}</dd></div>
+    <div><dt>{first}&apos;s sound arriving</dt><dd>{now ? (now.heard ? `${size(now.heard)}${now.level !== null ? ` · loudness ${Math.round(now.level * 100)}%` : ""}` : "none") : "…"}</dd></div>
+    <div><dt>Played here</dt><dd>{now ? (now.played ? "yes" : "no") : "…"}</dd></div>
+    <div><dt>{first}&apos;s video arriving</dt><dd>{now ? (now.seen ? size(now.seen) : "none") : "…"}</dd></div>
+    <div><dt>Your voice going to {first}</dt><dd>{now ? (now.sent ? size(now.sent) : "none") : "…"}</dd></div>
+  </dl>;
 }
 
 function Person({ name, photo, user, state }: { name: string; photo: string | null; user: string; state?: Pick<PeerState, "mic" | "cam" | "hand"> }) {

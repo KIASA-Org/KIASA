@@ -158,3 +158,10 @@
 .meet-mini { height: 30px; padding: 0 12px; border-radius: 8px; background: var(--leaf); color: var(--night); font-size: 13px; font-weight: 650; cursor: pointer; }
 .meet-mini:disabled { opacity: 0.6; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .meet-knock, .meet-lobby-wait span { animation: none; } }
+/* A connection's details, a click away on someone's tile. */
+.meet-details-button { position: absolute; top: 10px; left: 10px; z-index: 2; padding: 4px 10px; border-radius: 999px; background: rgb(3 8 7 / 0.7); color: var(--ink-soft); font-size: 12px; cursor: pointer; }
+.meet-details-button:hover { color: var(--ink); }
+.meet-details { position: absolute; top: 40px; left: 10px; z-index: 2; display: grid; gap: 4px; min-width: 240px; max-width: calc(100% - 20px); padding: 10px 12px; border-radius: 10px; background: rgb(3 8 7 / 0.88); font-size: 12.5px; }
+.meet-details div { display: flex; justify-content: space-between; gap: 14px; }
+.meet-details dt { color: var(--ink-mute); }
+.meet-details dd { color: var(--ink); font-weight: 600; text-align: right; }
