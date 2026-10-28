@@ -234,18 +234,18 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await adminMeet.locator(".meet-toast-message", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
     await adminMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
     const adminChat = adminMeet.getByRole("complementary", { name: "Chat with everyone" });
-    await adminChat.locator(".meet-chat-body", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
+    await adminChat.locator(".chat-text", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
     await adminChat.getByRole("textbox", { name: "Message to everyone" }).fill("Loud and clear, Ana.");
     await adminChat.getByRole("button", { name: "Send" }).click();
-    await anaChat.locator(".meet-chat-body", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
+    await anaChat.locator(".chat-text", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
     await adminMeet.screenshot({ path: path.join(out, "meeting-chat.png") });
     // Ben reloads the meeting: in again, he reads what was said before.
     await benMeet.reload();
     await join(benMeet);
     await benMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
     const benChat = benMeet.getByRole("complementary", { name: "Chat with everyone" });
-    await benChat.locator(".meet-chat-body", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
-    await benChat.locator(".meet-chat-body", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
+    await benChat.locator(".chat-text", { hasText: "Hello everyone, can you hear me?" }).waitFor({ timeout: 10000 });
+    await benChat.locator(".chat-text", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
     await benMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
     await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 3, null, { timeout: 15000 });
     // Someone not in the meeting reads and writes nothing.
@@ -260,6 +260,47 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     if (!sneak.error) throw new Error("someone outside the meeting wrote in its chat");
     const { data: names } = await site.from("meeting_messages").select("name").eq("meeting_id", meetingId).order("created_at");
     return `by ${names.map(row => row.name).join(", ")}`;
+  });
+
+  await step("in the chat, as in KIASA Chat: Ana answers the admin's message, reacts to it, and deletes a message of her own", async () => {
+    const anaChat = anaMeet.getByRole("complementary", { name: "Chat with everyone" });
+    if (!(await anaChat.count())) await anaMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    const adminChat = adminMeet.getByRole("complementary", { name: "Chat with everyone" });
+    if (!(await adminChat.count())) await adminMeet.getByRole("button", { name: /^Chat with everyone/ }).click();
+    // The message itself (its own words), not an answer quoting it.
+    const theirs = anaChat.locator(".chat-message", { has: anaMeet.locator(".chat-text", { hasText: "Loud and clear, Ana." }) });
+    // Reply: the quote shows above her answer, for the admin too.
+    await theirs.hover();
+    await theirs.getByRole("button", { name: "Reply" }).click();
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).fill("Great, thanks!");
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).press("Enter");
+    await adminChat.locator(".chat-message", { hasText: "Great, thanks!" }).locator(".chat-quote", { hasText: "Loud and clear, Ana." }).waitFor({ timeout: 10000 });
+    // React: the admin sees it on their message, live.
+    await theirs.hover();
+    await theirs.getByRole("button", { name: "React" }).click();
+    await anaChat.getByRole("group", { name: "Reactions" }).getByRole("button", { name: "🎉" }).click();
+    await adminChat.locator(".chat-message", { has: adminMeet.locator(".chat-text", { hasText: "Loud and clear, Ana." }) }).locator(".chat-reaction", { hasText: "🎉" }).waitFor({ timeout: 10000 });
+    // Delete her own: gone for everyone.
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).fill("Oops, wrong chat");
+    await anaChat.getByRole("textbox", { name: "Message to everyone" }).press("Enter");
+    await adminChat.locator(".chat-text", { hasText: "Oops, wrong chat" }).waitFor({ timeout: 10000 });
+    const oops = anaChat.locator(".chat-message", { hasText: "Oops, wrong chat" });
+    await oops.hover();
+    await oops.getByRole("button", { name: "Delete" }).click();
+    await adminChat.locator(".chat-text", { hasText: "Oops, wrong chat" }).waitFor({ state: "detached", timeout: 10000 });
+    // She cannot delete the admin's.
+    if (await theirs.getByRole("button", { name: "Delete" }).count()) throw new Error("Ana may delete the admin's message");
+    await adminMeet.screenshot({ path: path.join(out, "meeting-chat-more.png") });
+  });
+
+  await step("the admin's Leave menu closes with a click anywhere else, and with Escape", async () => {
+    await adminMeet.getByRole("button", { name: "Leave the meeting" }).click();
+    await adminMeet.getByRole("menu", { name: "Leave" }).waitFor();
+    await adminMeet.mouse.click(40, 300);
+    await adminMeet.getByRole("menu", { name: "Leave" }).waitFor({ state: "detached", timeout: 5000 });
+    await adminMeet.getByRole("button", { name: "Leave the meeting" }).click();
+    await adminMeet.keyboard.press("Escape");
+    await adminMeet.getByRole("menu", { name: "Leave" }).waitFor({ state: "detached", timeout: 5000 });
   });
 
   await step("Ana mutes and raises her hand; Ben turns his camera off: the others see each", async () => {
@@ -308,7 +349,9 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await adminMeet.waitForFunction(() => window.__closed === true, null, { timeout: 15000 });
     const { bytes, head, name } = await adminMeet.evaluate(() => {
       const all = window.__written.reduce((total, part) => total + part.length, 0);
-      return { bytes: all, head: [...window.__written[0].slice(0, 4)], name: document.querySelector(".meet-toast")?.textContent ?? "" };
+      // The file's first bytes, however the browser split its pieces (the first can be a single byte).
+      const head = window.__written.flatMap(part => [...part]).slice(0, 4);
+      return { bytes: all, head, name: document.querySelector(".meet-toast")?.textContent ?? "" };
     });
     // A WebM file starts with EBML's mark, 1A 45 DF A3.
     if (head.join(",") !== "26,69,223,163") throw new Error(`the file starts ${head}`);
@@ -375,7 +418,7 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
 
   await step("the admin ends it for everyone: Ana's window says so, and the card in the chat reads Ended", async () => {
     await adminMeet.getByRole("button", { name: "Leave the meeting" }).click();
-    await adminMeet.getByRole("button", { name: "End for everyone" }).click();
+    await adminMeet.getByRole("menuitem", { name: /^End for everyone/ }).click();
     await anaMeet.getByRole("heading", { name: "This meeting has ended" }).waitFor({ timeout: 10000 });
     await ana.page.locator(".chat-row", { hasText: "Meeting test" }).first().click();
     await ana.page.locator(".chat-meeting[data-status='ended']").first().waitFor({ timeout: 10000 });

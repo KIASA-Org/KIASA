@@ -239,6 +239,18 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
   };
 
   const leave = () => { setLeaving(false); setAsked(false); setJoined(false); setLeft(true); };
+  const leaveWrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!leaving) return;
+    const away = (event: PointerEvent) => { if (!leaveWrap.current?.contains(event.target as Node)) setLeaving(false); };
+    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setLeaving(false); };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [leaving]);
   const endForAll = () => act(async () => {
     const result = await endMeeting(meeting.id);
     if (result.error) { setNotice(result.error); return; }
@@ -358,7 +370,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
         </div>
       </main>
 
-      {joined && <MeetingChat supabase={supabase} meetingId={meeting.id} me={me} open={panel === "chat"} onClose={() => setPanel(null)}
+      {joined && <MeetingChat supabase={supabase} meetingId={meeting.id} me={me} people={start.people} open={panel === "chat"} onClose={() => setPanel(null)}
         onArrived={message => { if (panel !== "chat") { setUnread(count => count + 1); setLatest(message); } }} />}
       {panel === "people" && <aside className="meet-panel" aria-label="People">
         <div className="meet-panel-head">
@@ -418,21 +430,33 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
     </div>
 
     <footer className="meet-controls">
-      <ControlButton on={call.mic} level={call.mic ? "me" : undefined} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
-      <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
+      <p className="meet-controls-info">
+        <span className="meet-controls-time">{now ? new Date(now).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : ""}</span>
+        <span className="meet-controls-title">{meeting.title}</span>
+      </p>
+      <div className="meet-controls-main">
+      <span className="meet-mic">
+        <ControlButton on={call.mic} level={call.mic ? "me" : undefined} label={call.mic ? "Turn off microphone" : "Turn on microphone"} onClick={call.toggleMic}>{call.mic ? <Mic /> : <MicOff />}</ControlButton>
+        <MicChoice current={call.local?.getAudioTracks()[0]?.label ?? null} list={call.microphones} choose={call.chooseMic} />
+      </span>
       <ControlButton on={call.cam} label={call.cam ? "Turn off camera" : "Turn on camera"} onClick={() => void call.toggleCam()}>{call.cam ? <Video /> : <VideoOff />}</ControlButton>
       <ControlButton on={!!call.screen} active label={call.screen ? "Stop sharing your screen" : "Share your screen"} onClick={() => void call.shareScreen()}><Screen /></ControlButton>
       <ControlButton on={!!call.hand} active label={call.hand ? "Lower your hand" : "Raise your hand"} onClick={call.raiseHand}><Hand /></ControlButton>
       {me.admin && <ControlButton on={!!recorder} active danger label={recorder ? "Stop recording" : "Record to this computer"} onClick={record}><Record /></ControlButton>}
-      <ControlButton on={panel === "chat"} active label={`Chat with everyone${unread ? `, ${unread} new` : ""}`} count={panel === "chat" ? 0 : unread}
-        onClick={() => { setPanel(panel === "chat" ? null : "chat"); setUnread(0); setLatest(null); }}><ChatBubble /></ControlButton>
-      <ControlButton on={panel === "people"} active label={`People (${count})${me.admin && waiting.length ? `, ${waiting.length} waiting` : ""}`} onClick={() => setPanel(panel === "people" ? null : "people")}><People /></ControlButton>
-      <div className="meet-leave-wrap">
-        <button type="button" className="meet-leave" aria-label="Leave the meeting" title="Leave" onClick={() => (me.admin ? setLeaving(!leaving) : leave())}><PhoneOff /></button>
-        {leaving && <div className="meet-leave-menu" role="group" aria-label="Leave">
-          <button type="button" className="account-button" onClick={leave}>Leave</button>
-          <button type="button" className="account-button account-danger" disabled={working} onClick={endForAll}>{working ? "Ending…" : "End for everyone"}</button>
+      <div className="meet-leave-wrap" ref={leaveWrap}>
+        <button type="button" className="meet-leave" aria-label="Leave the meeting" title="Leave" aria-expanded={me.admin ? leaving : undefined}
+          onClick={() => (me.admin ? setLeaving(!leaving) : leave())}><PhoneOff /></button>
+        {leaving && <div className="meet-leave-menu" role="menu" aria-label="Leave">
+          <button type="button" role="menuitem" className="meet-leave-item" onClick={leave}><PhoneOff /><span>Leave the meeting<small>The others carry on</small></span></button>
+          <button type="button" role="menuitem" className="meet-leave-item" data-danger="" disabled={working} onClick={endForAll}><Close /><span>{working ? "Ending…" : "End for everyone"}<small>Everyone leaves now</small></span></button>
         </div>}
+      </div>
+      </div>
+      <div className="meet-controls-panels">
+        <ControlButton plain on={panel === "people"} active label={`People (${count})${me.admin && waiting.length ? `, ${waiting.length} waiting` : ""}`} count={me.admin ? waiting.length : 0}
+          onClick={() => setPanel(panel === "people" ? null : "people")}><People /></ControlButton>
+        <ControlButton plain on={panel === "chat"} active label={`Chat with everyone${unread ? `, ${unread} new` : ""}`} count={panel === "chat" ? 0 : unread}
+          onClick={() => { setPanel(panel === "chat" ? null : "chat"); setUnread(0); setLatest(null); }}><ChatBubble /></ControlButton>
       </div>
     </footer>
   </div>;
@@ -480,8 +504,10 @@ function MicChoice({ current, list, choose }: { current: string | null; list: ()
   </span>;
 }
 
-function ControlButton({ on, active, danger, label, onClick, level, count, children }: {
+function ControlButton({ on, active, danger, plain, label, onClick, level, count, children }: {
   on: boolean; active?: boolean; danger?: boolean; label: string; onClick: () => void;
+  /** Flat, as the panels' buttons at the bar's right are. */
+  plain?: boolean;
   /** Whose voice's level its ring shows, live. */
   level?: string;
   /** A count on its corner (new messages). */
@@ -489,7 +515,7 @@ function ControlButton({ on, active, danger, label, onClick, level, count, child
   children: React.ReactNode;
 }) {
   // Microphone and camera read "off" in red; the rest light up when on.
-  return <button type="button" className="meet-control" aria-label={label} title={label} aria-pressed={on} data-level={level}
+  return <button type="button" className={plain ? "meet-control meet-control-plain" : "meet-control"} aria-label={label} title={label} aria-pressed={on} data-level={level}
     data-state={active ? (on ? (danger ? "recording" : "lit") : undefined) : on ? undefined : "off"} onClick={onClick}>
     {level && <span className="meet-control-level" aria-hidden="true" />}
     {children}
