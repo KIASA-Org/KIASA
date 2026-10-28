@@ -1,20 +1,35 @@
 "use server";
 
+import { lookup as lookupEach } from "node:dns";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
 import { currentViewer, siteClient } from "@/lib/accounts/server";
 import { companyFromLink, factsFromPage } from "./links";
 
 /** Addresses inside a network, never fetched: a pasted link must not reach the site's own machines. */
 const PRIVATE = [/^0\./, /^10\./, /^127\./, /^169\.254\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
-  /^::1?$/, /^f[cd][0-9a-f]{2}:/i, /^fe80:/i, /^::ffff:/i];
+  /^198\.1[89]\./, /^(22[4-9]|2[3-5]\d)\./, /^::1?$/, /^f[cd][0-9a-f]{2}:/i, /^fe80:/i, /^::ffff:/i, /^64:ff9b:/i];
+const inside = (address: string) => PRIVATE.some(pattern => pattern.test(address));
+
+// The address each connection is really made to, checked too: a name can
+// point elsewhere a moment after it was first looked up.
+const outward = new Agent({
+  connect: {
+    lookup: (hostname, options, done) => lookupEach(hostname, options, (error, address, family) => {
+      const all = typeof address === "string" ? [address] : (address ?? []).map(entry => entry.address);
+      if (!error && all.some(inside)) return done(new Error("A private address"), "", 4);
+      (done as (...args: unknown[]) => void)(error, address, family);
+    }),
+  },
+});
 
 async function reachable(url: URL) {
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
   const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (host === "localhost" || /\.(localhost|local|internal|lan|home)$/.test(host)) return false;
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true }).catch(() => [])).map(entry => entry.address);
-  return addresses.length > 0 && !addresses.some(address => PRIVATE.some(pattern => pattern.test(address)));
+  return addresses.length > 0 && !addresses.some(inside);
 }
 
 /** A job's page (the whole of it: what a page tells search engines is often
@@ -25,8 +40,8 @@ async function readPage(link: string): Promise<string | null> {
   try { url = new URL(link); } catch { return null; }
   for (let hop = 0; hop < 4; hop++) {
     if (!(await reachable(url))) return null;
-    const response = await fetch(url, {
-      redirect: "manual", signal: AbortSignal.timeout(6000),
+    const response = await undiciFetch(url, {
+      dispatcher: outward, redirect: "manual", signal: AbortSignal.timeout(6000),
       headers: { "user-agent": "Mozilla/5.0 (compatible; KIASA-Jobs/1.0)", accept: "text/html,application/xhtml+xml", "accept-language": "en" },
     }).catch(() => null);
     if (!response) return null;

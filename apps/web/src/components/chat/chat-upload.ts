@@ -27,6 +27,24 @@ export function setUpload(id: string, upload: Upload | null) {
 /** One message's upload as it goes: only that message draws again as it moves. */
 export const useUpload = (id: string) => useSyncExternalStore(subscribe, () => uploads.get(id), () => undefined);
 
+/** The kinds a chat file is kept as (the store accepts no others: see
+ * supabase/migrations/20261029180000_security.sql). Anything else, a web page or
+ * a drawing that could run a script, is kept as plain bytes, which a browser
+ * only downloads. */
+const PICTURES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
+const KEPT = new Set([
+  ...PICTURES, "application/pdf", "text/plain", "text/csv",
+  "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/zip", "application/x-zip-compressed",
+]);
+export const keptAs = (type: string) =>
+  KEPT.has(type) || /^(audio|video)\/[\w.+-]+$/.test(type) ? type : "application/octet-stream";
+/** A picture the chat shows (a drawing, SVG, is sent as a file). */
+export const isPicture = (type: string) => PICTURES.has(type);
+
 /** A file into the chat's private store, telling how far along it is. Sent with
  * XMLHttpRequest, as fetch cannot tell an upload's progress; the store's rules
  * are the same as for any upload (only the chat's members may add to it). */
@@ -38,7 +56,7 @@ export function putFile({ url, key, token, path, file, onProgress }: {
     request.open("POST", `${url.replace(/\/+$/, "")}/storage/v1/object/chat-files/${path.split("/").map(encodeURIComponent).join("/")}`);
     request.setRequestHeader("authorization", `Bearer ${token}`);
     request.setRequestHeader("apikey", key);
-    request.setRequestHeader("content-type", file.type || "application/octet-stream");
+    request.setRequestHeader("content-type", keptAs(file.type));
     request.setRequestHeader("cache-control", "max-age=3600");
     request.setRequestHeader("x-upsert", "false");
     request.upload.onprogress = event => onProgress(event.loaded);

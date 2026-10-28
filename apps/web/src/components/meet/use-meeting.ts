@@ -254,29 +254,39 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     // One at a time per connection, in the order they came.
     link.queue = link.queue.then(() => handle(signal)).catch((error: Error) => patchRemote(signal.from, () => ({ trouble: `${error.name}: ${error.message}`.slice(0, 200) })));
   });
-  const endedHere = useEffectEvent(() => setEnded(true));
+  // Over only if the meeting itself says so: anyone on the channel could say it.
+  const endedHere = useEffectEvent(async () => {
+    const { data } = await supabase.from("meetings").select("ended_at").eq("id", meeting.id).maybeSingle();
+    if (data?.ended_at) setEnded(true);
+  });
 
-  // The meeting's channel, from the first moment: the waiting screen shows who is in.
+  // The meeting's channel, from the first moment: the waiting screen shows who
+  // is in. Only those in the meeting may send on it, and the live server asks
+  // as a browser joins the channel: so whoever is let in joins it again (once
+  // the old one is closed, as the same channel cannot be had twice at once).
+  const closing = useRef<Promise<unknown>>(Promise.resolve());
   useEffect(() => {
     let stopped = false;
     let opened: RealtimeChannel | null = null;
     (async () => {
+      await closing.current;
       await supabase.realtime.setAuth();
       if (stopped) return;
+      setConnection("connecting");
       opened = supabase.channel(`meet:${meeting.id}`, { config: { private: true, broadcast: { self: false }, presence: { key: peerId } } });
       channel.current = opened;
       opened
         .on("presence", { event: "sync" }, () => synced())
         .on("broadcast", { event: "signal" }, ({ payload }) => signalled(payload as Signal))
-        .on("broadcast", { event: "ended" }, () => endedHere())
+        .on("broadcast", { event: "ended" }, () => void endedHere())
         .subscribe(status => { if (!stopped) setConnection(status === "SUBSCRIBED" ? "live" : status === "CLOSED" ? "paused" : status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "paused" : "connecting"); });
     })().catch(() => { if (!stopped) setConnection("paused"); });
     return () => {
       stopped = true;
       channel.current = null;
-      if (opened) supabase.removeChannel(opened);
+      if (opened) closing.current = supabase.removeChannel(opened);
     };
-  }, [supabase, meeting.id, peerId]);
+  }, [supabase, meeting.id, peerId, joined]);
 
   // What I say about myself, whenever it changes (only once in).
   useEffect(() => {

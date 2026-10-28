@@ -1,7 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import { Agent, fetch as undiciFetch, type RequestInit as UndiciInit } from "undici";
 import { reasons, type Account, type AccountStatus, type Reason } from "@/content/accounts";
@@ -58,6 +58,30 @@ export function siteClient() {
   return createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: keptFetch } });
 }
 
+// Tries are counted on the live site (and locally with KIASA_LIMITS=on).
+const limited = process.env.VERCEL === "1" || process.env.KIASA_LIMITS === "on";
+
+/** Where a request came from: Vercel puts the visitor's own address in
+ * x-real-ip (one a browser sends is replaced). */
+export async function visitorAddress() {
+  const sent = await headers();
+  return sent.get("x-real-ip") ?? sent.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+}
+
+/** Whether there have been `most` or more tries of a kind from one key (an
+ * address, an address and an email, an account) in the last `minutes`.
+ * Counting not set up yet, or not answering: the try goes ahead. */
+export async function tooMany(kind: string, key: string, minutes: number, most: number) {
+  if (!limited) return false;
+  const { data, error } = await siteClient().rpc("too_many", { what: kind, who: key, within: `${minutes} minutes`, most });
+  return !error && data === true;
+}
+
+/** A try, counted. */
+export async function noteAttempt(kind: string, key: string) {
+  if (limited) await siteClient().rpc("note_attempt", { what: kind, who: key });
+}
+
 type ProfileRow = {
   id: string; email: string; name: string; organization: string | null; reason: string; digest: boolean;
   status: AccountStatus; asked_at: string; decided_at: string | null; last_sign_in_at: string | null;
@@ -98,7 +122,7 @@ export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const { id, email } = person;
   const site = siteClient();
   const [admin, profile, avatar, top, team] = await Promise.all([
-    site.from("admins").select("name").eq("email", email).maybeSingle(),
+    site.from("admins").select("name").eq("user_id", id).maybeSingle(),
     site.from("profiles").select("*").eq("id", id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", id).maybeSingle(),
     site.from("top_managers").select("user_id").eq("user_id", id).maybeSingle(),

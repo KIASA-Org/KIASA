@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Close, Download } from "../site/icons";
 import { fileSize } from "./chat-format";
-import type { Upload } from "./chat-upload";
+import { isPicture, type Upload } from "./chat-upload";
 
 type StoredFile = { path: string; name: string; mime: string; size: number };
 
@@ -92,7 +92,7 @@ function Ring({ share }: { share: number }) {
  * tab; any other file is a card that downloads it, as in Telegram: ↓ in its
  * round mark, which fills as it comes down. Both come from the chat's private store. */
 export function ChatFile({ supabase, file }: { supabase: SupabaseClient; file: StoredFile }) {
-  const picture = file.mime.startsWith("image/");
+  const picture = isPicture(file.mime);
   const [url, setUrl] = useState<string | null>(() => previews.get(file.path) ?? links.get(file.path)?.url ?? null);
   const saved = useSaving(file.path);
   useEffect(() => {

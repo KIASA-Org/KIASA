@@ -144,6 +144,42 @@ admin. Without an email service, an address is not proved to belong to whoever
 gives it; the admin's approval is the check. A hidden field turns away simple
 robots.
 
+Hardened against attack (`supabase/migrations/20261029180000_security.sql`,
+checked October 2026 across the database, the server and the browser):
+- **An admin is an account, not an email.** `admins.user_id` is the account;
+  every rule (`is_admin`, `jobs_admin`, `can_chat`, `am_admin`) and
+  `currentViewer` ask by `auth.uid()`. Someone with an admin's address in their
+  token (an account made with it, or an email changed to it) is no admin. A row
+  added before its account exists links to nothing; add an admin after their
+  account (see step 4 below).
+- **Tries counted** (`attempts`, `too_many`, `note_attempt`; server only):
+  sign-in, 8 wrong passwords for one email from one address, and 30 tries in
+  all from one address, per 15 minutes; 5 account requests an hour from one
+  address; 5 wrong current passwords per 15 minutes on changing it. Counted on
+  Vercel (the visitor's address is `x-real-ip`), or locally with
+  `KIASA_LIMITS=on`.
+- **Meetings:** those waiting to be let in see who is in the call, but only
+  those in it send on its live channel (let in, a browser joins the channel
+  again, as the live server decides on joining); "ended" is believed only
+  once the meeting says so in the database. Relay passwords last four hours
+  and go only to those invited.
+- **Chat files** are read only through a message one can see (a deleted
+  message, a cleared history, or a chat joined later shows none of its old
+  files). A member's message carries only a file of its own chat, and no card.
+  The store keeps pictures, PDFs, text, sound, film and office files as they
+  are; anything else (a web page, an SVG) is kept as plain bytes, which a
+  browser only downloads.
+- **Every page** sends a Content-Security-Policy (this site and Supabase only),
+  `X-Frame-Options: DENY` (no other site can show a KIASA page in a frame and
+  trick a click), `nosniff`, a referrer policy and a permissions policy
+  (camera, microphone and screen for KIASA only): `next.config.ts`, in
+  production builds.
+- The jobs bot's page reader checks the address each connection is really
+  made to (a name that points somewhere private a moment later is refused).
+- In Supabase's settings (done by hand): "Allow new users to sign up" off,
+  "Confirm email" and "Secure email change" on, and Realtime's "Allow public
+  access" off.
+
 Company facts the pages share, so they agree: founded in London in 2012, owned
 through an employee ownership trust, 420 people in eight studios (Lisbon,
 Amsterdam, London and Nairobi; Toronto and Austin; Singapore and Melbourne).
@@ -706,11 +742,16 @@ Once, in this order:
    `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat), then
    `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it), then
    `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once), then
-   `supabase/migrations/20261029150000_meeting_people.sql` (who is in a meeting; managers' meetings and the admin's OK).
+   `supabase/migrations/20261029150000_meeting_people.sql` (who is in a meeting; managers' meetings and the admin's OK), then
+   `supabase/migrations/20261029180000_security.sql` (admins by account, tries counted, meeting channels and chat files locked down).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto
    Confirm User". Only you know that password; the site never sees it.
+   Another admin: make their account first, then add them in the SQL Editor:
+   `insert into public.admins (email, name) values ('them@kiasa.tech', 'Their Name');`
+   (the row takes the account with that email; a row made before the account
+   makes no one an admin).
 5. **Close the side door.** Supabase → Authentication → Sign In / Providers:
    turn off "Allow new users to sign up". The site still creates accounts (it
    uses its secret key); this only stops anyone making one around the approval.

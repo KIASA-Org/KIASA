@@ -8,7 +8,7 @@ type Ice = MeetStart["ice"];
 
 /** Cloudflare's relay (TURN), when its key is set (CLOUDFLARE_TURN_KEY_ID and
  * CLOUDFLARE_TURN_API_TOKEN): fresh passwords for a day, asked for as the
- * meeting opens, so a call gets through on any network. Nothing, if it is not
+ * meeting opens (for four hours, and only to those invited), so a call gets through on any network. Nothing, if it is not
  * set or does not answer within three seconds: calls then go straight between
  * browsers, as before. */
 async function cloudflareRelay(): Promise<Ice> {
@@ -17,7 +17,7 @@ async function cloudflareRelay(): Promise<Ice> {
   try {
     const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(key)}/credentials/generate-ice-servers`, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ ttl: 86_400 }), cache: "no-store", signal: AbortSignal.timeout(3000),
+      body: JSON.stringify({ ttl: 14_400 }), cache: "no-store", signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) { console.error("Cloudflare relay:", response.status); return []; }
     const { iceServers } = await response.json() as { iceServers?: Ice | Ice[number] };
@@ -44,11 +44,11 @@ async function iceServers(): Promise<Ice> {
  * of the people invited), with everyone in it. Null if they may not. */
 export async function meetingFor(id: string, me: ChatMe): Promise<MeetStart | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
-  // Asked for at once, beside everything else.
-  const ice = iceServers();
   const visitor = await visitorClient();
   const { data: meeting } = await visitor.from("meetings").select("*").eq("id", id).maybeSingle();
   if (!meeting) return null;
+  // Asked for once the meeting is theirs to see, beside everything else.
+  const ice = iceServers();
   const chatId = (meeting as Meeting).chat_id;
   const site = siteClient();
   const [chat, invited, avatars, admins, admissions] = await Promise.all([

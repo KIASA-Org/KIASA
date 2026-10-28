@@ -45,7 +45,7 @@ export async function chatPeople(): Promise<ChatPerson[]> {
     const sim = sims.get(someone.id);
     // A simulated member is shown as any member (by its organization, never its address).
     people.set(someone.id, sim ? { ...person(someone.id, someone.name, someone.organization ?? "KIASA team", false), hours: hoursOf(sim, zone) }
-      : person(someone.id, someone.name, someone.organization ?? someone.email, false));
+      : person(someone.id, someone.name, someone.organization ?? "KIASA team", false));
   }
   return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -25,7 +25,7 @@ export async function askContact(otherId: string, reason: string): Promise<{ err
   if (!accountsLive) return { error: RETRY };
   const me = await chatViewer();
   if (!me) return { error: "Please sign in again." };
-  const tidy = reason.replace(/\s+/g, " ").trim().slice(0, 300);
+  const tidy = String(reason ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
   const [other, known] = await Promise.all([nameOf(otherId), ranks()]);
   if (!other || otherId === me.id) return { error: "You cannot message that person." };
   const site = siteClient();
