@@ -4,20 +4,48 @@ import { photoUrl } from "@/lib/accounts/viewer";
 import type { ChatMe } from "@/lib/chat/types";
 import type { Admission, Meeting, MeetStart } from "./types";
 
+type Ice = MeetStart["ice"];
+
+/** Cloudflare's relay (TURN), when its key is set (CLOUDFLARE_TURN_KEY_ID and
+ * CLOUDFLARE_TURN_API_TOKEN): fresh passwords for a day, asked for as the
+ * meeting opens, so a call gets through on any network. Nothing, if it is not
+ * set or does not answer within three seconds: calls then go straight between
+ * browsers, as before. */
+async function cloudflareRelay(): Promise<Ice> {
+  const key = process.env.CLOUDFLARE_TURN_KEY_ID, token = process.env.CLOUDFLARE_TURN_API_TOKEN;
+  if (!key || !token) return [];
+  try {
+    const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(key)}/credentials/generate-ice-servers`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ ttl: 86_400 }), cache: "no-store", signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) { console.error("Cloudflare relay:", response.status); return []; }
+    const { iceServers } = await response.json() as { iceServers?: Ice | Ice[number] };
+    // Port 53 is left out: some browsers wait on it for a long time.
+    return [iceServers ?? []].flat().map(server => ({ ...server, urls: [server.urls].flat().filter(url => !/:53(\?|$)/.test(url)) }))
+      .filter(server => server.urls.length);
+  } catch (error) {
+    console.error("Cloudflare relay:", (error as Error).message);
+    return [];
+  }
+}
+
 // Where browsers learn their own address on the internet; and a relay (TURN),
-// when one is set (MEETING_TURN_URLS, comma-separated, with its username and
-// credential), for the few networks that let no call through directly.
-function iceServers(): MeetStart["ice"] {
-  const servers: MeetStart["ice"] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+// for networks that let no call through directly: Cloudflare's (above), or one
+// set by hand (MEETING_TURN_URLS, comma-separated, with its username and credential).
+async function iceServers(): Promise<Ice> {
+  const servers: Ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
   const turn = (process.env.MEETING_TURN_URLS ?? "").split(",").map(url => url.trim()).filter(Boolean);
   if (turn.length) servers.push({ urls: turn, username: process.env.MEETING_TURN_USERNAME, credential: process.env.MEETING_TURN_CREDENTIAL });
-  return servers;
+  return [...servers, ...await cloudflareRelay()];
 }
 
 /** A meeting, as the person signed in may see it (the database's rules: a
  * member of its chat), with everyone who may join it. Null if they may not. */
 export async function meetingFor(id: string, me: ChatMe): Promise<MeetStart | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  // Asked for at once, beside everything else.
+  const ice = iceServers();
   const visitor = await visitorClient();
   const { data: meeting } = await visitor.from("meetings").select("*").eq("id", id).maybeSingle();
   if (!meeting) return null;
@@ -37,6 +65,6 @@ export async function meetingFor(id: string, me: ChatMe): Promise<MeetStart | nu
   return {
     meeting: meeting as Meeting, chatTitle, people,
     admins: ((admins.data ?? []) as { id: string }[]).map(admin => admin.id),
-    admissions: (admissions.data ?? []) as Admission[], me: { id: me.id, name: me.name, admin: me.admin, photo: me.photo }, ice: iceServers(),
+    admissions: (admissions.data ?? []) as Admission[], me: { id: me.id, name: me.name, admin: me.admin, photo: me.photo }, ice: await ice,
   };
 }
