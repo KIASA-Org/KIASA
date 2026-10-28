@@ -270,6 +270,78 @@ const shot = (page, name) => page.screenshot({ path: path.join(out, `${name}.png
       await row(ben.page, /^Sales$/).click();
       await ben.page.locator(".chat-notice", { hasText: "Ana Silva is no longer in the team, and left the group." }).waitFor({ timeout: 10000 });
     });
+
+    // ── Names, live.
+    await step("Ben changes his name on his account page: Dia's open chat shows it at once, beside the chat and on his photo", async () => {
+      const account = await ben.context.newPage();
+      await account.goto(BASE + "/account");
+      await hydrated(account, ".account-button");
+      await account.getByRole("button", { name: "Edit details" }).click();
+      await account.getByLabel("Name").fill("Benjamin Okoro");
+      const at = Date.now();
+      await account.getByRole("button", { name: "Save details" }).click();
+      const panel = dia.page.getByRole("complementary", { name: "Members" });
+      await panel.locator(".chat-member-name", { hasText: "Benjamin Okoro" }).waitFor({ timeout: 10000 });
+      const seen = Date.now() - at;
+      const row = panel.locator(".chat-member", { hasText: "Benjamin Okoro" }).first();
+      const initials = (await row.locator(".chat-avatar").first().evaluate(node => node.firstChild?.textContent ?? "")).trim();
+      if (initials !== "BO") throw new Error(`his photo reads "${initials}"`);
+      // Back as he was, for the next run.
+      await account.getByRole("button", { name: "Edit details" }).click();
+      await account.getByLabel("Name").fill("Ben Okoro");
+      await account.getByRole("button", { name: "Save details" }).click();
+      await panel.locator(".chat-member-name", { hasText: /^Ben Okoro/ }).first().waitFor({ timeout: 10000 });
+      await account.close();
+      return `on Dia's page ${seen} ms after he saved`;
+    });
+
+    // ── The admin's teams, at a glance.
+    await step("the admin's Teams page: every team in one list with its size; one chosen shows its manager and members, found by name", async () => {
+      const desk = await admin.context.newPage();
+      await desk.setViewportSize({ width: 1440, height: 900 });
+      await desk.goto(BASE + "/admin/teams");
+      await hydrated(desk, ".teams-list");
+      const rows = await desk.getByRole("navigation", { name: "Teams" }).locator(".teams-row-name").allTextContents();
+      if (rows.join() !== "Platform,Sales,Not in a team") throw new Error(`the list reads ${rows.join(", ")}`);
+      await desk.getByRole("navigation", { name: "Teams" }).getByRole("button", { name: /^Sales/ }).click();
+      const panel = desk.getByRole("article", { name: "Sales" });
+      await panel.getByText("led by Ben Okoro").waitFor({ timeout: 5000 });
+      await desk.screenshot({ path: path.join(out, "8-admin-teams.png"), fullPage: true });
+      await desk.getByRole("navigation", { name: "Teams" }).getByRole("button", { name: /^Not in a team/ }).click();
+      await desk.getByRole("article", { name: "Not in a team" }).getByLabel("Team of Ana Silva").waitFor({ timeout: 5000 });
+      await desk.getByRole("navigation", { name: "Teams" }).getByRole("button", { name: "New team" }).click();
+      await desk.getByRole("article", { name: "New team" }).getByRole("button", { name: "Make the team" }).waitFor();
+      await desk.close();
+      return rows.join(", ");
+    });
+
+    await step("the Users page: whoever waits for an answer comes first; Show by team narrows the list to a team, to those in one, or to those in none", async () => {
+      // Eli asks again, for a moment: he waits.
+      await site.from("profiles").update({ status: "waiting" }).eq("id", id("eli@example.com"));
+      const desk = await admin.context.newPage();
+      try {
+        await desk.goto(BASE + "/admin");
+        await hydrated(desk, ".admin-table");
+        const firstRow = async () => (await desk.locator(".admin-table tbody tr").first().locator("td, th").first().textContent()).trim();
+        const first = await firstRow();
+        if (!first.startsWith("Eli")) throw new Error(`the first row is ${first}`);
+        const names = async () => (await desk.locator(".admin-table tbody tr").evaluateAll(rows => rows.map(row => row.querySelector("td, th")?.textContent ?? ""))).map(name => name.trim());
+        await desk.getByLabel("Show by team").selectOption({ label: "Sales (1)" });
+        const sales = await names();
+        if (sales.length !== 1 || !sales[0].startsWith("Ben Okoro")) throw new Error(`Sales lists ${sales.join(", ")}`);
+        await desk.getByLabel("Show by team").selectOption("unteamed");
+        const none = await names();
+        if (!none.some(name => name.startsWith("Ana Silva")) || none.some(name => name.startsWith("Ben Okoro") || name.startsWith("Dia"))) throw new Error(`in no team: ${none.join(", ")}`);
+        await desk.getByLabel("Show by team").selectOption("teamed");
+        const teamed = await names();
+        if (teamed.some(name => name.startsWith("Ana Silva")) || !teamed.some(name => name.startsWith("Dia"))) throw new Error(`in a team: ${teamed.join(", ")}`);
+        await desk.screenshot({ path: path.join(out, "9-admin-users-teamed.png") });
+        return `first: ${first.split("@")[0]}; Sales ${sales.length}, in no team ${none.length}, in a team ${teamed.length}`;
+      } finally {
+        await site.from("profiles").update({ status: "approved" }).eq("id", id("eli@example.com"));
+        await desk.close();
+      }
+    });
   } finally {
     console.log(results.join("\n"));
     console.log("page errors:", errors.length ? errors.join(" | ") : "none");

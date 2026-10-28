@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardRow, HourRow, Plan, TeamPerson, TrendRow } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
-import { useTopManagers } from "../site/ranks";
+import { useFaces, useTopManagers } from "../site/ranks";
 import { Columns, Meter, Sparkline, StatTile, type Column } from "./jobs-charts";
 import { addDays, ago, compact, dayGoal, initialsOf, partsIn, shortDay, weekdayOf } from "./jobs-format";
 
@@ -18,7 +18,9 @@ export function LiveView({ supabase, team, board: everyone, plans, zone, today, 
   version: number; pending?: number; onConfirm?: () => void; only?: string[]; teamName?: string;
 }) {
   const managers = useTopManagers();
-  const board = everyone.filter(row => !managers.includes(row.user_id) && (!only || only.includes(row.user_id)));
+  const faces = useFaces();
+  const board = everyone.filter(row => !managers.includes(row.user_id) && (!only || only.includes(row.user_id)))
+    .map(row => ({ ...row, name: faces.name(row.user_id, row.name) }));
   const whose = teamName ? teamName : "the team";
   const [trend, setTrend] = useState<TrendRow[]>([]);
   const [hours, setHours] = useState<HourRow[]>([]);

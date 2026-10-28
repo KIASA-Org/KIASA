@@ -41,6 +41,8 @@ export type Account = {
   top?: boolean;
   /** The id of the team an admin put them in. */
   team?: string;
+  /** Their photo's address, if they have set one. */
+  photo?: string | null;
 };
 
 /** The person the account page is drawn for: a client, signed in. */

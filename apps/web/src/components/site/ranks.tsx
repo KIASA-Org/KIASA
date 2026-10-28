@@ -3,22 +3,27 @@
 import { createContext, useContext, useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { refreshBadge } from "@/lib/accounts/actions";
 import { browserClient } from "@/lib/accounts/browser";
-import { markKey, markOf, readBadge, type Mark, type Ranks, type Team } from "@/lib/accounts/viewer";
+import { markKey, markOf, photoUrl, readBadge, type Mark, type Ranks, type Team } from "@/lib/accounts/viewer";
 
 const Known = createContext<Ranks>({ owners: [], top: [], teams: [], placed: {} });
+/** A face changed while this page is open: a new name, a new photo (null: the photo taken away). */
+type Face = { name?: string; photo?: string | null };
+const Faces = createContext<Record<string, Face>>({});
 
 /** Who wears what on their photo, for every Avatar inside: KIASA's admins, the
  * top managers, and each team's shield on its people. A badge given or taken
  * away, a team made, renamed or recoloured, or someone moved between teams on
- * the admin page reaches this page the moment it happens. `me`: the person
- * signed in, whose own badge cookie (which the header of every page reads) is
- * brought up to date with it. */
+ * the admin page reaches this page the moment it happens; so does anyone's new
+ * name or photo, for every Avatar and every name drawn with useFaces. `me`: the
+ * person signed in, whose own badge cookie (which the header of every page
+ * reads) is brought up to date with it. */
 export function RanksProvider({ initial, realtime, me, children }: {
   initial: Ranks; realtime?: { url: string; key: string }; me?: string; children: ReactNode;
 }) {
   const [top, setTop] = useState(initial.top);
   const [teams, setTeams] = useState<Team[]>(initial.teams ?? []);
   const [placed, setPlaced] = useState<Record<string, string>>(initial.placed ?? {});
+  const [faces, setFaces] = useState<Record<string, Face>>({});
   const url = realtime?.url, key = realtime?.key;
 
   useEffect(() => {
@@ -45,6 +50,16 @@ export function RanksProvider({ initial, realtime, me, children }: {
         .on("postgres_changes", { event: "*", schema: "public", table: "top_managers" }, reload)
         .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, reload)
         .on("postgres_changes", { event: "*", schema: "public", table: "team_members" }, reload)
+        .on("postgres_changes", { event: "*", schema: "public", table: "names" }, payload => {
+          const row = payload.new as { user_id?: string; name?: string };
+          if (row.user_id && row.name) setFaces(current => ({ ...current, [row.user_id!]: { ...current[row.user_id!], name: row.name } }));
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "avatars" }, payload => {
+          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as { user_id?: string; path?: string };
+          if (!row.user_id) return;
+          const photo = payload.eventType === "DELETE" || !row.path ? null : photoUrl(url, row.path);
+          setFaces(current => ({ ...current, [row.user_id!]: { ...current[row.user_id!], photo } }));
+        })
         .subscribe(status => { if (status === "SUBSCRIBED" && !stopped) reload(); });
     })().catch(() => {});
     return () => {
@@ -61,7 +76,17 @@ export function RanksProvider({ initial, realtime, me, children }: {
   });
   useEffect(() => { if (me) update(); }, [me, mine]);
 
-  return <Known value={known}>{children}</Known>;
+  return <Known value={known}><Faces value={faces}>{children}</Faces></Known>;
+}
+
+/** Names and photos as they are now: what the page was given, unless the person
+ * changed it while the page is open. */
+export function useFaces() {
+  const faces = useContext(Faces);
+  return {
+    name: (id: string | null | undefined, given: string) => (id && faces[id]?.name) || given,
+    photo: (id: string | null | undefined, given: string | null | undefined) => (id && faces[id] && "photo" in faces[id] ? faces[id].photo ?? null : given ?? null),
+  };
 }
 
 /** The mark someone wears, as this page knows it now. */

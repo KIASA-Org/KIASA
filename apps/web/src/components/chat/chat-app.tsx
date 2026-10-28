@@ -5,10 +5,10 @@ import type { PostgrestError, RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
 import { photoUrl } from "@/lib/accounts/viewer";
 import { splitChatList, type Attachment, type ChatMe, type ChatMember, type ChatPerson, type ChatRow, type ChatSummary, type ContactRequest, type GroupEntry, type Message } from "@/lib/chat/types";
-import { onlineAt } from "@/lib/sims/hours";
+import { onlineNow as simsOnline } from "@/lib/sims/hours";
 import { reachOf, teamLedBy, whyAsk } from "@/lib/teams/rules";
 import { Archive, Bell, BellOff, Check, Eraser, Leave, NewTab, People, Pin, Trash, Unread } from "../site/icons";
-import { useRanks } from "../site/ranks";
+import { useFaces, useRanks } from "../site/ranks";
 import { showTabBadge } from "../site/tab-badge";
 import { AskToMessage } from "./chat-ask";
 import { alertNewMessage, alertsWorker, messageAlert, useAlerts } from "./chat-alerts";
@@ -121,13 +121,16 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   // When people seen going offline here left.
   const [left, setLeft] = useState<Record<string, string>>({});
   const photoOf = useCallback((id: string | null | undefined) => (id ? photos[id] ?? null : null), [photos]);
-  const peopleNow = useMemo(() => people.map(person => ({ ...person, photo: photos[person.id] ?? null })), [people, photos]);
+  // …and everyone's name, as they change it.
+  const faces = useFaces();
+  const peopleNow = people.map(person => ({ ...person, name: faces.name(person.id, person.name), photo: photos[person.id] ?? null }));
   const seenOf = useCallback((id: string) => left[id] ?? people.find(person => person.id === id)?.seen ?? null, [left, people]);
   // Who is online: everyone here now, and the simulated members online now, as the admin set them or as their day goes (shown only to those who see them).
   const minute = useSyncExternalStore(minuteNow.subscribe, minuteNow.read, () => 0);
   const onlineNow = useMemo(() => {
-    const working = minute ? people.filter(person => person.hours && onlineAt(person.id, person.hours, minute * 60_000)) : [];
-    return working.length ? new Set([...online, ...working.map(person => person.id)]) : online;
+    const sims = people.flatMap(person => (person.hours ? [{ id: person.id, hours: person.hours }] : []));
+    const working = minute && sims.length ? simsOnline(sims, minute * 60_000) : new Set<string>();
+    return working.size ? new Set([...online, ...working]) : online;
   }, [online, people, minute]);
   // The open chat and each chat's channel, for the live handlers, which outlive any one render.
   const activeRef = useRef<string | null>(initialChat ?? null);

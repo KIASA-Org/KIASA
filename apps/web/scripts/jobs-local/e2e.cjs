@@ -85,6 +85,7 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
   const benId = people["ben@example.com"].id;
   // Everyone a member again, as a run cut short may have left Ben a top manager.
   await site.from("top_managers").delete().not("user_id", "is", null);
+  await site.from("teams").delete().not("id", "is", null);
   const { data: kept } = await site.from("resumes").select("path").eq("user_id", benId);
   if (kept?.length) {
     await site.storage.from("resumes").remove(kept.map(resume => resume.path));
@@ -145,16 +146,22 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     const at = Date.now();
     await admin.page.waitForFunction(() => ![...document.querySelectorAll(".jobs-member-name")].some(name => name.textContent === "Ben Okoro"), null, { polling: 10, timeout: 10000 });
     const gone = Date.now() - at;
-    await ben.page.locator(".jobs-bar .account-initials .rank-leaf").waitFor({ timeout: 10000 });
+    // Given a team of his own at once, he leads it: its shield, with the manager's gold rim.
+    await ben.page.locator(".jobs-bar .account-initials .rank-team[title=\"Ben Team · manager\"]").waitFor({ timeout: 10000 });
     const seen = Date.now() - at;
     await desk.reload();
     await hydrated(desk, ".admin-table");
     if (await desk.getByLabel("Role of Ben Okoro").inputValue() !== "top") throw new Error("the admin table forgot it");
+    // A new top manager in no team leads one of their own, named for them.
+    const ownTeam = await desk.getByLabel("Team of Ben Okoro").evaluate(select => select.selectedOptions[0]?.textContent ?? "");
+    if (ownTeam !== "Ben Team") throw new Error(`Ben's team reads “${ownTeam}”`);
+    const { data: made } = await site.from("teams").select("name, color").eq("name", "Ben Team").single();
     await desk.getByLabel("Role of Ben Okoro").selectOption("member");
     await admin.page.locator(".jobs-member-name", { hasText: "Ben Okoro" }).waitFor({ timeout: 10000 });
-    await ben.page.locator(".jobs-bar .account-initials .rank-leaf").waitFor({ state: "detached", timeout: 10000 });
+    // A member again, he keeps the team (for the admin to hand on), without the rim.
+    await ben.page.locator(".jobs-bar .account-initials .rank-team[title=\"Ben Team\"]").waitFor({ timeout: 10000 });
     await desk.close();
-    return `his card gone ${gone} ms after the choice, his own leaf ${seen} ms`;
+    return `his card gone ${gone} ms after the choice, his own leaf ${seen} ms; his own team made: ${made.name} (${made.color})`;
   });
 
   await step("Ben, made Sales' manager with Ana in it, gets My team: Ana's day as the admin sees it, and no one else's", async () => {
