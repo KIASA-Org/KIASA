@@ -187,6 +187,26 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     return text;
   });
 
+  await step("the admin chooses another microphone from the list: Ana keeps hearing, and Details names it, working", async () => {
+    await adminMeet.getByRole("button", { name: "Choose microphone" }).click();
+    const list = adminMeet.getByRole("menu", { name: "Microphones" });
+    await list.getByRole("menuitemradio").first().waitFor({ timeout: 10000 });
+    const names = await list.getByRole("menuitemradio").allInnerTexts();
+    const now = await list.getByRole("menuitemradio", { checked: true }).innerText().catch(() => "");
+    const other = names.find(name => name.trim() !== now.trim()) ?? names[0];
+    await list.getByRole("menuitemradio", { name: other.trim() }).click();
+    const face = tile(adminMeet, "Ana Silva");
+    await face.getByRole("button", { name: "Details" }).click();
+    const sentNow = () => adminMeet.evaluate(() => Object.fromEntries([...document.querySelectorAll(".meet-details div")].map(row => [row.querySelector("dt").textContent, row.querySelector("dd").textContent])));
+    await adminMeet.waitForFunction(name => [...document.querySelectorAll(".meet-details div")].some(row => row.querySelector("dt").textContent === "Your microphone" && row.querySelector("dd").textContent.includes(name) && row.querySelector("dd").textContent.includes("working")), other.trim(), { timeout: 10000 });
+    const first = (await sentNow())["Your voice going to Ana"];
+    await adminMeet.waitForTimeout(4500);
+    const later = (await sentNow())["Your voice going to Ana"];
+    await face.getByRole("button", { name: "Close details" }).click();
+    if (first === later) throw new Error(`the voice stopped going to Ana after the change (${first})`);
+    return `${names.length} microphones listed; now ${other.trim()}; voice to Ana ${first} → ${later}`;
+  });
+
   await step("who is speaking shows (the made-up microphone beeps)", async () => {
     await adminMeet.waitForFunction(() => document.querySelectorAll('.meet-faces [data-speaking="true"]').length > 0, null, { timeout: 15000 });
   });
