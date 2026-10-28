@@ -282,7 +282,7 @@ export const voice = {
   /** Shown under the name when set. */
   role: undefined as string | undefined,
   /** Describes the portrait beside the quotation; replace both together. */
-  imageAlt: "A black-and-white portrait of Chris Lim.",
+  imageAlt: "Chris Lim in a black jacket, standing before a blue-lit stage.",
 };
 
 export const spotlight = {
