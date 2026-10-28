@@ -475,7 +475,8 @@ browsers in a meeting connect only to admins and people let in.
   as `MEETING_TURN_URLS` (comma-separated), `MEETING_TURN_USERNAME` and
   `MEETING_TURN_CREDENTIAL`. Without either, calls are direct only.
 - **The microphone's level, live**: a ring around one's own microphone button grows with one's voice (on the waiting screen too, to check it works), and three bars by each name on the tiles move with that person's voice; muted, nothing moves. One loop reads every voice each frame and sets `--level` on what shows it, without drawing the page again.
-- **The meeting's chat** (Chat with everyone): a panel beside the call that everyone in the meeting reads and writes, kept with the meeting (`supabase/migrations/20261028230000_meeting_chat.sql`), so whoever comes in later reads what was said. Only those in it (its chat's members who are admins or let in) read or write; the database sets each message's name and time. Closed, a new message is counted on the Chat button and shown for a moment.
+- **The meeting's chat** (Chat with everyone): a panel beside the call that everyone in the meeting reads and writes, kept with the meeting (`supabase/migrations/20261028230000_meeting_chat.sql`), so whoever comes in later reads what was said. Only those in it (its chat's members who are admins or let in) read or write; the database sets each message's name and time. Closed, a new message is counted on the Chat button and shown for a moment. It is drawn as KIASA Chat (bubbles in runs, each writer's photo and badge, their name in their colour): a message can be answered (its quote above the answer), given a reaction, and deleted by its writer or an admin (`supabase/migrations/20261029090000_meeting_chat_more.sql`).
+- **The bar, as Google Meet's**: the time and the meeting's name at the left; the microphone (its chooser a small arrow on its corner), camera, screen, hand, recording and Leave in the middle; People and Chat at the right. The admin's Leave menu (Leave the meeting, End for everyone) closes with a click anywhere else or Escape. Panels float beside the call as rounded cards; people coming in fade in.
 - **Recording stays on the admin's computer**: the meeting as shown, with
   everyone's voices, is written as a WebM video to a file the admin chooses
   (Chrome and Edge; other browsers download it at the end). Nothing is uploaded;
@@ -651,7 +652,8 @@ Once, in this order:
    `supabase/migrations/20261028170000_group_signals.sql` (the list of groups, live), then
    `supabase/migrations/20261028190000_sims_presence.sql` (simulated members online or offline), then
    `supabase/migrations/20261028210000_manager_view.sql` (a manager's view of their team's work), then
-   `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat).
+   `supabase/migrations/20261028230000_meeting_chat.sql` (a meeting's own chat), then
+   `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

@@ -193,28 +193,6 @@
 .meet-bars i:nth-child(3) { height: calc(3px + var(--level, 0) * 5px); }
 .meet-tile { transition: box-shadow 180ms ease; }
 
-/* ── The meeting's chat, beside the call. */
-.meet-chat { gap: 10px; overflow: hidden; }
-.meet-chat-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-mute); }
-.meet-chat-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 4px 6px; list-style: none; }
-.meet-chat-message { display: grid; gap: 3px; padding-top: 10px; animation: meet-rise 260ms cubic-bezier(0.22, 1, 0.36, 1); }
-.meet-chat-message[data-run] { padding-top: 2px; }
-.meet-chat-message[data-pending] { opacity: 0.6; }
-.meet-chat-who { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
-.meet-chat-who time { font-size: 12px; font-weight: 400; color: var(--ink-mute); }
-.meet-chat-photo { width: 22px; height: 22px; font-size: 9px; }
-.meet-chat-body { justify-self: start; max-width: 100%; padding: 7px 11px; border-radius: 12px; background: var(--night-control); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-.meet-chat-message[data-mine] { justify-items: end; }
-.meet-chat-message[data-mine] .meet-chat-body { justify-self: end; background: #1d4a33; }
-.meet-chat-empty { margin: auto 0; padding: 20px 0; font-size: 14px; color: var(--ink-mute); text-align: center; }
-.meet-chat-write { display: flex; align-items: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
-.meet-chat-write textarea { flex: 1; min-height: 42px; max-height: 120px; padding: 10px 14px; border: 1.5px solid transparent; border-radius: 21px; background: var(--night-control); color: var(--ink); font: inherit; font-size: 14px; resize: none; field-sizing: content; transition: border-color 160ms ease; }
-.meet-chat-write textarea:focus { outline: none; border-color: var(--leaf); }
-.meet-chat-send { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--leaf); color: var(--night); cursor: pointer; transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 160ms ease; }
-.meet-chat-send:hover { transform: scale(1.06); }
-.meet-chat-send:active { transform: scale(0.94); }
-.meet-chat-send[aria-disabled] { opacity: 0.45; cursor: default; transform: none; }
-.meet-chat-send svg { width: 19px; height: 19px; }
 .meet-toast-message { display: grid; gap: 2px; justify-items: start; width: 100%; text-align: left; cursor: pointer; animation: meet-rise 300ms cubic-bezier(0.22, 1, 0.36, 1); }
 .meet-toast-message strong { font-size: 13px; color: var(--leaf); }
 .meet-toast-message span { color: var(--ink); }
@@ -230,6 +208,78 @@
 @keyframes meet-slide-in { from { opacity: 0; transform: translateX(24px); } }
 @keyframes meet-pop { from { opacity: 0; transform: scale(0.94); } }
 @media (prefers-reduced-motion: reduce) {
-  .meet-chat-message, .meet-toast, .meet-toast-message, .meet-panel, .meet-mic-list, .meet-leave-menu, .meet-details, .meet-control-count { animation: none; }
+  .meet-toast, .meet-toast-message, .meet-panel, .meet-mic-list, .meet-leave-menu, .meet-details, .meet-control-count { animation: none; }
   .meet-control:active, .meet-chat-send:hover, .meet-chat-send:active { transform: none; }
+}
+
+/* ── The bar, as Google Meet's: the time and the meeting's name at the left,
+   the call's controls in the middle, the panels at the right. */
+.meet-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px 20px 16px; }
+.meet-controls-main { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.meet-controls-info { justify-self: start; display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.meet-controls-time { font-variant-numeric: tabular-nums; }
+.meet-controls-title { overflow: hidden; padding-left: 12px; border-left: 1px solid var(--line-strong); color: var(--ink-soft); font-weight: 500; text-overflow: ellipsis; }
+.meet-controls-panels { justify-self: end; display: flex; gap: 6px; }
+.meet-control-plain { width: 48px; height: 48px; background: transparent; color: var(--ink-soft); }
+.meet-control-plain:hover { background: rgb(236 255 243 / 0.08); color: var(--ink); }
+.meet-control-plain[data-state="lit"] { background: rgb(184 236 147 / 0.18); color: var(--leaf); }
+.meet-leave { width: 64px; height: 48px; }
+.meet-leave-menu { right: auto; left: 50%; translate: -50% 0; width: 240px; padding: 6px; gap: 2px; }
+.meet-leave-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 10px; text-align: left; color: var(--ink); cursor: pointer; transition: background-color 140ms ease; }
+.meet-leave-item:hover { background: rgb(236 255 243 / 0.07); }
+.meet-leave-item svg { flex: none; width: 20px; height: 20px; color: var(--ink-soft); }
+.meet-leave-item span { display: grid; gap: 1px; font-size: 14.5px; font-weight: 650; }
+.meet-leave-item small { font-size: 12.5px; font-weight: 400; color: var(--ink-mute); }
+.meet-leave-item[data-danger], .meet-leave-item[data-danger] svg { color: #ff9b9e; }
+.meet-leave-item:disabled { opacity: 0.6; cursor: default; }
+
+/* The microphone's chooser: a small round arrow on the button's corner. */
+.meet-mic { position: relative; display: inline-flex; }
+.meet-mic .meet-mic-choice { position: absolute; right: -5px; bottom: -3px; margin: 0; }
+.meet-mic .meet-mic-more { width: 22px; height: 22px; border: 2px solid var(--night); border-radius: 50%; background: #26372f; color: var(--ink); }
+.meet-mic .meet-mic-more:hover { background: #33473d; }
+.meet-mic .meet-mic-more svg { width: 13px; height: 13px; }
+.meet-mic .meet-mic-list { left: 50%; bottom: calc(100% + 34px); }
+
+/* ── Panels float beside the call as rounded cards, as Google Meet's do. */
+.meet-panel { margin: 12px 16px 0 0; border: 0; border-radius: 16px; background: #0f1a15; box-shadow: 0 0 0 1px var(--line), 0 18px 48px rgb(0 0 0 / 0.4); }
+
+/* ── The meeting's chat, drawn as KIASA Chat: its bubbles, photos, quotes and reactions. */
+.meet-chat { --bubble: #16231d; --bubble-mine: #1d4a33; --bubble-radius: 18px; --bubble-tight: 6px; --glass: rgb(10 20 16 / 0.74); --warn: #ffb4a2;
+  width: 360px; gap: 8px; overflow: hidden; }
+.meet-chat-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-mute); }
+.meet-chat-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; margin: 0 -10px; padding: 6px 14px 10px; list-style: none; }
+.meet-chat .chat-message { max-width: 88%; }
+.meet-chat .chat-gutter { width: 28px; margin-right: 6px; }
+.meet-chat .chat-gutter-avatar { width: 28px; height: 28px; font-size: 10.5px; }
+.meet-chat .chat-text { font-size: 14.5px; }
+.meet-chat-wait { width: 12px; height: 12px; }
+.meet-chat-empty { margin: auto 0; padding: 20px 0; font-size: 14px; color: var(--ink-mute); text-align: center; }
+/* A message's buttons: React, Reply, Delete, beside it while it is pointed at (or tapped). */
+.meet-chat-actions { position: absolute; top: -16px; z-index: 2; display: flex; gap: 1px; padding: 3px; border: 1px solid rgb(236 255 243 / 0.1); border-radius: 12px; background: #22322b; box-shadow: 0 8px 20px rgb(0 0 0 / 0.4); opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity 140ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.chat-message:not([data-mine]) .meet-chat-actions { right: -6px; }
+.chat-message[data-mine] .meet-chat-actions { left: -6px; }
+.meet-chat-actions button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; font-size: 15px; color: var(--ink-soft); cursor: pointer; }
+.meet-chat-actions button:hover { background: rgb(236 255 243 / 0.1); color: var(--ink); }
+.meet-chat-actions button[data-danger] { color: #ffb4a2; }
+.meet-chat-actions svg { width: 16px; height: 16px; }
+.chat-message:is(:hover, :focus-within, [data-open]) .meet-chat-actions { opacity: 1; pointer-events: auto; transform: none; }
+.meet-chat-picker { position: absolute; top: -56px; z-index: 3; display: flex; gap: 2px; padding: 5px; border-radius: 22px; background: #22322b; box-shadow: 0 10px 28px rgb(0 0 0 / 0.5); animation: meet-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.chat-message:not([data-mine]) .meet-chat-picker { right: -6px; }
+.chat-message[data-mine] .meet-chat-picker { left: -6px; }
+.meet-chat-picker button { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 20px; cursor: pointer; transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 140ms ease; }
+.meet-chat-picker button:hover { background: rgb(236 255 243 / 0.1); transform: scale(1.18); }
+.meet-chat-composer { padding: 10px 0 0; border-top: 1px solid var(--line); background: none; }
+
+/* People coming into the meeting fade in. */
+.meet-cell { animation: meet-pop 320ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+@media (max-width: 719px) {
+  .meet-controls { display: flex; flex-wrap: wrap; justify-content: center; }
+  .meet-controls-info { display: none; }
+  .meet-panel { margin: 0; border-radius: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meet-cell, .meet-chat-picker { animation: none; }
+  .meet-chat-actions, .meet-chat-picker button:hover { transform: none; }
 }
