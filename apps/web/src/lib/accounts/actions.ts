@@ -8,7 +8,7 @@ import { reasons } from "@/content/accounts";
 import { noticeDecision, noticeRequest } from "@/lib/chat/server";
 import { TEAM_COLORS } from "@/lib/teams/colors";
 import { alertPerson, isAlertAddress, pushReady } from "./push";
-import { accountsLive, currentViewer, publicSupabase, siteClient, visitorClient } from "./server";
+import { accountsLive, currentViewer, noteAttempt, publicSupabase, siteClient, tooMany, visitorAddress, visitorClient } from "./server";
 import { VIEWER_COOKIE, initialsOf, photoUrl, type ViewerBadge } from "./viewer";
 
 /** What a form shows after it is sent: done, or what to fix. `preview` means
@@ -18,6 +18,7 @@ export type FormState = { done?: boolean; preview?: boolean; error?: string };
 const text = (form: FormData, name: string, max: number) => String(form.get(name) ?? "").trim().slice(0, max);
 const EMAIL = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 const RETRY = "That did not work just now. Please try again in a minute.";
+const TOO_MANY = "Too many tries. Please wait 15 minutes, then try again.";
 
 async function setBadge(badge: ViewerBadge) {
   // Next encodes the value itself.
@@ -43,6 +44,10 @@ export async function requestAccount(_: FormState, form: FormData): Promise<Form
   if (password.length < 10 || password.length > 72) return { error: "Please choose a password of 10 to 72 characters." };
   if (!(reasons as readonly string[]).includes(reason)) return { error: "Please choose what brings you to KIASA." };
   if (form.get("terms") !== "on") return { error: "Please agree to the terms to send your request." };
+  // A few requests an hour from one place: enough for a family or an office.
+  const from = await visitorAddress();
+  if (await tooMany("request", from, 60, 5)) return { error: "Too many requests from here. Please try again in an hour." };
+  await noteAttempt("request", from);
 
   const site = siteClient();
   const name = `${first} ${last}`;
@@ -82,14 +87,23 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const email = text(form, "email", 254).toLowerCase();
   const password = String(form.get("password") ?? "").slice(0, 200);
   if (!email || !password) return { error: "Please give your email and password." };
+  // From one place: a few wrong passwords for one email, and not too many tries
+  // in all, every 15 minutes. So no one guesses a password.
+  const from = await visitorAddress();
+  const [busy, guessing] = await Promise.all([tooMany("sign-in", from, 15, 30), tooMany("sign-in-wrong", `${from} ${email}`, 15, 8)]);
+  if (busy || guessing) return { error: TOO_MANY };
+  after(() => noteAttempt("sign-in", from));
 
   const visitor = await visitorClient();
   const { data, error } = await visitor.auth.signInWithPassword({ email, password });
-  if (error || !data.user) return { error: "That email and password do not match an account." };
+  if (error || !data.user) {
+    await noteAttempt("sign-in-wrong", `${from} ${email}`);
+    return { error: "That email and password do not match an account." };
+  }
 
   const site = siteClient();
   const [admin, profile, avatar, top, team] = await Promise.all([
-    site.from("admins").select("name").eq("email", email).maybeSingle(),
+    site.from("admins").select("name").eq("user_id", data.user.id).maybeSingle(),
     site.from("profiles").select("name, status, decided_at, last_sign_in_at").eq("id", data.user.id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", data.user.id).maybeSingle(),
     site.from("top_managers").select("user_id").eq("user_id", data.user.id).maybeSingle(),
@@ -204,7 +218,7 @@ async function ownTeam(id: string, name: string | null, email: string, by: strin
   const site = siteClient();
   const [{ data: member }, { data: isAdmin }, { data: teams, error: missing }] = await Promise.all([
     site.from("team_members").select("team_id").eq("user_id", id).maybeSingle(),
-    site.from("admins").select("email").eq("email", email).maybeSingle(),
+    site.from("admins").select("email").eq("user_id", id).maybeSingle(),
     site.from("teams").select("name, color"),
   ]);
   // Admins stand above the teams; without the teams set up, there is nothing to make.
@@ -249,7 +263,7 @@ export async function removeAccount(id: string): Promise<{ error?: string }> {
   const site = siteClient();
   const { data: person } = await site.from("profiles").select("email").eq("id", id).maybeSingle();
   if (!person) return { error: "That account is already gone." };
-  const { data: isAdmin } = await site.from("admins").select("email").eq("email", person.email as string).maybeSingle();
+  const { data: isAdmin } = await site.from("admins").select("email").eq("user_id", id).maybeSingle();
   if (isAdmin || id === viewer.id) return { error: "Admins' accounts cannot be deleted here." };
   const { error } = await site.auth.admin.deleteUser(id);
   if (error) return { error: "That account could not be deleted. Please try again." };
@@ -300,9 +314,13 @@ export async function changePassword(_: FormState, form: FormData): Promise<Form
   const current = String(form.get("current") ?? ""), next = String(form.get("next") ?? ""), again = String(form.get("again") ?? "");
   if (next.length < 10 || next.length > 72) return { error: "Please choose a new password of 10 to 72 characters." };
   if (next !== again) return { error: "The new password and its repeat are not the same." };
+  if (await tooMany("password-wrong", viewer.id, 15, 5)) return { error: TOO_MANY };
   const visitor = await visitorClient();
   const checked = await visitor.auth.signInWithPassword({ email: viewer.email, password: current });
-  if (checked.error) return { error: "That is not your current password." };
+  if (checked.error) {
+    await noteAttempt("password-wrong", viewer.id);
+    return { error: "That is not your current password." };
+  }
   const { error } = await visitor.auth.updateUser({ password: next });
   if (error?.code === "same_password") return { error: "The new password is your current one. Please choose another." };
   if (error?.code === "weak_password") return { error: "Please choose a stronger password: longer, or less common." };

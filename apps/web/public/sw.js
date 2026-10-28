@@ -45,7 +45,8 @@ self.addEventListener("push", event => {
   } catch {
     alert = {};
   }
-  const url = typeof alert.url === "string" && alert.url.startsWith("/") ? alert.url : "/account";
+  // A page of this site only ("//elsewhere" would be another site).
+  const url = typeof alert.url === "string" && /^\/(?![/\\])/.test(alert.url) ? alert.url : "/account";
   event.waitUntil(self.registration.showNotification(alert.title || "KIASA", {
     body: alert.body || "",
     icon: "/icon.png",
@@ -58,7 +59,7 @@ self.addEventListener("push", event => {
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   const data = event.notification.data || {};
-  const url = new URL(typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/account", self.location.origin).href;
+  const url = new URL(typeof data.url === "string" && /^\/(?![/\\])/.test(data.url) ? data.url : "/account", self.location.origin).href;
   event.waitUntil((async () => {
     const pages = (await self.clients.matchAll({ type: "window", includeUncontrolled: true }))
       .filter(page => new URL(page.url).origin === self.location.origin);

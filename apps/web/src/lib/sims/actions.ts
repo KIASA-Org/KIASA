@@ -206,7 +206,7 @@ export async function renameSim(id: string, name: string): Promise<Done> {
   const who = await admin();
   if ("error" in who) return who;
   const [sim] = await onlySims([id]);
-  const tidy = name.replace(/\s+/g, " ").trim().slice(0, 80);
+  const tidy = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
   if (!sim) return { error: RETRY };
   if (!tidy) return { error: "Please give a name." };
   if (await nameTaken(tidy, sim)) return { error: `${tidy} is already someone's name. Please choose another.` };

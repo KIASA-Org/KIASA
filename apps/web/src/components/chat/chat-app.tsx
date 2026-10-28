@@ -21,7 +21,7 @@ import { ChatList } from "./chat-list";
 import { MembersPanel } from "./chat-members";
 import type { MenuItem } from "./chat-menu";
 import { chatReducer, directDraft, type ChatDraft, type ChatView } from "./chat-state";
-import { putFile, setUpload, uploadOf } from "./chat-upload";
+import { keptAs, putFile, setUpload, uploadOf } from "./chat-upload";
 import { Conversation } from "./conversation";
 
 type Realtime = { url: string; key: string };
@@ -609,7 +609,7 @@ export function ChatApp({ me, initialChats, initialMembers, people, realtime, in
   const sendFile = useCallback(async (chatId: string, file: File, options: { caption: string; replyTo: string | null; preview: string | null; id?: string }) => {
     const id = options.id ?? crypto.randomUUID();
     const kept = { chatId, file, caption: options.caption, replyTo: options.replyTo, preview: options.preview };
-    const facts = { name: file.name, mime: file.type || "application/octet-stream", size: file.size };
+    const facts = { name: file.name, mime: keptAs(file.type), size: file.size };
     setUpload(id, { ...kept, loaded: 0 });
     dispatch({
       type: "message", me: me.id, reading: true, message: {

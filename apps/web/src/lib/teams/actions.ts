@@ -19,7 +19,7 @@ async function admin(): Promise<{ name: string; email: string } | { error: strin
 
 /** A team's name and colour, tidied and checked. */
 function details(name: string, color: string): { name: string; color: string } | { error: string } {
-  const tidy = name.replace(/\s+/g, " ").trim().slice(0, 40);
+  const tidy = String(name ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
   if (!tidy) return { error: "Please give the team a name." };
   if (!TEAM_COLORS.some(entry => entry.color === color)) return { error: "Please choose one of the colours." };
   return { name: tidy, color };

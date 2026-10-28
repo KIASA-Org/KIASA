@@ -77,7 +77,7 @@ export async function meetingChoices(chatId?: string | null): Promise<{ people?:
   return { people, chosen: chatId ? people.map(person => person.id) : [], manager: !who.admin };
 }
 
-const cleanTitle = (title: string) => title.replace(/\s+/g, " ").trim().slice(0, 120);
+const cleanTitle = (title: string) => String(title ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 const listed = (names: string[]) => names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
 /** A meeting's card in a chat. A new card is a new message, so everyone in
@@ -128,7 +128,7 @@ export async function createMeeting(input: { chatId?: string | null; title: stri
     if (chat.error) return chat;
   }
   const options = new Map((await choices(who, chatId)).map(person => [person.id, person]));
-  const ids = [...new Set(input.people)].filter(id => options.has(id));
+  const ids = [...new Set(Array.isArray(input.people) ? input.people : [])].filter(id => options.has(id));
   if (!ids.length) return { error: "Please choose who is in the meeting." };
   const now = !input.startsAt;
   const when = now ? Date.now() : Date.parse(input.startsAt!);
