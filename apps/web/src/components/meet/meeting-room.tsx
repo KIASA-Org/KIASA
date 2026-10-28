@@ -325,7 +325,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
           {others.map(remote => {
             const person = start.people.find(entry => entry.id === remote.user);
             return <div key={remote.peer} className="meet-cell"><Tile name={remote.name} initials={initialsOf(remote.name)} photo={person?.photo ?? null} user={remote.user}
-              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} link={remote.link} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
+              stream={cameraOf(remote)} camera={remote.cam} mic={remote.mic} hand={!!remote.hand} speaking={speaking.includes(remote.peer)} link={remote.link} relayed={call.relayed} state={`${remote.link}/${remote.signaling}${remote.trouble ? ` ${remote.trouble}` : ""}`} /></div>;
           })}
         </div>
       </main>
@@ -431,9 +431,11 @@ function ControlButton({ on, active, danger, label, onClick, children }: {
     data-state={active ? (on ? (danger ? "recording" : "lit") : undefined) : on ? undefined : "off"} onClick={onClick}>{children}</button>;
 }
 
-function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, link, state }: {
+function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking, link, relayed, state }: {
   name: string; initials: string; photo: string | null; user: string; stream: MediaStream | null; camera: boolean; mic: boolean; hand: boolean;
   speaking: boolean; link?: RTCPeerConnectionState;
+  /** Whether a relay is set up, said while connecting: a call that cannot go direct needs one. */
+  relayed?: boolean;
   /** How the connection stands, for whoever looks into a problem (and the tests). */
   state?: string;
 }) {
@@ -446,7 +448,7 @@ function Tile({ name, initials, photo, user, stream, camera, mic, hand, speaking
       : <div className="meet-nobody"><Avatar initials={initials} photo={photo} className="meet-avatar" who={user} /></div>}
     <span className="meet-name">{!mic && <MicOff aria-label="Microphone off" role="img" aria-hidden={false} />}{name}</span>
     {hand && <span className="meet-hand" role="img" aria-label="Hand raised">✋</span>}
-    {link && link !== "connected" && link !== "new" && <span className="meet-link">{link === "connecting" ? "Connecting…" : link === "failed" ? "Can't connect" : "Reconnecting…"}</span>}
+    {link && link !== "connected" && link !== "new" && <span className="meet-link">{link === "connecting" ? "Connecting…" : link === "failed" ? "Can't connect" : "Reconnecting…"}{relayed !== undefined && ` · relay ${relayed ? "on" : "off"}`}</span>}
   </div>;
 }
 

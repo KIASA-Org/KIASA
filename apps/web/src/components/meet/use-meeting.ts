@@ -14,12 +14,15 @@ export type Remote = PeerState & { peer: string; streams: MediaStream[]; link: R
 export type Connection = "connecting" | "live" | "paused";
 
 /** `user`: who sends it, so a browser answers only those it may connect to. */
-type Signal = { from: string; to: string; user: string; description?: RTCSessionDescriptionInit };
+/** `candidate`: a way to reach the sender found after its offer or answer went out. */
+type Signal = { from: string; to: string; user: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 type Link = {
   pc: RTCPeerConnection; polite: boolean; makingOffer: boolean; ignoreOffer: boolean;
   cam?: RTCRtpSender; screen?: RTCRtpSender; voice?: RTCRtpSender; queue: Promise<void>;
   /** Seen in the meeting's list of who is here: from then on, gone from it means gone. */
   seen: boolean;
+  /** This side's offer or answer has gone out: ways to reach it found later go on their own. */
+  described: boolean;
 };
 
 // A camera picture good enough for a face, light enough to send to five others at once.
@@ -131,7 +134,7 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   /** A connection to someone else in the meeting, sending them what I send everyone. */
   const connect = (peer: string, state?: PeerState): Link => {
     const pc = new RTCPeerConnection({ iceServers: ice });
-    const link: Link = { pc, polite: peerId > peer, makingOffer: false, ignoreOffer: false, queue: Promise.resolve(), seen: false };
+    const link: Link = { pc, polite: peerId > peer, makingOffer: false, ignoreOffer: false, queue: Promise.resolve(), seen: false, described: false };
     links.current.set(peer, link);
     const mine = localRef.current;
     for (const track of mine?.getTracks() ?? []) {
@@ -141,9 +144,15 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     }
     const shared = screenRef.current;
     if (shared) link.screen = pc.addTrack(shared.getVideoTracks()[0], shared);
+    // A way to reach this side found after its offer or answer went out (a relay
+    // far away can take seconds): sent on its own, so it is never lost.
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate && link.described) send(peer, { candidate: candidate.toJSON() });
+    };
     pc.onnegotiationneeded = async () => {
       try {
         link.makingOffer = true;
+        link.described = false;
         await pc.setLocalDescription();
       } catch (error) {
         patchRemote(peer, () => ({ trouble: `offer: ${(error as Error).message}`.slice(0, 200) }));
@@ -151,7 +160,10 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
       } finally { link.makingOffer = false; }
       await gathered(pc, relayed);
       // Set aside meanwhile, for an offer from the other side: nothing to send.
-      if (pc.signalingState === "have-local-offer") send(peer, { description: clearVoice(pc.localDescription!.toJSON()) });
+      if (pc.signalingState === "have-local-offer") {
+        send(peer, { description: clearVoice(pc.localDescription!.toJSON()) });
+        link.described = true;
+      }
     };
     pc.ontrack = ({ track, streams }) => {
       const stream = streams[0] ?? new MediaStream([track]);
@@ -184,15 +196,22 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     let link = links.current.get(signal.from);
     if (!link) link = connect(signal.from);
     const { pc } = link;
+    if (signal.candidate) {
+      // One for an offer set aside (or already known) is let go.
+      try { await pc.addIceCandidate(signal.candidate); } catch { /* not for the offer or answer now in hand */ }
+      return;
+    }
     if (signal.description) {
       const collision = signal.description.type === "offer" && (link.makingOffer || pc.signalingState !== "stable");
       link.ignoreOffer = !link.polite && collision;
       if (link.ignoreOffer) return;
       await pc.setRemoteDescription(signal.description);
       if (signal.description.type === "offer") {
+        link.described = false;
         await pc.setLocalDescription();
         await gathered(pc, relayed);
         send(signal.from, { description: clearVoice(pc.localDescription!.toJSON()) });
+        link.described = true;
       }
     }
   };
@@ -356,6 +375,8 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   const announceEnd = () => { void channel.current?.send({ type: "broadcast", event: "ended", payload: {} }); };
 
   return {
+    // Whether a relay is set up for calls that cannot go direct.
+    relayed,
     peerId, connection, present, remotes: Object.values(remotes), ended, problem, setProblem,
     local, screen, mic, cam, hand, recording,
     toggleMic, toggleCam, shareScreen, stopScreen,
