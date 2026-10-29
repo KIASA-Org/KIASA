@@ -1,7 +1,7 @@
 import "server-only";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Browser } from "playwright-core";
+import type { Browser, Page } from "playwright-core";
 import { renderResumeFooter, renderResumeHtml } from "./resume-html";
 import type { Profile } from "./schema";
 
@@ -37,9 +37,13 @@ function fonts(): string {
   return fontCss;
 }
 
-// ── One browser for the server's life: on Vercel the serverless Chromium
-// (@sparticuz/chromium); on a computer, its own Chrome or Edge.
-const shared = globalThis as typeof globalThis & { kiasaPdfBrowser?: Promise<Browser> };
+// ── One browser, and one page in it, for the server's life: on Vercel the
+// serverless Chromium (@sparticuz/chromium); on a computer, its own Chrome or
+// Edge. The page is kept and reused, one résumé after another: that Chromium
+// runs as a single process, and closing a page there breaks the browser for
+// the next one (the second PDF on a server hung until the server gave up).
+type Printer = { browser: Promise<Browser>; page: Promise<Page> };
+const shared = globalThis as typeof globalThis & { kiasaPdf?: Printer; kiasaPdfTurn?: Promise<unknown> };
 async function launch(): Promise<Browser> {
   const { chromium: playwright } = await import("playwright-core");
   if (process.env.VERCEL) {
@@ -54,34 +58,68 @@ async function launch(): Promise<Browser> {
   }
   throw new Error(`No Chrome or Edge here to print PDFs with (${String((last as Error)?.message ?? last).split("\n")[0]})`);
 }
-function browser(): Promise<Browser> {
-  shared.kiasaPdfBrowser ??= launch().then(
-    started => { started.on("disconnected", () => { shared.kiasaPdfBrowser = undefined; }); return started; },
-    (error: unknown) => { shared.kiasaPdfBrowser = undefined; throw error; },
-  );
-  return shared.kiasaPdfBrowser;
+function printer(): Promise<Page> {
+  if (!shared.kiasaPdf) {
+    const browser = launch();
+    const page = browser.then(started => {
+      started.on("disconnected", () => { if (shared.kiasaPdf?.browser === browser) shared.kiasaPdf = undefined; });
+      return started.newPage();
+    });
+    const kept: Printer = { browser, page };
+    page.catch(() => { if (shared.kiasaPdf === kept) shared.kiasaPdf = undefined; });
+    shared.kiasaPdf = kept;
+  }
+  return shared.kiasaPdf.page;
 }
 
 /** Letter-size margins; the footer (name, "Page X of Y") sits in the bottom one. */
 const MARGINS = { top: "0.5in", right: "0.6in", bottom: "0.6in", left: "0.6in" };
 
+/** Waits for `work`, at most `ms`; then fails, saying what took too long. */
+function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work.finally(() => clearTimeout(timer)),
+    new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} took over ${ms / 1000} s`)), ms); }),
+  ]);
+}
+
+/** Lets the kept browser go (it no longer answers): the next print starts afresh. */
+async function dropPrinter() {
+  const kept = shared.kiasaPdf;
+  shared.kiasaPdf = undefined;
+  await within(kept?.browser.then(open => open.close()) ?? Promise.resolve(), 3000, "Closing Chromium").catch(() => {});
+}
+
+async function print(profile: Profile): Promise<Uint8Array<ArrayBuffer>> {
+  const page = await within(printer(), 25_000, "Starting Chromium");
+  await within(page.setContent(renderResumeHtml(profile, { fontCss: fonts() }), { waitUntil: "load" }), 8000, "Laying out the résumé");
+  await within(page.evaluate(() => document.fonts.ready.then(() => undefined)), 4000, "Loading its fonts").catch(() => {});
+  const printed = await within(page.pdf({
+    format: "Letter", printBackground: true, margin: MARGINS,
+    displayHeaderFooter: true, headerTemplate: "<span></span>", footerTemplate: renderResumeFooter(profile),
+  }), 12_000, "Printing");
+  const out = new Uint8Array(printed.byteLength);
+  out.set(printed);
+  return out;
+}
+
 /** A résumé, printed: the Resume Tailor App's one-column template that
- * applicant tracking systems read cleanly (real text, no tables or columns). */
-export async function resumePdf(profile: Profile): Promise<Uint8Array<ArrayBuffer>> {
-  const page = await (await browser()).newPage();
-  try {
-    await page.setContent(renderResumeHtml(profile, { fontCss: fonts() }), { waitUntil: "load" });
-    await page.evaluate(() => document.fonts.ready.then(() => undefined));
-    const printed = await page.pdf({
-      format: "Letter", printBackground: true, margin: MARGINS,
-      displayHeaderFooter: true, headerTemplate: "<span></span>", footerTemplate: renderResumeFooter(profile),
-    });
-    const out = new Uint8Array(printed.byteLength);
-    out.set(printed);
-    return out;
-  } finally {
-    await page.close();
-  }
+ * applicant tracking systems read cleanly (real text, no tables or columns).
+ * One at a time on the kept page; no step may hang (each has a time limit),
+ * and if the kept browser no longer answers, a fresh one prints it, once. */
+export function resumePdf(profile: Profile): Promise<Uint8Array<ArrayBuffer>> {
+  const turn = (shared.kiasaPdfTurn ?? Promise.resolve()).then(async () => {
+    try {
+      return await print(profile);
+    } catch (error) {
+      console.warn("Résumé PDF: printing again with a fresh browser:", (error as Error).message);
+      await dropPrinter();
+      return print(profile);
+    }
+  });
+  shared.kiasaPdfTurn = turn.catch(() => {});
+  return turn;
 }
 
 /** A résumé's file name as a recruiter should see it: "Jane Doe Resume.pdf".

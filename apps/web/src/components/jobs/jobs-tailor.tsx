@@ -183,6 +183,7 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
         </label>
       </li>
     </ol>
+    {step === "printing" && <p className="jobs-hint" role="status">Applied and kept. Now making the PDF: usually a few seconds, up to about 20 when it is the first in a while.</p>}
     {result && <div className="resume-result" role="status">
       {result.saved && file && (file.error
         ? <p className="b-form-error">{file.error}</p>
