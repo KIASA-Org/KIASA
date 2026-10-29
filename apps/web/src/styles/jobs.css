@@ -428,3 +428,7 @@
 .resume-first { display: grid; gap: 10px; }
 .resume-first ul { display: grid; gap: 6px; padding-left: 20px; list-style: disc; }
 .resume-first b { color: var(--ink); }
+.resume-flow-title { font-size: 15.5px; font-weight: 650; color: var(--ink); }
+.resume-next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; }
+.resume-next p { flex: 1 1 360px; }
+.resume-next b { color: #f2d36b; }
