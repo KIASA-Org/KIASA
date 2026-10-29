@@ -432,3 +432,15 @@
 .resume-next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; }
 .resume-next p { flex: 1 1 360px; }
 .resume-next b { color: #f2d36b; }
+/* The résumé folder: where PDFs are saved, and their paths to copy for applications. */
+.resume-folder { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--card-line); }
+.resume-folder-title { font-size: 14.5px; font-weight: 650; }
+.resume-folder b { color: var(--ink); }
+.resume-folder-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.resume-folder-path { flex: 1 1 360px; }
+.resume-saved { display: grid; gap: 6px; margin-top: 10px; }
+.resume-path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.resume-path code { min-width: 0; padding: 6px 10px; border-radius: 8px; background: var(--night-raised); font: 12.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink-soft); overflow-wrap: anywhere; }
+.resume-toast { position: fixed; left: 50%; bottom: 20px; z-index: 50; max-width: min(720px, calc(100vw - 32px)); padding: 12px 16px; border-radius: 14px; background: #16231d; box-shadow: 0 12px 40px rgb(0 0 0 / 0.45), inset 3px 0 0 var(--leaf); font-size: 14px; line-height: 1.5; color: var(--ink); transform: translateX(-50%); overflow-wrap: anywhere; }
+.resume-toast[data-state="failed"] { box-shadow: 0 12px 40px rgb(0 0 0 / 0.45), inset 3px 0 0 #ffb4a2; }
+.resume-toast b { color: var(--leaf); }

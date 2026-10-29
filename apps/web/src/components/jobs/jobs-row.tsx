@@ -2,7 +2,7 @@
 
 import { useCallback, useState, type MouseEvent } from "react";
 import { STATUS_LABELS, type Job, type JobStatus, type Resume } from "@/lib/jobs/types";
-import { ArrowLeft, Check, ChevronDown, Close, More, NewTab, Pencil, Trash } from "../site/icons";
+import { ArrowLeft, Check, ChevronDown, Close, Copy, More, NewTab, Pencil, Trash } from "../site/icons";
 import { Menu, type MenuItem, type MenuPlace } from "../chat/chat-menu";
 import { HiredDialog, InterviewDialog, NoteDialog, ResumeDialog, type HiredForm, type InterviewForm } from "./jobs-dialogs";
 import { clockIn, linkLabel } from "./jobs-format";
@@ -56,8 +56,12 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
       onSelect: () => choose(step),
     })),
   ];
+  // A résumé made for this job: made again from here (its button copies its path).
+  const again: MenuItem[] = tailor && tailored ? [{ label: "Tailor the résumé again…", icon: <Pencil />, onSelect: () => tailor.open(job) }] : [];
+  const copying = tailor?.copying?.job === job.id ? tailor.copying.state : null;
   const more: MenuItem[] = job.status
     ? [
+      ...again,
       { label: "Interview…", icon: <Pencil />, onSelect: () => setAsking("interview") },
       { label: "I got the job…", icon: <Check />, onSelect: () => setAsking("hired") },
       { label: job.my_note ? "Change note" : "Add a note", icon: <Pencil />, onSelect: () => setAsking("note") },
@@ -66,6 +70,7 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
     ]
     // (A note is kept with an application, so a job not yet marked has none.)
     : [
+      ...again,
       { label: "Skip (not a fit)", icon: <Close />, onSelect: () => void act.status(job, "skipped") },
       { label: "Interview…", icon: <Pencil />, onSelect: () => setAsking("interview") },
     ];
@@ -89,8 +94,12 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
       {job.my_note && <p className="jobs-row-note">{job.my_note}</p>}
     </div>
     <div className="jobs-row-actions">
-      {tailor && job.status !== "skipped" && <button type="button" className="chat-pill jobs-tailor" data-done={tailored || undefined} onClick={() => tailor.open(job)}
-        aria-label={`${tailored ? "Tailor again" : "Tailor résumé"}: ${title}`}><Pencil /> {tailored ? "Tailor again" : "Tailor résumé"}</button>}
+      {tailor && job.status !== "skipped" && (tailored
+        ? <button type="button" className="chat-pill jobs-tailor" data-done="" disabled={copying === "busy"} onClick={() => tailor.copyPath(job)}
+          aria-label={`Copy the path of your résumé for ${title}`} title="Copy the résumé file's whole path, to paste in the application's file box">
+          {copying === "done" ? <Check /> : <Copy />} {copying === "busy" ? "Saving…" : copying === "done" ? "Path copied" : "Copy résumé path"}
+        </button>
+        : <button type="button" className="chat-pill jobs-tailor" onClick={() => tailor.open(job)} aria-label={`Tailor résumé: ${title}`}><Pencil /> Tailor résumé</button>)}
       {!job.status
         ? <>
           <a className="jobs-button" href={job.url} target="_blank" rel="noopener noreferrer">Open <NewTab /></a>

@@ -84,8 +84,16 @@ export async function resumePdf(profile: Profile): Promise<Uint8Array<ArrayBuffe
   }
 }
 
-/** "Jane_Doe_Acme_Data_Engineer.pdf". */
-export function pdfName(...parts: (string | null | undefined)[]): string {
-  const name = parts.filter(Boolean).join(" ").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
-  return `${name || "resume"}.pdf`;
+/** A résumé's file name as a recruiter should see it: "Jane Doe Resume.pdf".
+ * Never the company or the job (that reads as made for them); credentials
+ * after a comma ("Jane Doe, Ph.D.") left out; nothing a file name cannot hold. */
+export function pdfName(name: string | null | undefined): string {
+  const person = (name ?? "").split(",")[0].replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return `${person ? `${person} ` : ""}Resume.pdf`;
+}
+
+/** The Content-Disposition header for a file name, any language's letters kept (RFC 6266). */
+export function attachmentHeader(name: string, inline = false): string {
+  const plain = name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
+  return `${inline ? "inline" : "attachment"}; filename="${plain}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }

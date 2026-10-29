@@ -8,9 +8,12 @@ import { parseImportedProfile } from "@/lib/resume/import-answer";
 import { emptyProfile } from "@/lib/resume/profile-form";
 import { ProfileSchema, type Profile } from "@/lib/resume/schema";
 import { Confirm } from "../chat/chat-dialog";
-import { Download, Pencil } from "../site/icons";
+import { Copy, Download, Pencil } from "../site/icons";
 import { dayName, partsIn } from "./jobs-format";
-import { CopyButton, LOST, ReportLists, downloadPdf } from "./jobs-resume-parts";
+import { copyText, jobPlace, savePdf, writableFolder, type Saved } from "./jobs-resume-folder";
+import { ResumeFolder } from "./jobs-resume-folder-card";
+import { CopyButton, LOST, ReportLists } from "./jobs-resume-parts";
+import { useTailor } from "./jobs-tailor";
 import { ResumeEditor } from "./jobs-resume-editor";
 
 type Base = { profile: Profile; status: BaseStatus; updated_at: string };
@@ -38,6 +41,8 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
   const [said, setSaid] = useState("");
   const [removing, setRemoving] = useState<Tailored | null>(null);
   const [printing, setPrinting] = useState<string | null>(null);
+  const [file, setFile] = useState<Saved | null>(null);
+  const tailor = useTailor();
 
   const fetchAll = useCallback(async () => {
     const [found, made] = await Promise.all([
@@ -59,12 +64,16 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
   const editing = mode?.kind === "edit" || mode?.kind === "tailored";
   useEffect(() => { onEditing?.(editing); }, [editing, onEditing]);
 
-  const pdf = async (query: string, key: string) => {
+  // A PDF: into the résumé folder when one is chosen (asked first, in the click), else downloaded.
+  const pdf = async (query: string, key: string, within: string[] = []) => {
+    const folder = await writableFolder();
     setPrinting(key);
     setSaid("");
-    const failed = await downloadPdf(query);
+    setFile(null);
+    const saved = await savePdf(query, folder, key === "base" ? undefined : key, within);
     setPrinting(null);
-    if (failed) setSaid(failed);
+    if (saved.error) setSaid(saved.error);
+    else setFile(saved);
   };
   const editTailored = async (job: Tailored) => {
     const { data } = await supabase.from("tailored_resumes").select("profile").eq("job_id", job.job_id).eq("user_id", me.id).maybeSingle();
@@ -142,6 +151,11 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
       })} />}
       {mode?.kind === "generate" && base && <GenerateFlow supabase={supabase} onBack={() => setMode(null)} onChecked={(profile, notes) => setMode({ kind: "edit", profile, status: "generated", banner: notes })} />}
       {said && <p className="jobs-hint" role="status">{said}</p>}
+      {file && <div className="resume-saved" role="status">
+        <p className="resume-done">{file.where === "folder" ? "Saved in your résumé folder" : "Downloaded"}: {file.where === "folder" ? file.place?.split("/").join(" › ") : file.name}</p>
+        {file.path && <span className="resume-path"><code>{file.path}</code><button type="button" className="chat-pill" onClick={() => void copyText(file.path!)}><Copy /> Copy path</button></span>}
+      </div>}
+      {!mode && <ResumeFolder />}
     </section>
 
     {tailored.length > 0 && <section className="jobs-card" aria-labelledby="resume-made-title">
@@ -154,7 +168,8 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
             <p className="jobs-row-meta">{job.jobs?.company && <span>{job.jobs.company}</span>}<span>{dayName(partsIn(zone, job.updated_at).day, today)}</span></p>
           </div>
           <div className="jobs-row-actions">
-            <button type="button" className="chat-pill" disabled={printing === job.job_id} onClick={() => void pdf(`job=${job.job_id}`, job.job_id)}><Download /> {printing === job.job_id ? "Making…" : "PDF"}</button>
+            <button type="button" className="chat-pill" disabled={printing === job.job_id} onClick={() => void pdf(`job=${job.job_id}`, job.job_id, jobPlace({ id: job.job_id, company: job.jobs?.company, title: job.jobs?.title }))}><Download /> {printing === job.job_id ? "Making…" : "PDF"}</button>
+            {tailor && <button type="button" className="chat-pill" onClick={() => tailor.copyPath({ id: job.job_id, company: job.jobs?.company ?? null, title: job.jobs?.title ?? null })}><Copy /> Copy path</button>}
             <button type="button" className="chat-pill" onClick={() => void editTailored(job)}><Pencil /> Edit</button>
             <button type="button" className="chat-pill" data-danger="" onClick={() => setRemoving(job)}>Remove</button>
           </div>

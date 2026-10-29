@@ -1,7 +1,7 @@
 import { visitorClient } from "@/lib/accounts/server";
 import { jobsViewer } from "@/lib/jobs/server";
 import { ProfileSchema } from "@/lib/resume/schema";
-import { pdfName, resumePdf } from "@/lib/resume/server";
+import { attachmentHeader, pdfName, resumePdf } from "@/lib/resume/server";
 
 // Printing a résumé takes a few seconds (a headless Chromium, on Node).
 export const runtime = "nodejs";
@@ -23,11 +23,10 @@ export async function GET(request: Request) {
   if ((job && !ID.test(job)) || !ID.test(user)) return say("That résumé is not known.", 400);
   const db = await visitorClient();
   const found = job
-    ? await db.from("tailored_resumes").select("profile, jobs(title, company)").eq("job_id", job).eq("user_id", user).maybeSingle()
+    ? await db.from("tailored_resumes").select("profile").eq("job_id", job).eq("user_id", user).maybeSingle()
     : await db.from("resume_profiles").select("profile").eq("user_id", user).maybeSingle();
   const parsed = ProfileSchema.safeParse(found.data?.profile);
   if (!parsed.success) return say(job ? "There is no résumé made for this job yet." : "There is no base résumé yet.", 404);
-  const posting = (found.data as { jobs?: { title: string | null; company: string | null } | null }).jobs;
   let pdf: Uint8Array<ArrayBuffer>;
   try {
     pdf = await resumePdf(parsed.data);
@@ -35,11 +34,11 @@ export async function GET(request: Request) {
     console.error("Résumé PDF failed:", error);
     return say("The PDF could not be made just now. Please try again in a minute.", 503);
   }
-  const name = pdfName(parsed.data.info.name, posting?.company, posting?.title);
+  const name = pdfName(parsed.data.info.name);
   return new Response(pdf, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `${asked.get("inline") === "1" ? "inline" : "attachment"}; filename="${name}"`,
+      "Content-Disposition": attachmentHeader(name, asked.get("inline") === "1"),
       "Content-Length": String(pdf.byteLength),
       "Cache-Control": "private, no-store",
     },
