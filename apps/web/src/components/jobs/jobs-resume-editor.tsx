@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { fromForm, tidyProfile, toForm, validateProfile, type ExperienceForm, type FormModel, type SkillForm } from "@/lib/resume/profile-form";
 import type { Profile } from "@/lib/resume/schema";
 import { ArrowLeft, ChevronDown, Close, Plus } from "../site/icons";
+import { LOST } from "./jobs-resume-parts";
 
 type Certification = Profile["certifications"][number];
 type Education = Profile["education"][number];
@@ -52,7 +53,7 @@ export function ResumeEditor({ initial, title, banner, saveLabel, note, onSave, 
     if (problems.length) { setErrors(problems); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     setErrors([]);
     setBusy(true);
-    const failed = await onSave(profile);
+    const failed = await onSave(profile).catch(() => [LOST]);
     setBusy(false);
     if (failed?.length) { setErrors(failed); window.scrollTo({ top: 0, behavior: "smooth" }); }
   };

@@ -144,7 +144,7 @@ const decodeKeepingLines = (text: string) => text
   .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole);
 
 /** Text from a page's HTML, its paragraphs and points on lines of their own. */
-function plainText(html: string) {
+export function plainText(html: string) {
   const unescaped = html.includes("&lt;") ? decodeKeepingLines(html) : html;
   return decodeKeepingLines(unescaped
     .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*(script|style)\s*>/gi, " ")

@@ -1,6 +1,7 @@
 "use server";
 
-import { visitorClient } from "@/lib/accounts/server";
+import { siteClient, visitorClient } from "@/lib/accounts/server";
+import { descriptionFor } from "@/lib/jobs/page";
 import { jobsViewer } from "@/lib/jobs/server";
 import { applyComprehensive } from "./apply-comprehensive";
 import { applyInit } from "./apply-init";
@@ -70,7 +71,17 @@ export async function textForJob(job: string, kind: "tailor" | "init", descripti
   ]);
   if (!posting) return { error: "That job is no longer on the list." };
   if (!base) return { needsBase: true, error: "First make your base résumé, once: every job's résumé is made from it." };
-  const jd = (typeof description === "string" && description.trim() ? description : posting.description ?? "").trim().slice(0, 30000);
+  let kept = posting.description ?? "";
+  // No description yet (a job posted before the Jobright bot brought them, or
+  // a page not read): read it off the job's page now, and keep it for everyone.
+  if (!kept.trim() && !(typeof description === "string" && description.trim())) {
+    const found = await descriptionFor(posting.url).catch(() => null);
+    if (found) {
+      kept = found;
+      await siteClient().from("jobs").update({ description: found }).eq("id", job).is("description", null);
+    }
+  }
+  const jd = (typeof description === "string" && description.trim() ? description : kept).trim().slice(0, 30000);
   if (jd.length < 80) return { needsDescription: true, error: "KIASA has no description for this job yet. Paste it from the job's page." };
   const record = buildJobRecord(
     { company: posting.company ?? "", title: posting.title ?? "", jd, link: posting.url, about: "" },

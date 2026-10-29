@@ -4,6 +4,9 @@ import { useState } from "react";
 import type { TailorReport } from "@/lib/resume/actions";
 import { Copy } from "../site/icons";
 
+/** When a call to the server fails: no connection, or the page is from before an update. */
+export const LOST = "That did not reach KIASA: the connection dropped, or this page is from before an update. Copy what you pasted, reload the page (F5), and try again.";
+
 /** Copies text for a chat, and shows how long it is (the text itself is long: the prompt and the résumé). */
 export function CopyButton({ text, label, onCopied }: { text: string; label: string; onCopied?: () => void }) {
   const [copied, setCopied] = useState(false);

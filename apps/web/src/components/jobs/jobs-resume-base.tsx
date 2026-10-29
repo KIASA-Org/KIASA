@@ -10,7 +10,7 @@ import { ProfileSchema, type Profile } from "@/lib/resume/schema";
 import { Confirm } from "../chat/chat-dialog";
 import { Download, Pencil } from "../site/icons";
 import { dayName, partsIn } from "./jobs-format";
-import { CopyButton, ReportLists, downloadPdf } from "./jobs-resume-parts";
+import { CopyButton, LOST, ReportLists, downloadPdf } from "./jobs-resume-parts";
 import { ResumeEditor } from "./jobs-resume-editor";
 
 type Base = { profile: Profile; status: BaseStatus; updated_at: string };
@@ -177,7 +177,7 @@ function ImportFlow({ onRead, onBack }: { onRead: (profile: Profile, warnings: s
   const [text, setText] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [problem, setProblem] = useState("");
-  useEffect(() => { void importPrompt().then(setText); }, []);
+  useEffect(() => { void importPrompt().then(setText, () => setProblem(LOST)); }, []);
   const read = () => {
     const result = parseImportedProfile(answer);
     if (!result.ok) return setProblem(result.error);
@@ -222,7 +222,7 @@ function GenerateFlow({ supabase, onChecked, onBack }: { supabase: SupabaseClien
   const build = async () => {
     setBusy(true);
     setProblem("");
-    const made = await textForJob(job, "init", needs ? description : undefined);
+    const made = await textForJob(job, "init", needs ? description : undefined).catch(() => ({ text: undefined, needsDescription: false, error: LOST }));
     setBusy(false);
     if (made.needsDescription) setNeeds(true);
     if (made.text) setText(made.text);
@@ -230,7 +230,7 @@ function GenerateFlow({ supabase, onChecked, onBack }: { supabase: SupabaseClien
   };
   const check = async () => {
     setBusy(true);
-    const result = await checkGenerated(answer);
+    const result = await checkGenerated(answer).catch(() => ({ profile: undefined, repairs: [], warnings: [], errors: [LOST] }));
     setBusy(false);
     if (!result.profile) return setProblem(result.errors.join(" ") || "That answer could not be used.");
     onChecked(result.profile, <div className="resume-banner">
@@ -248,7 +248,7 @@ function GenerateFlow({ supabase, onChecked, onBack }: { supabase: SupabaseClien
         </select>
       </li>
       {needs && <li><label className="chat-field"><span>Its description (from the job&apos;s page)</span><textarea rows={6} value={description} onChange={event => setDescription(event.target.value)} /></label></li>}
-      <li>Copy the text for ChatGPT, and send it in a <b>new chat</b>. {text ? <CopyButton text={text} label="Copy for ChatGPT" /> : <button type="button" className="jobs-button" data-primary="" disabled={busy || !job} onClick={() => void build()}>{busy ? "Getting it…" : "Make the text"}</button>}</li>
+      <li>Copy the text for ChatGPT, and send it in a <b>new chat</b>. {text ? <CopyButton text={text} label="Copy for ChatGPT" /> : <button type="button" className="jobs-button" data-primary="" disabled={busy || !job} onClick={() => void build()}>{busy ? "Getting it (reading the job's page if need be)…" : "Make the text"}</button>}</li>
       <li>Paste its whole answer here.</li>
     </ol>
     <label className="chat-field"><span>ChatGPT&apos;s answer</span><textarea rows={8} value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Paste the whole answer here." /></label>
