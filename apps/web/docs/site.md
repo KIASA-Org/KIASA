@@ -530,7 +530,17 @@ own, changeable under Plans).
   downloaded as a PDF made on the server (`/jobs/resume/pdf`: the app's
   one-column template, Source Sans 3 inlined, through a headless Chromium:
   `@sparticuz/chromium` on Vercel, the computer's Chrome or Edge locally).
-  What was applied, skipped or refused is shown. Résumés made for jobs are
+  What was applied, skipped or refused is shown. **The résumé folder**
+  (`jobs-resume-folder.ts`, Chrome and Edge): a member chooses a folder once
+  (and gives its path, which a browser never tells a page); every PDF is then
+  saved straight into it, a job's in a folder for the day (the computer's
+  date, `2026-10-29`) and in it one for the job (`Docker - Data Engineer`),
+  each named as a recruiter should see it, `Jane Doe Resume.pdf` (never the
+  company or job; credentials after a comma left out); a job with a résumé made for
+  it offers **Copy résumé path** (Tailor again moves to its ⋮ menu): the
+  file's whole path, saved first if it is not there, to paste in a job
+  application's file box. Kept in that browser only (IndexedDB and
+  localStorage); other browsers download as before. Résumés made for jobs are
   listed under Made for jobs (PDF, edit by hand, remove); the admins' Who list
   opens each member's. Each job's **description** comes from the Jobright bot
   (what the extension read), or is found for it (`descriptionFor` in
