@@ -65,10 +65,10 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
   if (noBase) return <dialog ref={dialog} className="chat-dialog jobs-dialog resume-dialog" aria-label="First, your base résumé" onClose={onClose}>
     <p className="chat-dialog-title">First, your base résumé</p>
     <div className="chat-dialog-text resume-first">
-      <p>Every job&apos;s résumé is made from your base résumé, so make that once first. It takes a few minutes:</p>
+      <p>Every job&apos;s résumé is tailored from your base résumé, so make that once first, in two steps:</p>
       <ul>
-        <li><b>Import your PDF</b>: ChatGPT copies your résumé into a form, word for word, and you check it.</li>
-        <li>Or <b>type it in</b> the form yourself.</li>
+        <li><b>Your facts</b>: copied from your PDF into a form (or typed in), and checked by you.</li>
+        <li><b>Your init prompt</b> writes your base résumé from them, for the kind of job you want.</li>
       </ul>
       <p>Then come back to this job and press Tailor résumé again.</p>
     </div>

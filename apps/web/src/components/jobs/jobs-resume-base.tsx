@@ -17,7 +17,8 @@ type Base = { profile: Profile; status: BaseStatus; updated_at: string };
 type Tailored = { job_id: string; updated_at: string; edited: boolean; jobs: { title: string | null; company: string | null; url: string } | null };
 type Posting = { id: string; title: string | null; company: string | null };
 type Mode =
-  | { kind: "edit"; profile: Profile; status: BaseStatus; banner?: ReactNode }
+  // `next`: after saving, go on to write it with the init prompt (step 2).
+  | { kind: "edit"; profile: Profile; status: BaseStatus; banner?: ReactNode; next?: "generate" }
   | { kind: "tailored"; job: Tailored; profile: Profile }
   | { kind: "import" } | { kind: "generate" } | null;
 
@@ -25,9 +26,11 @@ const HOW: Record<BaseStatus, string> = { typed: "Typed in", imported: "Imported
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 /** A member's base résumé (the one every job's résumé is made from), and the
- * résumés made for jobs. Made once: typed in, imported from a PDF they have
- * (with the import prompt, in a chat), or written fuller with the init prompt
- * for a kind of job. For each job of the day, "Tailor résumé" does the rest. */
+ * résumés made for jobs. Made once, in two steps, as the Resume Tailor App
+ * does: 1, their facts, typed in or copied from their PDF (the import prompt
+ * only copies, word for word); 2, the init prompt writes the base résumé from
+ * those facts for a kind of job. For each job of the day, "Tailor résumé"
+ * (the tailoring prompt) does the rest. Only those two prompts write. */
 export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsMe; supabase: SupabaseClient; zone: string; today: string; onEditing?: (editing: boolean) => void }) {
   const [base, setBase] = useState<Base | null | undefined>(undefined);
   const [tailored, setTailored] = useState<Tailored[]>([]);
@@ -68,17 +71,24 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
     const parsed = ProfileSchema.safeParse(data?.profile);
     if (parsed.success) setMode({ kind: "tailored", job, profile: parsed.data });
   };
-  const keepBase = (status: BaseStatus) => async (profile: Profile) => {
+  const keepBase = (status: BaseStatus, next?: "generate") => async (profile: Profile) => {
     const { errors } = await saveBaseResume(profile, status);
     if (errors?.length) return errors;
-    setMode(null);
-    setSaid("Your base résumé is saved. Every job's résumé starts from it.");
     await load();
+    if (next === "generate") {
+      setMode({ kind: "generate" });
+      setSaid("");
+    } else {
+      setMode(null);
+      setSaid(status === "generated" ? "Your base résumé is saved. Every job's résumé starts from it." : "Saved.");
+    }
     return null;
   };
 
-  if (mode?.kind === "edit") return <ResumeEditor initial={mode.profile} title="Your base résumé" banner={mode.banner} saveLabel="Save base résumé"
-    note="Each job's résumé is made from this one." onSave={keepBase(mode.status)} onBack={() => setMode(null)} />;
+  if (mode?.kind === "edit") return <ResumeEditor initial={mode.profile} title={mode.next ? "Step 1: your facts" : "Your base résumé"} banner={mode.banner}
+    saveLabel={mode.next ? "Save, and go to step 2" : "Save base résumé"}
+    note={mode.next ? "Next, your init prompt writes the base résumé from these facts." : "Each job's résumé is made from this one."}
+    onSave={keepBase(mode.status, mode.next)} onBack={() => setMode(null)} />;
   if (mode?.kind === "tailored") return <ResumeEditor initial={mode.profile} title={`Résumé for ${[mode.job.jobs?.title, mode.job.jobs?.company].filter(Boolean).join(" at ") || "this job"}`}
     saveLabel="Save this résumé" note="Only this job's résumé changes; your base résumé stays as it is."
     onSave={async profile => {
@@ -109,20 +119,26 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
           <button type="button" className="chat-pill" disabled={printing === "base"} onClick={() => void pdf("base=1", "base")}><Download /> {printing === "base" ? "Making…" : "PDF"}</button>
         </div>
       </div> : null}
+      {base && base.status !== "generated" && !mode && <div className="resume-banner resume-next">
+        <p><b>Step 2 is left.</b> This holds your facts as you gave them. Your init prompt now writes your base résumé from them, for the kind of job you want; every job&apos;s résumé is then tailored from that.</p>
+        <button type="button" className="jobs-button" data-primary="" onClick={() => setMode({ kind: "generate" })}>Write it with the init prompt</button>
+      </div>}
       {base !== undefined && !mode && <div className="resume-ways">
-        <button type="button" className="resume-way" onClick={() => setMode({ kind: "edit", profile: base?.profile ?? emptyProfile(), status: base?.status ?? "typed" })}>
-          <b>{base ? "Change it by hand" : "Type it in"}</b><span>A form: contact, summary, roles, schools, skills, certifications.</span>
-        </button>
         <button type="button" className="resume-way" onClick={() => setMode({ kind: "import" })}>
-          <b>{base ? "Import a PDF again" : "Import your PDF"}</b><span>ChatGPT copies your résumé into the form, word for word; you check it.</span>
+          <b>1 · {base ? "Your facts again, from a PDF" : "Your facts, from your PDF"}</b><span>ChatGPT copies your résumé into the form, word for word. It only copies: step 2 writes.</span>
+        </button>
+        <button type="button" className="resume-way" onClick={() => setMode(base
+          ? { kind: "edit", profile: base.profile, status: base.status }
+          : { kind: "edit", profile: emptyProfile(), status: "typed", next: "generate" })}>
+          <b>{base ? "Change it by hand" : "1 · Or type your facts"}</b><span>A form: contact, summary, roles, schools, skills, certifications.</span>
         </button>
         <button type="button" className="resume-way" disabled={!base} onClick={() => setMode({ kind: "generate" })}>
-          <b>Write it fuller</b><span>{base ? "The init prompt writes a complete résumé from yours and a kind of job you want." : "After you have typed or imported yours."}</span>
+          <b>2 · Write it with the init prompt</b><span>{base ? "Your init prompt writes the full base résumé from your facts and a kind of job you want." : "Once your facts are in (step 1)."}</span>
         </button>
       </div>}
       {mode?.kind === "import" && <ImportFlow onBack={() => setMode(null)} onRead={(profile, warnings) => setMode({
-        kind: "edit", profile, status: "imported",
-        banner: <p className="resume-banner">Check it against your PDF, then save.{warnings.length ? ` ${warnings.join(" ")}` : ""}</p>,
+        kind: "edit", profile, status: "imported", next: "generate",
+        banner: <p className="resume-banner">Check it against your PDF, then save. Next, your init prompt writes your base résumé from it.{warnings.length ? ` ${warnings.join(" ")}` : ""}</p>,
       })} />}
       {mode?.kind === "generate" && base && <GenerateFlow supabase={supabase} onBack={() => setMode(null)} onChecked={(profile, notes) => setMode({ kind: "edit", profile, status: "generated", banner: notes })} />}
       {said && <p className="jobs-hint" role="status">{said}</p>}
@@ -168,6 +184,8 @@ function ImportFlow({ onRead, onBack }: { onRead: (profile: Profile, warnings: s
     onRead(result.profile, result.warnings);
   };
   return <div className="resume-flow">
+    <p className="resume-flow-title">Step 1: your facts, from your PDF</p>
+    <p className="jobs-form-hint">This prompt only copies your résumé into the form, word for word, so nothing is lost or made up. It writes nothing new: in step 2, your init prompt writes your base résumé.</p>
     <ol className="resume-steps">
       <li>Open a <b>new chat</b> in ChatGPT, and attach your résumé (the PDF).</li>
       <li>Copy this prompt, paste it as the message, and send it. {text ? <CopyButton text={text} label="Copy the import prompt" /> : <span className="jobs-hint">Loading…</span>}</li>
@@ -182,7 +200,7 @@ function ImportFlow({ onRead, onBack }: { onRead: (profile: Profile, warnings: s
   </div>;
 }
 
-/** Writing the base résumé fuller with the init prompt, for one kind of job:
+/** Step 2: the init prompt writes the base résumé, for one kind of job:
  * the prompt, a job with its description, and the résumé as it is; the answer
  * is checked (every fact put back as it was) and opens in the form. */
 function GenerateFlow({ supabase, onChecked, onBack }: { supabase: SupabaseClient; onChecked: (profile: Profile, notes: ReactNode) => void; onBack: () => void }) {
@@ -221,6 +239,8 @@ function GenerateFlow({ supabase, onChecked, onBack }: { supabase: SupabaseClien
     </div>);
   };
   return <div className="resume-flow">
+    <p className="resume-flow-title">Step 2: your init prompt writes your base résumé</p>
+    <p className="jobs-form-hint">From your facts and one job like the ones you want, it writes the full résumé every job&apos;s résumé is then tailored from. Your employers, dates and schools stay exactly as they are.</p>
     <ol className="resume-steps">
       <li>Choose a job like the ones you want.
         <select className="resume-select" value={job} onChange={event => { setJob(event.target.value); setText(null); setNeeds(false); }} aria-label="A job like the ones you want">

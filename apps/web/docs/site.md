@@ -515,10 +515,13 @@ own, changeable under Plans).
 - **Tailored résumés** (the Resume Tailor App, built in: `src/lib/resume/`,
   `src/components/jobs/jobs-tailor.tsx`, `jobs-resume-base.tsx`,
   `jobs-resume-editor.tsx`; `supabase/migrations/20261030090000_resume_tailor.sql`).
-  A member makes one **base résumé** (Résumés tab), once: typed in the form,
-  imported from their PDF (the import prompt in a chat, the answer pasted back
-  into the form to check), or written fuller with the init prompt for a kind
-  of job (every fact the model changed is put back). Then, on any job of the
+  A member makes one **base résumé** (Résumés tab), once, in two steps as the
+  app does. Step 1, their facts: typed in the form, or copied from their PDF
+  (the app's import prompt, which only copies, word for word; the answer is
+  pasted back into the form to check). Step 2, the **init prompt** writes the
+  base résumé from those facts for a kind of job (every fact the model changed
+  is put back); saving step 1 leads straight into it, and until it is done the
+  card says step 2 is left. Only the two fixed prompts write. Then, on any job of the
   day, **Tailor résumé** copies the tailoring prompt, the job's description and
   the base résumé (without email and phone) for ChatGPT; the member pastes its
   answer and presses **Load PDF**: the change list is applied to the base
