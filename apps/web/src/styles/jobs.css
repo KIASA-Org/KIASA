@@ -226,6 +226,66 @@
 .jobs-bot-items li[data-read] > span { color: var(--leaf); }
 .jobs-bot-dots { display: inline-block; width: 22px; height: 8px; margin-right: 4px; background: radial-gradient(circle, var(--leaf) 3px, transparent 3.5px) 0 50% / 8px 8px repeat-x; animation: jobs-pulse 1.2s ease-in-out infinite; vertical-align: middle; }
 @media (prefers-reduced-motion: reduce) { .jobs-bot-dots { animation: none; } }
+
+/* The Jobright bot: a computer's Job Saving Bot, started, watched and scheduled here. */
+.jobs-bot-face[data-kind="jobright"] { background: linear-gradient(150deg, #bfeaff, #6fc3f0); }
+.jobright .jobs-bot-head > div { min-width: 0; flex: 1; }
+.jobright-add { flex: none; }
+.jobright-intro { display: grid; justify-items: start; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--night-raised); font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+.jobright-intro b { color: var(--ink); }
+.jobright-bot { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--card-line); border-radius: 14px; background: var(--night-raised); }
+.jobright-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.jobright-status { display: flex; align-items: baseline; gap: 9px; font-size: 14.5px; line-height: 1.5; color: var(--ink); }
+.jobright-status[data-tone="warn"] { color: #f2d36b; }
+.jobright-status[data-tone="wait"] { color: var(--ink-soft); }
+.jobright-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--ink-mute); transform: translateY(-1px); }
+.jobright-status[data-tone="on"] .jobright-dot { background: var(--leaf); box-shadow: 0 0 0 4px rgb(184 236 147 / 0.16); }
+.jobright-status[data-tone="warn"] .jobright-dot { background: #f2d36b; }
+.jobright-start { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.jobright-cards { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
+.jobright-cards input { width: 84px; height: 34px; padding: 0 10px; border: 1.5px solid var(--line-strong); border-radius: 17px; background: var(--night-control); color: var(--ink); font: inherit; font-size: 14.5px; color-scheme: dark; }
+.jobright-cards input:focus { outline: none; border-color: var(--leaf); }
+.jobright-go { background: rgb(184 236 147 / 0.16); color: var(--leaf); }
+.jobright-quiet { font-size: 13px; color: var(--ink-mute); }
+.jobright-run { display: grid; gap: 8px; }
+.jobright-run-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; font-weight: 600; }
+.jobright-counts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-weight: 600; }
+.jobright-counts [data-kind="saved"] { color: var(--leaf); }
+.jobright-counts [data-kind="removed"] { color: #8fdcff; }
+.jobright-counts [data-kind="skipped"] { color: #f2d36b; }
+.jobright-counts [data-kind="failed"] { color: #ffb4a2; }
+.jobright-feed-box { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--card-line); }
+.jobright-feed-title { font-size: 12.5px; font-weight: 600; color: var(--ink-mute); }
+.jobright-message { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.jobright-feed { display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px; border-radius: 10px; background: var(--night); font-size: 13px; line-height: 1.45; }
+.jobright-feed li { display: flex; gap: 10px; min-width: 0; color: var(--ink-soft); }
+.jobright-feed time { flex: none; font-variant-numeric: tabular-nums; color: var(--ink-mute); }
+.jobright-feed span { min-width: 0; overflow-wrap: anywhere; }
+.jobright-feed li[data-level="step"] { margin-top: 4px; color: var(--ink); font-weight: 600; }
+.jobright-feed li[data-level="ok"] span { color: var(--leaf); }
+.jobright-feed li[data-level="warn"] span { color: #f2d36b; }
+.jobright-feed li[data-level="error"] span { color: #ffb4a2; }
+.jobright-foot { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-mute); }
+.jobright-earlier summary { width: fit-content; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.jobright-earlier ul { display: grid; gap: 4px; margin-top: 8px; }
+.jobright-earlier li { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 6px 0; border-top: 1px solid var(--card-line); font-size: 13px; color: var(--ink-soft); }
+.jobright-ending { margin-left: auto; font-weight: 650; }
+.jobright-ending[data-state="done"] { color: var(--leaf); }
+.jobright-ending[data-state="failed"], .jobright-ending[data-state="missed"] { color: #ffb4a2; }
+.jobright-ending[data-state="stopped"] { color: #f2d36b; }
+.jobright-steps { display: grid; gap: 6px; margin: 12px 0; padding-left: 20px; list-style: decimal; font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); }
+.jobright-steps b { color: var(--ink); }
+.jobright-code { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--night-raised); color: var(--ink); font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; word-break: break-all; resize: none; }
+.jobright-code:focus { outline: none; border-color: var(--leaf); }
+.chat-dialog-button svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.jobright-days { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; }
+.jobright-days legend { margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.jobright-days label { position: relative; cursor: pointer; }
+.jobright-days input { position: absolute; opacity: 0; }
+.jobright-days span { display: inline-grid; place-items: center; min-width: 48px; height: 34px; padding: 0 10px; border-radius: 17px; background: var(--night-control); font-size: 13.5px; font-weight: 600; color: var(--ink-mute); }
+.jobright-days input:checked + span { background: rgb(184 236 147 / 0.18); color: var(--leaf); }
+.jobright-days input:focus-visible + span { outline: 2px solid var(--leaf); outline-offset: 2px; }
+.jobright-danger { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--card-line); }
 .jobs-bot-input { display: flex; align-items: flex-end; gap: 10px; }
 .jobs-bot-input textarea { flex: 1; min-width: 0; min-height: 46px; max-height: 160px; padding: 12px 18px; border: 1.5px solid rgb(184 236 147 / 0.35); border-radius: 23px; background: var(--night-control); color: var(--ink); font: inherit; font-size: 15px; line-height: 1.4; resize: none; field-sizing: content; }
 .jobs-bot-input textarea:focus { outline: none; border-color: var(--leaf); }

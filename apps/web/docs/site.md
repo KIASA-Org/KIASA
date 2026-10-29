@@ -438,6 +438,27 @@ own, changeable under Plans).
   kept. It reports each job as it goes, and those whose page would not say, to
   be named with ✎. The day's list below shows, for each job, how many on the
   team have applied, its interviews, offers and hires, and who is where.
+- **The Jobright bot** (Jobs tab, under the jobs bot;
+  `src/components/jobs/jobs-jobright.tsx`,
+  `supabase/migrations/20261029210000_jobright_bot.sql`). Job Saving Bot, the
+  Windows app that works down Jobright's Recommended list (a project of its
+  own: `Job Applying Agent\Job Link Finder`), runs on a KIASA computer that
+  stays on. Every job it saves is posted to the day's list (each link once, as
+  pasted ones are), and the admins run it from here: **Start** a number of
+  cards, watch each card, the counts and each job posted live, **Stop**; the
+  gear sets a daily limit (150 by default) and a schedule (days and a time of
+  the team's day; a computer off then runs it when back, the same day). It
+  says when the computer is offline (no word for a minute), and when Jobright
+  wants signing in again there. Connecting: **Connect a computer** makes a
+  code, shown once, to paste in the app's box "4 - KIASA"; **New code**
+  replaces it, **Disconnect** ends it. The bot has no account: the code holds
+  the database's address, its public key and the bot's own secret (only its
+  hash is kept, in `job_bot_keys`, which no one reads), and with it the bot
+  can only call `job_bot_check_in` (every 3 seconds: how it is, and a run to
+  do), `job_bot_report` (a run's start, counts, lines and end; the answer
+  says whether Stop was pressed) and `job_bot_add_jobs`. KIASA never calls
+  the computer. Bots, runs and their lines (`job_bots`, `bot_runs`,
+  `bot_steps`) are for admins only; a run's lines go after a month.
 - **Members work through the day** (Today): their plan at the top (each target
   with its progress, and the admins' notes), then the day's jobs, newest first.
   Open ↗ opens the posting; ✓ Applied marks it at once, with the résumé chosen
@@ -743,7 +764,8 @@ Once, in this order:
    `supabase/migrations/20261029090000_meeting_chat_more.sql` (replies, reactions and deleting in it), then
    `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once), then
    `supabase/migrations/20261029150000_meeting_people.sql` (who is in a meeting; managers' meetings and the admin's OK), then
-   `supabase/migrations/20261029180000_security.sql` (admins by account, tries counted, meeting channels and chat files locked down).
+   `supabase/migrations/20261029180000_security.sql` (admins by account, tries counted, meeting channels and chat files locked down), then
+   `supabase/migrations/20261029210000_jobright_bot.sql` (the Jobright bot: a computer's Job Saving Bot, run from the job desk).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

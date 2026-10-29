@@ -74,3 +74,17 @@ export type HourRow = { user_id: string; hour: number; applications: number };
 export type JobsStart = {
   settings: JobSettings; today: string; jobs: Job[]; board: BoardRow[]; resumes: Resume[]; plans: Plan[]; team: TeamPerson[]; pending: number;
 };
+
+/** A computer running Job Saving Bot, which works down Jobright's list and posts the jobs it saves. */
+export type BotState = "new" | "ready" | "busy" | "sign_in" | "setup" | "error";
+export type JobBot = {
+  id: string; name: string; computer: string | null; version: string | null; state: BotState; detail: string | null; seen_at: string | null;
+  daily_cap: number; schedule_at: string | null; schedule_cards: number; schedule_days: number[]; created_at: string;
+};
+export type RunState = "waiting" | "running" | "done" | "stopped" | "failed" | "missed";
+export type BotRun = {
+  id: string; bot_id: string; cards: number; origin: "admin" | "schedule" | "computer"; asked_by: string | null; asked_at: string;
+  state: RunState; stop_asked: boolean; saved: number; removed: number; skipped: number; failed: number; processed: number;
+  message: string | null; started_at: string | null; ended_at: string | null;
+};
+export type BotStep = { id: number; run_id: string; at: string; level: "info" | "step" | "ok" | "warn" | "error"; text: string; job_id: string | null };
