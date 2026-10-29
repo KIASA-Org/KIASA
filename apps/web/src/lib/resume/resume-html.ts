@@ -186,9 +186,13 @@ h2 {
 .dates { font-size: 9.5pt; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 ul { margin: 3pt 0 0; padding-left: 12pt; }
-li { margin: 0 0 2pt; padding-left: 2pt; break-inside: avoid; }
+/* Every page filled to its foot: a long point may go on over a page, as in a
+   word processor, but never leaves one line alone on either page. (Kept whole,
+   one that did not fit took the page's last inches with it, unevenly.) */
+li { margin: 0 0 2pt; padding-left: 2pt; orphans: 2; widows: 2; }
 li::marker { color: var(--accent); }
+p { orphans: 2; widows: 2; }
 
-.entry { margin-bottom: 3pt; }
+.entry { margin-bottom: 3pt; break-inside: avoid; }
 .strong { font-weight: 600; }
 `;
