@@ -43,7 +43,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@sparticuz/chromium", "playwright-core"],
   outputFileTracingIncludes: {
     "/jobs": ["./src/lib/resume/prompts/**/*"],
-    "/jobs/resume/pdf": ["./src/lib/resume/fonts/**/*", "./node_modules/@sparticuz/chromium/bin/**/*"],
+    // (All of playwright-core: it reads files such as its browsers.json by a
+    // path the tracer cannot follow, and the PDF fails without them.)
+    "/jobs/resume/pdf": ["./src/lib/resume/fonts/**/*", "./node_modules/@sparticuz/chromium/bin/**/*", "./node_modules/playwright-core/**/*"],
   },
   // Every page guarded (above); and the service worker behind "Alert me on this
   // computer" (public/sw.js): never cached, so a change reaches every browser,

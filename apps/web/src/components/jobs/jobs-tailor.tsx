@@ -6,7 +6,7 @@ import type { Job, JobsMe } from "@/lib/jobs/types";
 import { tailorFromAnswer, textForJob, type TailorReport } from "@/lib/resume/actions";
 import { Download } from "../site/icons";
 import { linkLabel } from "./jobs-format";
-import { CopyButton, ReportLists, downloadPdf } from "./jobs-resume-parts";
+import { CopyButton, LOST, ReportLists, downloadPdf } from "./jobs-resume-parts";
 
 type Tailoring = { made: Set<string>; open: (job: Job) => void };
 const TailorContext = createContext<Tailoring | null>(null);
@@ -59,7 +59,7 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
       if (made.text) setText(made.text);
       else if (made.needsBase) setNoBase(true);
       else { setProblem(made.error ?? "That did not work. Please try again."); setNeeds(!!made.needsDescription); }
-    });
+    }, () => setProblem(LOST));
   }, [job.id]);
 
   if (noBase) return <dialog ref={dialog} className="chat-dialog jobs-dialog resume-dialog" aria-label="First, your base résumé" onClose={onClose}>
@@ -80,13 +80,15 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
 
   const withDescription = async () => {
     setProblem("");
-    const made = await textForJob(job.id, "tailor", description);
+    const made = await textForJob(job.id, "tailor", description).catch(() => ({ text: undefined, error: LOST }));
     if (made.text) { setText(made.text); setNeeds(false); } else setProblem(made.error ?? "That did not work. Please try again.");
   };
   const load = async () => {
     setStep("applying");
     setResult(null);
-    const { saved, report } = await tailorFromAnswer(job.id, answer);
+    // A call that fails (the connection, or a page from before an update) says so, instead of waiting for ever.
+    const { saved, report } = await tailorFromAnswer(job.id, answer)
+      .catch(() => ({ saved: false, report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] } as TailorReport }));
     if (!saved) { setStep("idle"); return setResult({ saved, report, printed: null }); }
     onMade();
     setStep("printing");
@@ -107,7 +109,7 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
     <ol className="resume-steps">
       <li>
         <span>Copy this for ChatGPT: the tailoring prompt, the job&apos;s description and your base résumé (without your email and phone).</span>
-        {text ? <CopyButton text={text} label="Copy for ChatGPT" /> : !problem && <span className="jobs-hint">Getting it ready…</span>}
+        {text ? <CopyButton text={text} label="Copy for ChatGPT" /> : !problem && <span className="jobs-hint">Getting it ready… (if KIASA has no description for this job yet, it reads it from the job&apos;s page, which can take a few seconds)</span>}
         {needs && <div className="resume-flow">
           <label className="chat-field"><span>The job&apos;s description, from its page</span><textarea rows={6} value={description} onChange={event => setDescription(event.target.value)} /></label>
           <button type="button" className="jobs-button" disabled={description.trim().length < 80} onClick={() => void withDescription()}>Use this description</button>

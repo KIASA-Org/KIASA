@@ -533,9 +533,13 @@ own, changeable under Plans).
   What was applied, skipped or refused is shown. Résumés made for jobs are
   listed under Made for jobs (PDF, edit by hand, remove); the admins' Who list
   opens each member's. Each job's **description** comes from the Jobright bot
-  (what the extension read), or is read off the posting's page for a pasted
-  link (schema.org JobPosting); admins can change it (✎), and a member can
-  paste one when a job has none. The two fixed prompts are kept word for word
+  (what the extension read), or is found for it (`descriptionFor` in
+  `src/lib/jobs/page.ts`): Greenhouse's and Lever's public job APIs (a
+  Greenhouse job on a company's own page too, by its `gh_jid`), else what the
+  page tells search engines (schema.org JobPosting: Ashby, Workday and most
+  others). It is looked for when a link is pasted, and again the first time
+  someone tailors a job that has none (then kept for everyone). Admins can
+  change it (✎), and a member can paste one when none is found. The two fixed prompts are kept word for word
   (`src/lib/resume/prompts/CHECKSUMS.json`).
 - **By the database** (`supabase/migrations/20261026235000_jobs.sql`): members
   write only their own rows; the database stamps the times; what members
