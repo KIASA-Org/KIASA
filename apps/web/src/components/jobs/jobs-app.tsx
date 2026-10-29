@@ -265,7 +265,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
     resumes: () => <Resumes me={me} supabase={supabase} resumes={resumes} zone={zone} version={versions.applications} onChanged={() => void loadResumes()} />,
     live: () => <LiveView supabase={supabase} team={team} board={board} plans={plans} zone={zone} today={today} now={now} version={versions.live}
       pending={pending} onConfirm={() => choose("confirm")} />,
-    post: () => <PostJobs supabase={supabase} zone={zone} today={today} day={day} jobs={list.jobs} loading={loading} team={team} onDay={setPicked} version={versions.live} />,
+    post: () => <PostJobs supabase={supabase} realtime={realtime} zone={zone} today={today} day={day} jobs={list.jobs} loading={loading} team={team} onDay={setPicked} version={versions.live} />,
     plans: () => <PlansView supabase={supabase} team={team} plans={plans} board={board} today={today} settings={settings}
       onSettings={next => { setSettings(next); void loadBoard(); }} onSaved={() => void loadPlans()} />,
     confirm: () => <ConfirmView supabase={supabase} team={team} currency={settings.currency} today={today} version={versions.money}

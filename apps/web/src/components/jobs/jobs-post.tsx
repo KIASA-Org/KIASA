@@ -8,14 +8,16 @@ import { ArrowLeft, Pencil, Search, Trash } from "../site/icons";
 import { Confirm } from "../chat/chat-dialog";
 import { Meter } from "./jobs-charts";
 import { JobsBot } from "./jobs-bot";
+import { JobrightBots } from "./jobs-jobright";
 import { FormDialog } from "./jobs-dialogs";
 import { addDays, clockIn, dayName, initialsOf, linkLabel } from "./jobs-format";
 
 /** The admins' job desk: the jobs bot, which takes the day's links as they are
- * pasted, then the day's list with how far the team has got with each job, and
+ * pasted, the Jobright bot, which posts the jobs a KIASA computer saves from
+ * Jobright, then the day's list with how far the team has got with each job, and
  * who is where. */
-export function PostJobs({ supabase, zone, today, day, jobs, loading, team, onDay, version }: {
-  supabase: SupabaseClient; zone: string; today: string; day: string; jobs: Job[]; loading: boolean; team: TeamPerson[];
+export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, team, onDay, version }: {
+  supabase: SupabaseClient; realtime: { url: string; key: string }; zone: string; today: string; day: string; jobs: Job[]; loading: boolean; team: TeamPerson[];
   onDay: (day: string | null) => void; version: number;
 }) {
   const [applications, setApplications] = useState<Pick<Application, "job_id" | "user_id" | "status">[]>([]);
@@ -40,6 +42,7 @@ export function PostJobs({ supabase, zone, today, day, jobs, loading, team, onDa
 
   return <div className="jobs-view">
     <JobsBot supabase={supabase} onPosted={() => onDay(null)} />
+    <JobrightBots supabase={supabase} realtime={realtime} zone={zone} today={today} />
 
     <section className="jobs-card" aria-labelledby="jobs-desk-title">
       <div className="jobs-card-head">
