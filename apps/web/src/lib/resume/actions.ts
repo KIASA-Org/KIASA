@@ -60,7 +60,7 @@ export async function saveBaseResume(input: unknown, status: BaseStatus): Promis
  * init prompt, to generate a whole base résumé), then the job and the member's
  * base résumé, with their email and phone left out. The job's description is
  * the one KIASA keeps, or `description` when the member pastes one. */
-export async function textForJob(job: string, kind: "tailor" | "init", description?: string): Promise<{ text?: string; error?: string; needsDescription?: boolean }> {
+export async function textForJob(job: string, kind: "tailor" | "init", description?: string): Promise<{ text?: string; error?: string; needsDescription?: boolean; needsBase?: boolean }> {
   const who = await member();
   if (!who) return { error: ONLY };
   if (typeof job !== "string" || !ID.test(job)) return { error: "That job is not known." };
@@ -69,7 +69,7 @@ export async function textForJob(job: string, kind: "tailor" | "init", descripti
     baseOf(who.db, who.me.id),
   ]);
   if (!posting) return { error: "That job is no longer on the list." };
-  if (!base) return { error: "Make your base résumé first: the Résumés tab, Your base résumé." };
+  if (!base) return { needsBase: true, error: "First make your base résumé, once: every job's résumé is made from it." };
   const jd = (typeof description === "string" && description.trim() ? description : posting.description ?? "").trim().slice(0, 30000);
   if (jd.length < 80) return { needsDescription: true, error: "KIASA has no description for this job yet. Paste it from the job's page." };
   const record = buildJobRecord(

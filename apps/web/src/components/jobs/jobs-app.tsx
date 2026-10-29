@@ -283,7 +283,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
       </div>
     </nav>
     {/* A member makes a résumé for any job of the day (jobs-tailor.tsx). */}
-    <div className="jobs-body">{me.member ? <TailorProvider me={me} supabase={supabase}>{views[tab]()}</TailorProvider> : views[tab]()}</div>
+    <div className="jobs-body">{me.member ? <TailorProvider me={me} supabase={supabase} onNeedBase={() => choose("resumes")}>{views[tab]()}</TailorProvider> : views[tab]()}</div>
     {notice && <p className="jobs-notice" role="status">{notice}</p>}
   </div>;
 }
