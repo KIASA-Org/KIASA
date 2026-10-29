@@ -138,6 +138,31 @@ function placeOf(job: Record<string, unknown>) {
   return null;
 }
 
+const decodeKeepingLines = (text: string) => text
+  .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+  .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+  .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole);
+
+/** Text from a page's HTML, its paragraphs and points on lines of their own. */
+function plainText(html: string) {
+  const unescaped = html.includes("&lt;") ? decodeKeepingLines(html) : html;
+  return decodeKeepingLines(unescaped
+    .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*(script|style)\s*>/gi, " ")
+    .replace(/<\s*li[^>]*>/gi, "\n• ")
+    .replace(/<\s*(br|\/p|\/div|\/h[1-6]|\/li|\/ul|\/ol|\/tr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " "))
+    .split("\n").map(line => line.replace(/[ \t ]+/g, " ").trim()).join("\n")
+    .replace(/\n{3,}/g, "\n\n").replace(/\n+•/g, "\n•").trim();
+}
+
+/** The job's description, as its page gives it to search engines (schema.org
+ * JobPosting), in plain text; for the tailored résumés. None when it gives none. */
+export function descriptionFromPage(html: string): string | null {
+  const job = posting(html);
+  const text = typeof job?.description === "string" ? plainText(job.description) : "";
+  return text.length >= 80 ? text.slice(0, 30000) : null;
+}
+
 /** What a job's own page says about it: first what it tells search engines
  * (its title, the company hiring and where), then its title, read in the known
  * ways the hiring sites write them. A hiring site's own name is never the company. */

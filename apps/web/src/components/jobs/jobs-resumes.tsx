@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { JobsMe, Resume, ResumeStats } from "@/lib/jobs/types";
 import { Confirm } from "../chat/chat-dialog";
 import { FormDialog } from "./jobs-dialogs";
+import { BaseResume } from "./jobs-resume-base";
 import { partsIn, shortDay } from "./jobs-format";
 
 const KINDS: Record<string, string> = {
@@ -16,14 +17,16 @@ const size = (bytes: number) => bytes < 1048576 ? `${Math.max(1, Math.round(byte
 /** A member's résumés: each version under a title (one is the default, chosen
  * first when applying), how each has done, and the file a click away. Only
  * they and admins can open them. */
-export function Resumes({ me, supabase, resumes, zone, version, onChanged }: {
-  me: JobsMe; supabase: SupabaseClient; resumes: Resume[]; zone: string; version: number; onChanged: () => void;
+export function Resumes({ me, supabase, resumes, zone, today, version, onChanged }: {
+  me: JobsMe; supabase: SupabaseClient; resumes: Resume[]; zone: string; today: string; version: number; onChanged: () => void;
 }) {
   const [stats, setStats] = useState<ResumeStats[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [renaming, setRenaming] = useState<Resume | null>(null);
   const [removing, setRemoving] = useState<Resume | null>(null);
+  // While the base résumé (or one made for a job) is open in the editor, it has the page.
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     let stopped = false;
     void supabase.rpc("resume_stats").then(({ data }) => { if (!stopped) setStats((data ?? []) as ResumeStats[]); });
@@ -70,6 +73,8 @@ export function Resumes({ me, supabase, resumes, zone, version, onChanged }: {
   };
 
   return <div className="jobs-view">
+    {me.member && <BaseResume me={me} supabase={supabase} zone={zone} today={today} onEditing={setEditing} />}
+    {!editing && <>
     <section className="jobs-card" aria-labelledby="jobs-resumes-title">
       <h2 id="jobs-resumes-title" className="jobs-card-title">Your résumés</h2>
       <p className="jobs-card-sub">Keep a version for each kind of role. The one chosen above the day&apos;s list goes with each application, so you can see which one gets interviews.</p>
@@ -112,6 +117,7 @@ export function Resumes({ me, supabase, resumes, zone, version, onChanged }: {
         </div>
       </form>
     </section>
+    </>}
     {renaming && <FormDialog title="Rename this résumé" action="Save" onClose={() => setRenaming(null)} onSubmit={async form => {
       const title = String(form.get("title") ?? "").trim();
       if (!title) return "Give it a title.";

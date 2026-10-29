@@ -179,6 +179,26 @@ checked October 2026 across the database, the server and the browser):
 - In Supabase's settings (done by hand): "Allow new users to sign up" off,
   "Confirm email" and "Secure email change" on, and Realtime's "Allow public
   access" off.
+- **Admins on their own devices only**
+  (`supabase/migrations/20261029230000_admin_devices.sql`,
+  `src/lib/accounts/devices.ts`, the Admin page's "Your devices"). An admin's
+  account works only in a browser they approved: it holds a secret in an
+  httpOnly cookie (`kiasa-device`, renewed at each sign-in, kept up to 400
+  days), the database keeps its hash (`admin_devices`). A password sign-in on
+  any other browser is refused and asks to be added; an approved device
+  approves or refuses it, and can remove a device (signed out at once). An
+  admin with no approved device has the next browser they sign in with
+  approved. Two layers: admin powers (`is_admin`, `jobs_admin`, `can_chat`
+  for admins, and `currentViewer`) hold only in a sign-in the site approved
+  (`admin_sessions`, by the token's `session_id`); and Supabase's access token
+  hook (`public.custom_access_token_hook`, switched on by hand under
+  Authentication → Hooks → Customize Access Token) gives any other sign-in to
+  an admin's account a token for no one (`role: anon`), so it cannot even read
+  their chats. `security_settings.admin_devices` turns it all off; only a
+  local test copy does (the older test suites sign in as the admin from new
+  browsers). Locked out: in the SQL Editor,
+  `delete from public.admin_devices where user_id = (select user_id from public.admins where email = 'chrislim@kiasa.tech');`
+  and the next sign-in is the first device again.
 
 Company facts the pages share, so they agree: founded in London in 2012, owned
 through an employee ownership trust, 420 people in eight studios (Lisbon,
@@ -492,6 +512,28 @@ own, changeable under Plans).
 - **Résumés.** Each member keeps versions (PDF or Word, up to 10 MB) in a
   private store only they and admins can open; each shows its applications,
   interviews and offers, so the one that gets interviews is plain.
+- **Tailored résumés** (the Resume Tailor App, built in: `src/lib/resume/`,
+  `src/components/jobs/jobs-tailor.tsx`, `jobs-resume-base.tsx`,
+  `jobs-resume-editor.tsx`; `supabase/migrations/20261030090000_resume_tailor.sql`).
+  A member makes one **base résumé** (Résumés tab), once: typed in the form,
+  imported from their PDF (the import prompt in a chat, the answer pasted back
+  into the form to check), or written fuller with the init prompt for a kind
+  of job (every fact the model changed is put back). Then, on any job of the
+  day, **Tailor résumé** copies the tailoring prompt, the job's description and
+  the base résumé (without email and phone) for ChatGPT; the member pastes its
+  answer and presses **Load PDF**: the change list is applied to the base
+  résumé (only lines found word for word; only the two newest roles; facts
+  checked), kept for that job (`tailored_resumes`, the JSON, not a file), and
+  downloaded as a PDF made on the server (`/jobs/resume/pdf`: the app's
+  one-column template, Source Sans 3 inlined, through a headless Chromium:
+  `@sparticuz/chromium` on Vercel, the computer's Chrome or Edge locally).
+  What was applied, skipped or refused is shown. Résumés made for jobs are
+  listed under Made for jobs (PDF, edit by hand, remove); the admins' Who list
+  opens each member's. Each job's **description** comes from the Jobright bot
+  (what the extension read), or is read off the posting's page for a pasted
+  link (schema.org JobPosting); admins can change it (✎), and a member can
+  paste one when a job has none. The two fixed prompts are kept word for word
+  (`src/lib/resume/prompts/CHECKSUMS.json`).
 - **By the database** (`supabase/migrations/20261026235000_jobs.sql`): members
   write only their own rows; the database stamps the times; what members
   report waits for an admin, and changing it asks again; the leaderboard comes
@@ -765,7 +807,9 @@ Once, in this order:
    `supabase/migrations/20261029120000_live_names.sql` (new names reach open pages at once), then
    `supabase/migrations/20261029150000_meeting_people.sql` (who is in a meeting; managers' meetings and the admin's OK), then
    `supabase/migrations/20261029180000_security.sql` (admins by account, tries counted, meeting channels and chat files locked down), then
-   `supabase/migrations/20261029210000_jobright_bot.sql` (the Jobright bot: a computer's Job Saving Bot, run from the job desk).
+   `supabase/migrations/20261029210000_jobright_bot.sql` (the Jobright bot: a computer's Job Saving Bot, run from the job desk), then
+   `supabase/migrations/20261029230000_admin_devices.sql` (admins on their own devices only; then switch on the hook under Authentication → Hooks → Customize Access Token → `public.custom_access_token_hook`), then
+   `supabase/migrations/20261030090000_resume_tailor.sql` (tailored résumés: each job's description, members' base résumés and those made for jobs).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

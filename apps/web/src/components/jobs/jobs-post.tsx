@@ -11,6 +11,7 @@ import { JobsBot } from "./jobs-bot";
 import { JobrightBots } from "./jobs-jobright";
 import { FormDialog } from "./jobs-dialogs";
 import { addDays, clockIn, dayName, initialsOf, linkLabel } from "./jobs-format";
+import { downloadPdf } from "./jobs-resume-parts";
 
 /** The admins' job desk: the jobs bot, which takes the day's links as they are
  * pasted, the Jobright bot, which posts the jobs a KIASA computer saves from
@@ -23,7 +24,10 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
   const [applications, setApplications] = useState<Pick<Application, "job_id" | "user_id" | "status">[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Job | null>(null);
+  const [editing, setEditing] = useState<(Job & { description: string | null }) | null>(null);
+  // Who has a résumé made for which job (opened as a PDF from the Who list).
+  const [tailored, setTailored] = useState<{ job_id: string; user_id: string }[]>([]);
+  const [printing, setPrinting] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Job | null>(null);
 
   const ids = jobs.map(job => job.id).join(",");
@@ -32,6 +36,9 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
     let stopped = false;
     void supabase.from("applications").select("job_id, user_id, status").in("job_id", ids.split(",")).then(({ data }) => {
       if (!stopped) setApplications((data ?? []) as Pick<Application, "job_id" | "user_id" | "status">[]);
+    });
+    void supabase.from("tailored_resumes").select("job_id, user_id").in("job_id", ids.split(",")).then(({ data }) => {
+      if (!stopped) setTailored((data ?? []) as { job_id: string; user_id: string }[]);
     });
     return () => { stopped = true; };
   }, [supabase, ids, version]);
@@ -83,6 +90,12 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
                     <Avatar initials={initialsOf(person.name)} photo={person.photo} className="jobs-avatar" who={person.id} />
                     <span>{person.name}</span>
                     <span className="jobs-chip" data-status={row?.status ?? "todo"}>{row ? STATUS_LABELS[row.status] : "Not yet"}</span>
+                    {tailored.some(entry => entry.job_id === job.id && entry.user_id === person.id) && <button type="button" className="chat-pill jobs-who-resume"
+                      disabled={printing === `${job.id}${person.id}`} onClick={async () => {
+                        setPrinting(`${job.id}${person.id}`);
+                        await downloadPdf(`job=${job.id}&user=${person.id}&inline=1`);
+                        setPrinting(null);
+                      }}>{printing === `${job.id}${person.id}` ? "Making…" : "Their résumé"}</button>}
                   </li>;
                 })}
               </ul>}
@@ -90,7 +103,10 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
             <div className="jobs-row-actions">
               <Meter value={applied} target={team.length || null} label={`Applied to ${title}`} compact />
               <button type="button" className="chat-pill" aria-expanded={open === job.id} onClick={() => setOpen(open === job.id ? null : job.id)}>Who</button>
-              <button type="button" className="chat-icon" aria-label={`Change ${title}`} title="Change" onClick={() => setEditing(job)}><Pencil /></button>
+              <button type="button" className="chat-icon" aria-label={`Change ${title}`} title="Change" onClick={async () => {
+                const { data } = await supabase.from("jobs").select("description").eq("id", job.id).maybeSingle();
+                setEditing({ ...job, description: (data?.description as string | null) ?? null });
+              }}><Pencil /></button>
               <button type="button" className="chat-icon" aria-label={`Remove ${title}`} title="Remove" onClick={() => setRemoving(job)}><Trash /></button>
             </div>
           </li>;
@@ -102,7 +118,7 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
 
     {editing && <FormDialog title="Change this job" action="Save" onClose={() => setEditing(null)} onSubmit={async form => {
       const text = (name: string) => String(form.get(name) ?? "").trim() || null;
-      const { error } = await supabase.from("jobs").update({ title: text("title"), company: text("company"), location: text("location"), note: text("note") }).eq("id", editing.id);
+      const { error } = await supabase.from("jobs").update({ title: text("title"), company: text("company"), location: text("location"), note: text("note"), description: text("description") }).eq("id", editing.id);
       return error ? "That did not save. Please try again." : null;
     }}>
       <label className="chat-field"><span>Title</span><input name="title" defaultValue={editing.title ?? ""} maxLength={200} /></label>
@@ -111,6 +127,7 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
         <label className="chat-field"><span>Place</span><input name="location" defaultValue={editing.location ?? ""} maxLength={120} placeholder="Remote, Berlin…" /></label>
       </div>
       <label className="chat-field"><span>Note for the team (optional)</span><textarea name="note" rows={2} defaultValue={editing.note ?? ""} maxLength={500} /></label>
+      <label className="chat-field"><span>Description (for the members&apos; tailored résumés)</span><textarea name="description" rows={8} defaultValue={editing.description ?? ""} maxLength={30000} placeholder="Read from the job's page, or brought by the Jobright bot. Paste it if it is missing." /></label>
     </FormDialog>}
     {removing && <Confirm title="Remove this job?" confirm="Remove"
       text={<>“{removing.title ?? linkLabel(removing.url)}” leaves everyone&apos;s list, with what the team has marked on it.</>}

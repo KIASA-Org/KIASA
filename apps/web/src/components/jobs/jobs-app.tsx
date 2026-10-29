@@ -14,6 +14,7 @@ import { ConfirmView, Earnings } from "./jobs-money";
 import { PlansView } from "./jobs-plans";
 import { PostJobs } from "./jobs-post";
 import { Resumes } from "./jobs-resumes";
+import { TailorProvider } from "./jobs-tailor";
 import type { JobActions } from "./jobs-row";
 import { MyJobs, TodayView } from "./jobs-today";
 
@@ -262,7 +263,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
     calendar: () => <CalendarView me={me} supabase={supabase} zone={zone} today={today} team={team} version={versions.interviews} onInterview={act.interview} />,
     board: () => <Leaderboard me={me} board={board} team={team} currency={settings.currency} zone={zone} today={today} now={now} />,
     money: () => <Earnings me={me} supabase={supabase} currency={settings.currency} today={today} mine={mine} version={versions.money} />,
-    resumes: () => <Resumes me={me} supabase={supabase} resumes={resumes} zone={zone} version={versions.applications} onChanged={() => void loadResumes()} />,
+    resumes: () => <Resumes me={me} supabase={supabase} resumes={resumes} zone={zone} today={today} version={versions.applications} onChanged={() => void loadResumes()} />,
     live: () => <LiveView supabase={supabase} team={team} board={board} plans={plans} zone={zone} today={today} now={now} version={versions.live}
       pending={pending} onConfirm={() => choose("confirm")} />,
     post: () => <PostJobs supabase={supabase} realtime={realtime} zone={zone} today={today} day={day} jobs={list.jobs} loading={loading} team={team} onDay={setPicked} version={versions.live} />,
@@ -281,7 +282,8 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
         </button>)}
       </div>
     </nav>
-    <div className="jobs-body">{views[tab]()}</div>
+    {/* A member makes a résumé for any job of the day (jobs-tailor.tsx). */}
+    <div className="jobs-body">{me.member ? <TailorProvider me={me} supabase={supabase}>{views[tab]()}</TailorProvider> : views[tab]()}</div>
     {notice && <p className="jobs-notice" role="status">{notice}</p>}
   </div>;
 }

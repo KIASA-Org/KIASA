@@ -6,6 +6,7 @@ import { ArrowLeft, Check, ChevronDown, Close, More, NewTab, Pencil, Trash } fro
 import { Menu, type MenuItem, type MenuPlace } from "../chat/chat-menu";
 import { HiredDialog, InterviewDialog, NoteDialog, ResumeDialog, type HiredForm, type InterviewForm } from "./jobs-dialogs";
 import { clockIn, linkLabel } from "./jobs-format";
+import { useTailor } from "./jobs-tailor";
 
 /** What a member does with a job; each says what went wrong, if anything. */
 export type JobActions = {
@@ -36,6 +37,8 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
   const closeMenu = useCallback(() => setMenu(null), []);
   const title = job.title ?? linkLabel(job.url);
   const used = resumes.find(entry => entry.id === job.resume_id);
+  const tailor = useTailor();
+  const tailored = !!tailor?.made.has(job.id);
 
   const choose = (status: JobStatus) => {
     if (status === job.status) return;
@@ -81,10 +84,13 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
         {posted && <span>Posted {clockIn(zone, job.posted_at)}</span>}
         {count && <span>{job.applied === 1 ? "1 on the team applied" : `${job.applied} on the team applied`}</span>}
         {used && job.status && job.status !== "skipped" && <span>With {used.title}</span>}
+        {tailored && <span className="jobs-tailored">Résumé made for it</span>}
       </p>
       {job.my_note && <p className="jobs-row-note">{job.my_note}</p>}
     </div>
     <div className="jobs-row-actions">
+      {tailor && job.status !== "skipped" && <button type="button" className="chat-pill jobs-tailor" data-done={tailored || undefined} onClick={() => tailor.open(job)}
+        aria-label={`${tailored ? "Tailor again" : "Tailor résumé"}: ${title}`}><Pencil /> {tailored ? "Tailor again" : "Tailor résumé"}</button>}
       {!job.status
         ? <>
           <a className="jobs-button" href={job.url} target="_blank" rel="noopener noreferrer">Open <NewTab /></a>
