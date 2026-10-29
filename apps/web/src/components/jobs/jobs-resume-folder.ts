@@ -136,27 +136,34 @@ function fileName(header: string) {
  * folders `within` (a job's: its day, then the job), else downloaded. `key`
  * remembers where it went, for copying its path later. */
 export async function savePdf(query: string, folder: FolderHandle | null, key?: string, within: string[] = []): Promise<Saved> {
+  // Never waiting for ever: the server gives up within a minute, and so does this.
   let answer: Response;
+  let blob: Blob;
   try {
-    answer = await fetch(`/jobs/resume/pdf?${query}`);
-  } catch {
-    return { error: "The PDF could not be made. Please check the connection and try again." };
+    answer = await fetch(`/jobs/resume/pdf?${query}`, { signal: AbortSignal.timeout(55_000) });
+    if (!answer.ok) return { error: (await answer.text().catch(() => "")) || "The PDF could not be made. Please try again." };
+    blob = await answer.blob();
+  } catch (error) {
+    return { error: (error as Error)?.name === "TimeoutError"
+      ? "Making the PDF took too long. Press Save again: it is usually quick the second time."
+      : "The PDF could not be made. Please check the connection and try again." };
   }
-  if (!answer.ok) return { error: (await answer.text().catch(() => "")) || "The PDF could not be made. Please try again." };
   const name = fileName(answer.headers.get("Content-Disposition") ?? "");
-  const blob = await answer.blob();
   if (folder) {
     try {
-      let at: FileSystemDirectoryHandle = folder;
-      for (const part of within) at = await at.getDirectoryHandle(part, { create: true });
-      const writer = await (await at.getFileHandle(name, { create: true })).createWritable();
-      await writer.write(blob);
-      await writer.close();
+      // (A file held open by a PDF reader can make Windows wait: not for longer than this.)
+      await timed((async () => {
+        let at: FileSystemDirectoryHandle = folder;
+        for (const part of within) at = await at.getDirectoryHandle(part, { create: true });
+        const writer = await (await at.getFileHandle(name, { create: true })).createWritable();
+        await writer.write(blob);
+        await writer.close();
+      })(), 20_000);
       const place = [...within, name].join("/");
       if (key) rememberName(key, place);
       return { name, place, path: pathOf(place), where: "folder" };
     } catch {
-      // Not allowed after all, or the folder is gone: downloaded instead, below.
+      // Not allowed after all, the folder is gone, or the file is held open: downloaded instead, below.
     }
   }
   if (key) rememberName(key, name);
@@ -168,6 +175,11 @@ export async function savePdf(query: string, folder: FolderHandle | null, key?: 
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
   return { name, place: name, path: null, where: "downloads" };
+}
+
+/** `work`, or a failure after `ms`. */
+function timed<T>(work: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([work, new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("timed out")), ms))]);
 }
 
 /** Copies text; true when it went. */
