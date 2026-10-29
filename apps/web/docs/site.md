@@ -480,7 +480,7 @@ own, changeable under Plans).
   the computer. Bots, runs and their lines (`job_bots`, `bot_runs`,
   `bot_steps`) are for admins only; a run's lines go after a month.
 - **Members work through the day** (Today): their plan at the top (each target
-  with its progress, and the admins' notes), then the day's jobs, newest first.
+  with its progress, and the admins' notes), then the day's jobs, newest first, twenty a page (the admins' job desk too; `jobs-pager.tsx`).
   Open ↗ opens the posting; ✓ Applied marks it at once, with the résumé chosen
   above the list, and the dropdown beside it (▾) gives any other status. From
   then on the status itself is a dropdown (Applied, Interview, Offer, Hired,

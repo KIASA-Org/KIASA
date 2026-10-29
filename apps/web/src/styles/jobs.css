@@ -444,3 +444,17 @@
 .resume-toast { position: fixed; left: 50%; bottom: 20px; z-index: 50; max-width: min(720px, calc(100vw - 32px)); padding: 12px 16px; border-radius: 14px; background: #16231d; box-shadow: 0 12px 40px rgb(0 0 0 / 0.45), inset 3px 0 0 var(--leaf); font-size: 14px; line-height: 1.5; color: var(--ink); transform: translateX(-50%); overflow-wrap: anywhere; }
 .resume-toast[data-state="failed"] { box-shadow: 0 12px 40px rgb(0 0 0 / 0.45), inset 3px 0 0 #ffb4a2; }
 .resume-toast b { color: var(--leaf); }
+
+/* A long day's list, twenty jobs a page. */
+.jobs-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--card-line); }
+.jobs-pager-pages { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.jobs-pager-page { min-width: 36px; height: 36px; padding: 0 10px; border-radius: 18px; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.jobs-pager-page:hover { background: rgb(236 255 243 / 0.06); color: var(--ink); }
+.jobs-pager-page[aria-current] { background: rgb(184 236 147 / 0.16); color: var(--leaf); }
+.jobs-pager-gap { padding: 0 4px; color: var(--ink-mute); }
+.jobs-pager .chat-icon:disabled { opacity: 0.35; pointer-events: none; }
+.resume-path-needed ol { display: grid; gap: 4px; padding-left: 20px; list-style: decimal; color: var(--ink-soft); }
+.resume-path-needed b { color: var(--ink); }
+.resume-path-kept { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--leaf); }
+.resume-path-kept svg { width: 16px; height: 16px; }
+.resume-path-kept code { padding: 2px 8px; border-radius: 6px; background: var(--night-raised); font: 12.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink-soft); overflow-wrap: anywhere; }

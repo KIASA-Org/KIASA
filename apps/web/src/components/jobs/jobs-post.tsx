@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { STATUS_LABELS, type Application, type Job, type TeamPerson } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
@@ -11,6 +11,7 @@ import { JobsBot } from "./jobs-bot";
 import { JobrightBots } from "./jobs-jobright";
 import { FormDialog } from "./jobs-dialogs";
 import { addDays, clockIn, dayName, initialsOf, linkLabel } from "./jobs-format";
+import { Pager, usePages } from "./jobs-pager";
 import { downloadPdf } from "./jobs-resume-parts";
 
 /** The admins' job desk: the jobs bot, which takes the day's links as they are
@@ -45,13 +46,16 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
 
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = jobs.filter(job => words.every(word => `${job.title ?? ""} ${job.company ?? ""} ${job.location ?? ""} ${job.url}`.toLowerCase().includes(word)));
+  // Twenty at a time; back to the first page when the day or the search changes.
+  const paging = usePages(shown, 20, `${day}|${words.join(" ")}`);
+  const top = useRef<HTMLElement>(null);
   const of = (job: string) => applications.filter(row => row.job_id === job);
 
   return <div className="jobs-view">
     <JobsBot supabase={supabase} onPosted={() => onDay(null)} />
     <JobrightBots supabase={supabase} realtime={realtime} zone={zone} today={today} />
 
-    <section className="jobs-card" aria-labelledby="jobs-desk-title">
+    <section className="jobs-card" aria-labelledby="jobs-desk-title" ref={top}>
       <div className="jobs-card-head">
         <div className="jobs-day-nav">
           <button type="button" className="chat-icon" aria-label="The day before" onClick={() => onDay(addDays(day, -1))}><ArrowLeft /></button>
@@ -68,7 +72,7 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
         </label>
       </div>
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
-        {shown.map(job => {
+        {paging.items.map(job => {
           const rows = of(job.id);
           const applied = rows.filter(row => row.status !== "skipped").length;
           const tally = (["interview", "offer", "hired"] as const).map(status => [status, rows.filter(row => row.status === status).length] as const).filter(([, count]) => count > 0);
@@ -112,6 +116,7 @@ export function PostJobs({ supabase, realtime, zone, today, day, jobs, loading, 
           </li>;
         })}
       </ul>
+      <Pager pages={paging} label={`Pages of ${dayName(day, today).toLowerCase()}'s jobs`} top={top} />
       {!loading && !shown.length && <p className="jobs-empty-line">{jobs.length ? `No job of the day matches “${query.trim()}”.` : day === today ? "Nothing posted yet today. Paste the links above." : `Nothing was posted on ${dayName(day, today)}.`}</p>}
       {loading && <p className="jobs-empty-line">Loading…</p>}
     </section>

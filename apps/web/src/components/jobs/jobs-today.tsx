@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardRow, Job, JobStatus, JobsMe, Plan, Resume } from "@/lib/jobs/types";
 import { ArrowLeft, Search } from "../site/icons";
 import { addDays, dayName } from "./jobs-format";
 import { PlanStrip } from "./jobs-plans";
+import { Pager, usePages } from "./jobs-pager";
 import { JobRow, type JobActions } from "./jobs-row";
 
 type Filter = "todo" | "applied" | "skipped" | "all";
@@ -43,10 +44,13 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
   };
   const stays = kept.view === view ? kept.ids : [];
   const shown = jobs.filter(job => (inFilter(job, filter) || stays.includes(job.id)) && matches(job, words));
+  // Twenty at a time; back to the first page when the day, the filter or the search changes.
+  const paging = usePages(shown, 20, `${filter}|${day}|${words.join(" ")}`);
+  const top = useRef<HTMLElement>(null);
 
   return <div className="jobs-view">
     {me.member && <PlanStrip me={me} plans={plans} mine={mine} today={today} />}
-    <section className="jobs-card" aria-labelledby="jobs-day-title">
+    <section className="jobs-card" aria-labelledby="jobs-day-title" ref={top}>
       <div className="jobs-card-head">
         <div className="jobs-day-nav">
           <button type="button" className="chat-icon" aria-label="The day before" onClick={() => onDay(addDays(day, -1))}><ArrowLeft /></button>
@@ -77,8 +81,9 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
           : me.member && onResumes && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
       </div>
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
-        {shown.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
+        {paging.items.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
       </ul>
+      <Pager pages={paging} label={`Pages of ${dayName(day, today).toLowerCase()}'s jobs`} top={top} />
       {!loading && !shown.length && <p className="jobs-empty-line">
         {!jobs.length ? day === today ? "No jobs yet today. They appear here the moment an admin posts them." : `No jobs were posted ${dayName(day, today).toLowerCase() === "yesterday" ? "yesterday" : `on ${dayName(day, today)}`}.`
           : words.length ? `No job of the day matches “${query.trim()}”.`
