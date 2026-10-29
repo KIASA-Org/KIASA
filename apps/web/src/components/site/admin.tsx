@@ -5,6 +5,8 @@ import type { Ranks, Team } from "@/lib/accounts/viewer";
 import { ChatWatch } from "../chat/chat-watch";
 import { PreviewNote } from "./account";
 import { AdminDesk } from "./admin-desk";
+import { AdminDevices } from "./admin-devices";
+import type { AdminDevice } from "@/lib/accounts/devices";
 import { AppBar, type AppArea } from "./app-bar";
 import { RanksProvider } from "./ranks";
 import type { SimDesk } from "@/lib/sims/server";
@@ -28,11 +30,18 @@ function AdminFrame({ admin, live, isAdmin = true, area = "admin", children }: {
 /** The admin page (`/admin`): where a person at KIASA approves who may sign in,
  * and finds anyone who has asked. `live` once accounts are connected; until
  * then it shows the sample people and keeps nothing. */
-export function AdminView({ people, admin, ranks, live }: { people: Account[]; admin: Admin; ranks?: Ranks; live: boolean }) {
+export function AdminView({ people, admin, ranks, live, devices }: {
+  people: Account[]; admin: Admin; ranks?: Ranks; live: boolean; devices?: { on: boolean; devices: AdminDevice[]; here: string | null };
+}) {
+  const asking = devices?.devices.filter(device => !device.approved_at).length ?? 0;
   return <RanksProvider initial={ranks ?? { owners: [], top: [] }} realtime={live ? publicSupabase : undefined} me={admin.id}>
     <AdminFrame admin={admin} live={live}>
       {!live && <div className="wrap wrap-wide admin-preview"><PreviewNote /></div>}
+      {asking > 0 && <div className="wrap wrap-wide admin-preview">
+        <p className="admin-notice" data-failed="">{asking === 1 ? "A device is" : `${asking} devices are`} asking to use your admin account. <a className="admin-notice-link" href="#admin-devices">See {asking === 1 ? "it" : "them"}</a></p>
+      </div>}
       <AdminDesk people={people} teams={ranks?.teams ?? []} live={live} realtime={live ? publicSupabase : undefined} />
+      {devices && <AdminDevices {...devices} />}
     </AdminFrame>
   </RanksProvider>;
 }

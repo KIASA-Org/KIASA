@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AdminView, NotAdminView } from "@/components/site/admin";
 import { accounts, admin as sampleAdmin } from "@/content/accounts";
+import { devicesOf } from "@/lib/accounts/devices";
 import { accountsLive, currentViewer, everyone, ranks } from "@/lib/accounts/server";
 
 export const metadata: Metadata = {
@@ -21,5 +22,6 @@ export default async function AdminPage() {
   if (!viewer) redirect("/sign-in");
   if (!viewer.admin) return <NotAdminView email={viewer.email} />;
   if (people instanceof Error) throw people;
-  return <AdminView people={people} admin={{ name: viewer.admin.name, role: viewer.email, id: viewer.id, photo: viewer.photo }} ranks={badges} live />;
+  const devices = await devicesOf(viewer.id);
+  return <AdminView people={people} admin={{ name: viewer.admin.name, role: viewer.email, id: viewer.id, photo: viewer.photo }} ranks={badges} live devices={devices} />;
 }

@@ -453,3 +453,11 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .sims-presence { height: 30px; font-size: 13px; }
 .sims-table { min-width: 1120px; }
 .teams-panel .admin-role { height: 40px; border-radius: 10px; }
+
+/* The admin's devices: their account works on these alone; others ask here. */
+.admin-devices-sub { margin: 28px 0 12px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
+.admin-devices-sub:first-of-type { margin-top: 0; }
+.admin-device[data-asking] { box-shadow: inset 3px 0 0 #f2d36b; }
+.admin-device .admin-request-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-device-here { display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 11px; background: rgb(184 236 147 / 0.16); font-size: 12.5px; font-weight: 650; letter-spacing: 0; color: var(--leaf); vertical-align: 3px; }
+.admin-notice-link { margin-left: 6px; font-weight: 650; color: var(--leaf); text-decoration: underline; text-underline-offset: 3px; }
