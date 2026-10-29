@@ -425,3 +425,6 @@
 @media (max-width: 760px) {
   .resume-ways { grid-template-columns: minmax(0, 1fr); }
 }
+.resume-first { display: grid; gap: 10px; }
+.resume-first ul { display: grid; gap: 6px; padding-left: 20px; list-style: disc; }
+.resume-first b { color: var(--ink); }
