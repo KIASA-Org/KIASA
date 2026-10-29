@@ -107,27 +107,43 @@ export type Viewer = { id: string; email: string; admin: { name: string } | null
 /** Who is signed in, as far as their sign-in itself says: its signature is
  * checked here, against Supabase's published key, rather than the cookie being
  * taken on trust, and without a round trip to Supabase. */
-export const signedIn = cache(async (): Promise<{ id: string; email: string } | null> => {
+export const signedIn = cache(async (): Promise<{ id: string; email: string; session: string | null } | null> => {
   if (!accountsLive) return null;
   const { data } = await (await visitorClient()).auth.getClaims();
-  const id = data?.claims.sub, email = data?.claims.email;
-  return id && typeof email === "string" ? { id, email: email.toLowerCase() } : null;
+  const claims = data?.claims;
+  // A token for no one: an admin's sign-in on a device they have not approved
+  // (the database's access token hook; lib/accounts/devices.ts).
+  if (!claims || claims.role !== "authenticated") return null;
+  const id = claims.sub, email = claims.email, session = claims.session_id;
+  return id && typeof email === "string" ? { id, email: email.toLowerCase(), session: typeof session === "string" ? session : null } : null;
 });
+
+/** Admins on their own devices only (lib/accounts/devices.ts): on, unless the
+ * database turns it off (a local test copy); off while the database has no
+ * such switch yet (this code before its SQL). */
+export async function deviceLockOn(): Promise<boolean> {
+  const { data, error } = await siteClient().from("security_settings").select("admin_devices").eq("id", 1).maybeSingle();
+  return !error && !!data && data.admin_devices !== false;
+}
 
 /** Who is signed in; whether they are one of KIASA's admins; their request, if
  * any; and their photo. Asked once per request however many parts of the page need it. */
 export const currentViewer = cache(async (): Promise<Viewer | null> => {
   const person = await signedIn();
   if (!person) return null;
-  const { id, email } = person;
+  const { id, email, session } = person;
   const site = siteClient();
-  const [admin, profile, avatar, top, team] = await Promise.all([
+  const [admin, profile, avatar, top, team, lock, approved] = await Promise.all([
     site.from("admins").select("name").eq("user_id", id).maybeSingle(),
     site.from("profiles").select("*").eq("id", id).maybeSingle(),
     site.from("avatars").select("path").eq("user_id", id).maybeSingle(),
     site.from("top_managers").select("user_id").eq("user_id", id).maybeSingle(),
     site.from("team_members").select("team_id, teams(id, name, color)").eq("user_id", id).maybeSingle(),
+    deviceLockOn(),
+    session ? site.from("admin_sessions").select("session_id").eq("session_id", session).eq("user_id", id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
+  // An admin's account, signed in on a device they have not approved: no one.
+  if (admin.data && lock && !approved.data) return null;
   const teamOf = (team.data?.teams ?? null) as Team | null;
   return {
     id,

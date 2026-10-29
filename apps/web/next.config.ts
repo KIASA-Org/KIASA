@@ -37,6 +37,14 @@ const guarded = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Tailored résumés as PDFs (src/lib/resume): a headless Chromium prints them.
+  // Its package finds its own files, so it is not bundled; and the prompts,
+  // fonts and that Chromium go with the pages that use them.
+  serverExternalPackages: ["@sparticuz/chromium", "playwright-core"],
+  outputFileTracingIncludes: {
+    "/jobs": ["./src/lib/resume/prompts/**/*"],
+    "/jobs/resume/pdf": ["./src/lib/resume/fonts/**/*", "./node_modules/@sparticuz/chromium/bin/**/*"],
+  },
   // Every page guarded (above); and the service worker behind "Alert me on this
   // computer" (public/sw.js): never cached, so a change reaches every browser,
   // and allowed to run only this site's own script.

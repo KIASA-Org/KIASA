@@ -22,15 +22,18 @@
     "sims:presence:check": "node --no-warnings scripts/sims-local/presence-check.mjs"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^153.0.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.3",
     "motion": "^13.5.0",
     "next": "16.4.3",
+    "playwright-core": "^1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "0.0.1",
     "undici": "7.30.1",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

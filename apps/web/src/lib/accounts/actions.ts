@@ -9,6 +9,7 @@ import { noticeDecision, noticeRequest } from "@/lib/chat/server";
 import { TEAM_COLORS } from "@/lib/teams/colors";
 import { alertPerson, isAlertAddress, pushReady } from "./push";
 import { accountsLive, currentViewer, noteAttempt, publicSupabase, siteClient, tooMany, visitorAddress, visitorClient } from "./server";
+import { sessionOf, trustSignIn } from "./devices";
 import { VIEWER_COOKIE, initialsOf, photoUrl, type ViewerBadge } from "./viewer";
 
 /** What a form shows after it is sent: done, or what to fix. `preview` means
@@ -19,6 +20,7 @@ const text = (form: FormData, name: string, max: number) => String(form.get(name
 const EMAIL = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 const RETRY = "That did not work just now. Please try again in a minute.";
 const TOO_MANY = "Too many tries. Please wait 15 minutes, then try again.";
+const DEVICE_ASKED = "This admin account works only on its approved devices, so this one has asked to be added. On your approved computer, open Admin, approve it under Your devices, then sign in here again.";
 
 async function setBadge(badge: ViewerBadge) {
   // Next encodes the value itself.
@@ -112,6 +114,14 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const inTeam = team.data?.teams as { name: string; color: string } | null | undefined;
   const photo = avatar.data ? photoUrl(publicSupabase.url, avatar.data.path as string) : undefined;
   if (admin.data) {
+    // Admins on their own devices only: anywhere else, this browser asks to be approved.
+    const trust = await trustSignIn(data.user.id, sessionOf(data.session?.access_token));
+    if (trust === "asked" || trust === "failed") {
+      await visitor.auth.signOut({ scope: "local" });
+      return { error: trust === "asked" ? DEVICE_ASKED : RETRY };
+    }
+    // The token is made again, now that this sign-in is approved (the database's access token hook).
+    if (trust !== "off") await visitor.auth.refreshSession();
     const name = admin.data.name as string;
     await setBadge({ name, initials: initialsOf(name), href: "/admin", photo, mark: { kind: "owner" } });
     redirect("/admin");
