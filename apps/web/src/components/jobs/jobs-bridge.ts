@@ -11,7 +11,7 @@ export type BridgeProgress = { step: "reading" | "opening" | "pasting" | "sent" 
 
 /** The bridge's version as downloaded now. Older ones still ask ChatGPT, but
  * cannot read a job's page (1.1.0), nor say whether ChatGPT is signed in (1.2.0). */
-export const BRIDGE_LATEST = "1.2.1";
+export const BRIDGE_LATEST = "1.2.2";
 const newer = (version: string, than: string) => {
   const [a, b] = [version, than].map(each => each.split(".").map(Number));
   for (let n = 0; n < 3; n++) if ((a[n] ?? 0) !== (b[n] ?? 0)) return (a[n] ?? 0) > (b[n] ?? 0);

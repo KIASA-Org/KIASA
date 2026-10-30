@@ -584,6 +584,12 @@ own, changeable under Plans).
   background awake while it works (Chrome stops it after ~30 s idle; that was
   "The bridge stopped" on a member's run); if it still drops, Auto mode tries
   the job again (stops after two drops in a row). Auto mode needs 1.2.1.
+  Bridge 1.2.2: the ChatGPT window is often behind others, and Chrome slows a
+  hidden page's timers to once a minute, so a finished answer waited (a
+  member saw ChatGPT's clock stop while the job ran on). The background (not
+  slowed) asks the page to look every 1.5 s; "finished" is ChatGPT's Copy
+  button under the answer (else no Stop and no change for 8 s); only
+  ChatGPT's own Stop button means "still writing" (not "Stop dictation").
   Note: Playwright attaches to the extension's worker, so local tests cannot
   show Chrome's idle stop; they stop the worker from
   chrome://serviceworker-internals instead. Résumés made for jobs are

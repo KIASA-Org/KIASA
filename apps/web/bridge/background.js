@@ -120,12 +120,15 @@ async function ask(text, progress, opened, stopped) {
     const chat = chrome.tabs.connect(tab, { name: "ask" });
     opened(chat);
     let done = false;
+    // Looks asked for every 1.5 seconds: the worker's timers are not slowed as a hidden page's are.
+    const looking = setInterval(() => { try { chat.postMessage({ type: "look" }); } catch { /* gone */ } }, 1500);
+    const finish = () => { done = true; clearInterval(looking); };
     chat.onMessage.addListener(message => {
       if (message.type === "progress") progress(message);
-      if (message.type === "answer") { done = true; resolve(message.answer); chat.disconnect(); }
-      if (message.type === "error") { done = true; reject(new Error(message.error)); chat.disconnect(); }
+      if (message.type === "answer") { finish(); resolve(message.answer); chat.disconnect(); }
+      if (message.type === "error") { finish(); reject(new Error(message.error)); chat.disconnect(); }
     });
-    chat.onDisconnect.addListener(() => { if (!done) reject(new Error("The ChatGPT tab was closed or reloaded before it answered.")); });
+    chat.onDisconnect.addListener(() => { clearInterval(looking); if (!done) reject(new Error("The ChatGPT tab was closed or reloaded before it answered.")); });
     chat.postMessage({ type: "ask", text });
   });
 }
