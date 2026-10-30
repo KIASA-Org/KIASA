@@ -8,6 +8,7 @@ import { addDays, dayName } from "./jobs-format";
 import { PlanStrip } from "./jobs-plans";
 import { Pager, usePages } from "./jobs-pager";
 import { JobRow, type JobActions } from "./jobs-row";
+import { AnyJobButton } from "./jobs-any-job";
 import { AutoBar, useTailor } from "./jobs-tailor";
 
 type Filter = "todo" | "ready" | "applied" | "skipped" | "all";
@@ -74,6 +75,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
             {entry.label} <span>{count(entry.id)}</span>
           </button>)}
         </div>
+        {made && <AnyJobButton />}
         {resumes.length > 0
           ? <label className="jobs-resume-pick"><span>Applying with</span>
             <select value={resume ?? ""} onChange={event => setPicked(event.target.value || null)}>

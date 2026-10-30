@@ -96,6 +96,41 @@ export async function textForJob(job: string, kind: "tailor" | "init", descripti
   return { text: buildPasteText(prompt(kind === "init" ? "init" : "tailor"), record) };
 }
 
+/** A job not on KIASA's list (one the member found elsewhere): its description,
+ * and its company, title and link if given. */
+export type AnyJob = { jd: string; company?: string; title?: string; link?: string };
+const field = (value: unknown, size: number) => typeof value === "string" ? value.trim().slice(0, size) : "";
+
+/** The text to paste into a new chat for a job not on KIASA's list: the
+ * tailoring prompt, that job and the member's base résumé (without email and
+ * phone). Nothing is kept: the job does not join KIASA's list. */
+export async function textForAnyJob(job: AnyJob): Promise<{ text?: string; error?: string; needsBase?: boolean }> {
+  const who = await member();
+  if (!who) return { error: ONLY };
+  const base = await baseOf(who.db, who.me.id);
+  if (!base) return { needsBase: true, error: "First make your base résumé, once: every job's résumé is made from it." };
+  const jd = field(job?.jd, 30000);
+  if (jd.length < 80) return { error: "Paste the job's whole description (at least a few lines)." };
+  const record = buildJobRecord({ company: field(job.company, 120), title: field(job.title, 200), jd, link: field(job.link, 2000), about: "" }, base, {});
+  return { text: buildPasteText(prompt("tailor"), record) };
+}
+
+/** The chat's answer for a job not on KIASA's list: its changes applied to the
+ * member's base résumé, and the résumé given back (to print), not kept. */
+export async function tailorAnyJob(answer: string): Promise<{ profile?: Profile; report: TailorReport }> {
+  const empty = (error: string) => ({ report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [error] } });
+  const who = await member();
+  if (!who) return empty(ONLY);
+  const base = await baseOf(who.db, who.me.id);
+  if (!base) return empty("Make your base résumé first.");
+  const found = extractJson(String(answer ?? "").slice(0, LONGEST_ANSWER));
+  if (!found.ok) return empty(found.error);
+  const result = applyComprehensive(base, found.value);
+  const report: TailorReport = { ok: result.ok, applied: result.applied, unmatched: result.unmatched, rejected: result.rejected, warnings: result.warnings, errors: result.errors };
+  if (result.errors.length || !result.applied.length || !result.profile) return { report };
+  return { profile: result.profile, report };
+}
+
 /** The chat's answer to the init prompt, checked against the base résumé sent:
  * every fact the model changed is put back; the result goes to the editor. */
 export async function checkGenerated(answer: string): Promise<{ profile?: Profile; repairs: string[]; warnings: string[]; errors: string[] }> {
