@@ -8,10 +8,10 @@ import { addDays, dayName } from "./jobs-format";
 import { PlanStrip } from "./jobs-plans";
 import { Pager, usePages } from "./jobs-pager";
 import { JobRow, type JobActions } from "./jobs-row";
-import { AutoBar } from "./jobs-tailor";
+import { AutoBar, useTailor } from "./jobs-tailor";
 
-type Filter = "todo" | "applied" | "skipped" | "all";
-const FILTERS: { id: Filter; label: string }[] = [{ id: "todo", label: "To do" }, { id: "applied", label: "Applied" }, { id: "skipped", label: "Skipped" }, { id: "all", label: "All" }];
+type Filter = "todo" | "ready" | "applied" | "skipped" | "all";
+const FILTERS: { id: Filter; label: string }[] = [{ id: "todo", label: "To do" }, { id: "ready", label: "Ready" }, { id: "applied", label: "Applied" }, { id: "skipped", label: "Skipped" }, { id: "all", label: "All" }];
 const matches = (job: Pick<Job, "title" | "company" | "location" | "url">, words: string[]) =>
   words.every(word => `${job.title ?? ""} ${job.company ?? ""} ${job.location ?? ""} ${job.url}`.toLowerCase().includes(word));
 
@@ -28,7 +28,9 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
   const resume = resumes.some(entry => entry.id === picked) ? picked : (resumes.find(entry => entry.is_default) ?? resumes[0])?.id ?? null;
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const done = jobs.filter(job => job.status).length;
-  const inFilter = (job: Job, id: Filter) => id === "todo" ? !job.status : id === "applied" ? !!job.status && job.status !== "skipped" : id === "skipped" ? job.status === "skipped" : true;
+  // Ready: still to do, with a résumé made for it (members only).
+  const made = useTailor()?.made;
+  const inFilter = (job: Job, id: Filter) => id === "todo" ? !job.status : id === "ready" ? !job.status && !!made?.has(job.id) : id === "applied" ? !!job.status && job.status !== "skipped" : id === "skipped" ? job.status === "skipped" : true;
   const count = (id: Filter) => jobs.filter(job => inFilter(job, id)).length;
   // A job marked here stays in sight in this list (with its new status) until
   // the list changes, so a click made by mistake is put right from its dropdown.
@@ -68,7 +70,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
           <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search the day's jobs" aria-label="Search the day's jobs" />
         </label>
         <div className="jobs-filters" role="group" aria-label="Show">
-          {FILTERS.map(entry => <button key={entry.id} type="button" className="jobs-filter" aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>
+          {FILTERS.filter(entry => entry.id !== "ready" || made).map(entry => <button key={entry.id} type="button" className="jobs-filter" aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>
             {entry.label} <span>{count(entry.id)}</span>
           </button>)}
         </div>

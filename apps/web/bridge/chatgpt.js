@@ -115,11 +115,15 @@
     port.onMessage.addListener(async message => {
       if (message.type === "stop") { stopped = true; return; }
       if (message.type !== "ask") return;
+      // "Still working", while it waits: the bridge stays awake, and KIASA knows.
+      const alive = setInterval(() => { try { port.postMessage({ type: "alive" }); } catch { /* gone */ } }, 10000);
       try {
         const answer = await ask(message.text, progress => { try { port.postMessage({ type: "progress", ...progress }); } catch { /* gone */ } }, () => stopped);
         port.postMessage({ type: "answer", answer });
       } catch (error) {
         try { port.postMessage({ type: "error", error: String(error?.message || error) }); } catch { /* gone */ }
+      } finally {
+        clearInterval(alive);
       }
     });
   });

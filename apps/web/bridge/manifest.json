@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KIASA ChatGPT Bridge",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Carries KIASA's tailoring prompt to ChatGPT in your own signed-in browser, and its answer back to KIASA; and reads the description off a KIASA job's page when KIASA cannot.",
   "permissions": [
     "tabs",

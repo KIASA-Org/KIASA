@@ -6,7 +6,7 @@ import { ArrowLeft, Check, ChevronDown, Close, Copy, More, NewTab, Pencil, Trash
 import { Menu, type MenuItem, type MenuPlace } from "../chat/chat-menu";
 import { HiredDialog, InterviewDialog, NoteDialog, ResumeDialog, type HiredForm, type InterviewForm } from "./jobs-dialogs";
 import { clockIn, linkLabel } from "./jobs-format";
-import { useTailor } from "./jobs-tailor";
+import { autoStep, TimeBar, useTailor } from "./jobs-tailor";
 
 /** What a member does with a job; each says what went wrong, if anything. */
 export type JobActions = {
@@ -39,6 +39,9 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
   const used = resumes.find(entry => entry.id === job.resume_id);
   const tailor = useTailor();
   const tailored = !!tailor?.made.has(job.id);
+  // Auto mode working on this job now.
+  const working = !!tailor?.auto.on && tailor.auto.job?.id === job.id;
+  const ready = tailored && !job.status;
 
   const choose = (status: JobStatus) => {
     if (status === job.status) return;
@@ -79,7 +82,7 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
     setMenu({ at: { x: box.right, y: box.bottom + 6, end: true }, kind });
   };
 
-  return <li className="jobs-row" data-status={job.status ?? "todo"}>
+  return <li className="jobs-row" id={`job-${job.id}`} data-status={job.status ?? "todo"} data-working={working || undefined} data-ready={ready || undefined}>
     <span className="jobs-logo" aria-hidden="true">{(job.company ?? title).trim()[0]?.toUpperCase() ?? "?"}</span>
     <div className="jobs-row-main">
       <a className="jobs-row-title" href={job.url} target="_blank" rel="noopener noreferrer">{title}</a>
@@ -89,8 +92,13 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
         {posted && <span>Posted {clockIn(zone, job.posted_at)}</span>}
         {count && <span>{job.applied === 1 ? "1 on the team applied" : `${job.applied} on the team applied`}</span>}
         {used && job.status && job.status !== "skipped" && <span>With {used.title}</span>}
-        {tailored && <span className="jobs-tailored">{tailor?.plain.has(job.id) ? "Base résumé (no description)" : "Résumé made for it"}</span>}
+        {tailored && !ready && <span className="jobs-tailored">{tailor?.plain.has(job.id) ? "Base résumé (no description)" : "Résumé made for it"}</span>}
       </p>
+      {ready && <p className="jobs-ready"><span className="jobs-ready-badge"><Check /> Ready to apply</span>{tailor?.plain.has(job.id) && <span className="jobs-ready-note">with your base résumé (no description)</span>}</p>}
+      {working && tailor && <div className="jobs-working" role="status">
+        <p><span className="auto-dot" aria-hidden="true" /> <b>Tailoring with ChatGPT</b> · {autoStep(tailor.auto)}</p>
+        <TimeBar since={tailor.auto.since} usual={tailor.auto.usual} />
+      </div>}
       {job.my_note && <p className="jobs-row-note">{job.my_note}</p>}
     </div>
     <div className="jobs-row-actions">
@@ -99,7 +107,9 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
           aria-label={`Copy the path of your résumé for ${title}`} title="Copy the résumé file's whole path, to paste in the application's file box">
           {copying === "done" ? <Check /> : <Copy />} {copying === "busy" ? "Saving…" : copying === "done" ? "Path copied" : "Copy résumé path"}
         </button>
-        : <button type="button" className="chat-pill jobs-tailor" onClick={() => tailor.open(job)} aria-label={`Tailor résumé: ${title}`}><Pencil /> Tailor résumé</button>)}
+        : working
+          ? <button type="button" className="chat-pill jobs-tailor" disabled>Tailoring…</button>
+          : <button type="button" className="chat-pill jobs-tailor" onClick={() => tailor.open(job)} aria-label={`Tailor résumé: ${title}`}><Pencil /> Tailor résumé</button>)}
       {!job.status
         ? <>
           <a className="jobs-button" href={job.url} target="_blank" rel="noopener noreferrer">Open <NewTab /></a>

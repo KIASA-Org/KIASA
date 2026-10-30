@@ -6,7 +6,7 @@ import type { Job, JobsMe } from "@/lib/jobs/types";
 import { baseResumeFor, tailorFromAnswer, textForJob, type TailorReport } from "@/lib/resume/actions";
 import { Copy, Download } from "../site/icons";
 import { BridgeDialog, BridgeStatusLine } from "./jobs-bridge-card";
-import { askChatGPT, bridgeVersion, canRead, progressText, readJobPage, useBridgeStatus, type BridgeProgress } from "./jobs-bridge";
+import { askChatGPT, bridgeVersion, canRead, canRun, progressText, readJobPage, useBridgeStatus, type BridgeProgress } from "./jobs-bridge";
 import { linkLabel } from "./jobs-format";
 import { canChooseFolder, copyText, folderPath, hasFile, jobPlace, pathOf, savePdf, savedName, writableFolder, type Saved } from "./jobs-resume-folder";
 import { ResumeFolder } from "./jobs-resume-folder-card";
@@ -23,13 +23,17 @@ type JobNamed = Pick<Job, "id" | "company" | "title">;
 export type AutoState = {
   on: boolean; job: JobNamed | null; progress: BridgeProgress | null; done: number; based: number;
   failed: { title: string; why: string }[]; note: string;
+  /** The job's step after ChatGPT (applying its answer, saving the PDF), when it started, and how long one usually takes (ms; none yet). */
+  phase: "applying" | "saving" | null; since: number; usual: number | null; timed: number;
 };
 /** `plain`: of the jobs with a résumé, those whose is the base résumé as it is. */
 type Tailoring = {
   made: Set<string>; plain: Set<string>; open: (job: Job) => void; copyPath: (job: JobNamed) => void; copying: Copying | null;
   auto: AutoState; startAuto: () => void; stopAuto: () => void;
 };
-const IDLE: AutoState = { on: false, job: null, progress: null, done: 0, based: 0, failed: [], note: "" };
+const IDLE: AutoState = { on: false, job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0 };
+/** How long a job's résumé is guessed to take before one has been timed: ChatGPT thinks for a while. */
+export const USUAL_GUESS = 150_000;
 const LOST_REPORT: TailorReport = { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] };
 const TailorContext = createContext<Tailoring | null>(null);
 /** For a job's row: whether a résumé was made for it, how to make one, and
@@ -76,13 +80,16 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
 
   const startAuto = async () => {
     if (running.current) return;
-    // (A bridge from before it could read a job's page is updated first.)
-    if (!canRead(await bridgeVersion())) return setNeedBridge(true);
+    // (A bridge from before it stayed awake through a long wait is updated first.)
+    if (!canRun(await bridgeVersion())) return setNeedBridge(true);
     // The résumé folder, asked for now, in the click: each PDF is saved into it.
     const folder = await writableFolder();
     const control = new AbortController();
     running.current = control;
     const tried = new Set<string>();
+    // The bridge dropping once (Chrome restarting it) is tried again; twice in a row stops.
+    let dropped = 0;
+    const isDrop = (why: string) => /bridge stopped|bridge did not answer/i.test(why);
     const update = (patch: Partial<AutoState>) => setAuto(current => ({ ...current, ...patch }));
     const fail = (target: JobNamed, why: string) => {
       tried.add(target.id);
@@ -97,13 +104,14 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       while (!control.signal.aborted) {
         // The day's jobs as they are now (new ones join as they are posted).
         const { data } = await supabase.rpc("jobs_on", { on_day: today });
-        const next = ((data ?? []) as Job[]).find(entry => entry.status !== "skipped" && !madeNow.current.has(entry.id) && !tried.has(entry.id));
+        // Only jobs still to do (not applied, not skipped) without a résumé, in the list's order.
+        const next = ((data ?? []) as Job[]).find(entry => !entry.status && !madeNow.current.has(entry.id) && !tried.has(entry.id));
         if (!next) {
-          update({ job: null, progress: null, note: "Every job of the day has its résumé. Waiting for new jobs…" });
+          update({ job: null, progress: null, phase: null, note: "Every job to do today has its résumé. Waiting for new jobs…" });
           await pause(60_000);
           continue;
         }
-        update({ job: next, progress: null, note: "" });
+        update({ job: next, progress: null, phase: null, note: "", since: Date.now() });
         const lost = () => ({ text: undefined, error: LOST, needsBase: false, needsDescription: false });
         let text = await textForJob(next.id, "tailor").catch(lost);
         // No description on KIASA: read off the job's page in this browser.
@@ -112,16 +120,21 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
           try {
             found = await readJobPage(next.id, progress => update({ progress }), control.signal);
           } catch (error) {
+            const why = (error as Error).message;
             if (control.signal.aborted) break;
-            fail(next, (error as Error).message);
+            if (isDrop(why) && ++dropped < 2) continue;
+            if (isDrop(why)) { update({ note: why }); break; }
+            fail(next, why);
             continue;
           }
+          dropped = 0;
           if (found.text) text = await textForJob(next.id, "tailor", found.text).catch(lost);
           // None there either (often only an application form): the base résumé, as it is.
           if (!text.text && text.needsDescription) {
             const { errors } = await baseResumeFor(next.id).catch(() => ({ errors: [LOST] }));
             if (errors?.length) { fail(next, errors[0]); continue; }
             madeFor(next.id, true);
+            update({ phase: "saving", progress: null });
             if (folder) {
               const file = await savePdf(`job=${next.id}`, folder, next.id, jobPlace(next));
               if (file.error) fail(next, `Its PDF: ${file.error}`);
@@ -141,23 +154,31 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
         } catch (error) {
           const why = (error as Error).message;
           if (control.signal.aborted) break;
+          if (isDrop(why) && ++dropped < 2) continue;
           if (/usage limit|not signed in|message box|bridge/i.test(why)) { update({ note: why }); break; }
           fail(next, why);
           continue;
         }
+        dropped = 0;
+        update({ phase: "applying", progress: null });
         const { saved, report } = await tailorFromAnswer(next.id, answer).catch(() => ({ saved: false, report: LOST_REPORT }));
         if (!saved) { fail(next, report.errors[0] ?? "ChatGPT's answer could not be used."); continue; }
         madeFor(next.id, false);
+        update({ phase: "saving" });
         // Into the résumé folder; with none, kept on KIASA only (a page cannot download dozens of files unasked).
         if (folder) {
           const file = await savePdf(`job=${next.id}`, folder, next.id, jobPlace(next));
           if (file.error) fail(next, `Made, but its PDF: ${file.error}`);
         }
-        setAuto(current => ({ ...current, done: current.done + 1 }));
+        // Timed: the next job's bar guesses from how long they take.
+        setAuto(current => {
+          const took = Date.now() - current.since;
+          return { ...current, done: current.done + 1, timed: current.timed + 1, usual: current.usual === null ? took : Math.round((current.usual * current.timed + took) / (current.timed + 1)) };
+        });
       }
     } finally {
       running.current = null;
-      setAuto(current => ({ ...current, on: false, job: null, progress: null, note: current.note && !/^Starting|Waiting/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
+      setAuto(current => ({ ...current, on: false, job: null, progress: null, phase: null, note: current.note && !/^Starting|Waiting/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
     }
   };
   const stopAuto = () => running.current?.abort();
@@ -419,16 +440,17 @@ export function AutoBar() {
   if (!tailor) return null;
   const { auto, startAuto, stopAuto } = tailor;
   // No bridge, or one too old for Auto mode: its steps first.
-  const start = () => status?.state === "missing" || status?.state === "old" ? setSettingUp(true) : startAuto();
+  const start = () => status?.state === "missing" || status?.state === "old" || status?.state === "outdated" ? setSettingUp(true) : startAuto();
   return <div className="auto-bar" data-on={auto.on || undefined}>
     {auto.on
       ? <>
         <span className="auto-dot" aria-hidden="true" />
         <p className="auto-text" role="status">
           <b>Auto mode</b> · {auto.done} made{auto.based ? ` (${auto.based} with your base résumé)` : ""}
-          {auto.job ? <> · now: {[auto.job.title, auto.job.company].filter(Boolean).join(" · ")} · {progressText(auto.progress)}</> : auto.note ? <> · {auto.note}</> : null}
+          {auto.job ? <> · now: <button type="button" className="jobs-link" onClick={() => showRow(auto.job!.id)}>{[auto.job.title, auto.job.company].filter(Boolean).join(" · ")}</button> · {autoStep(auto)}</> : auto.note ? <> · {auto.note}</> : null}
         </p>
         <button type="button" className="chat-pill" data-danger="" onClick={stopAuto}>Stop</button>
+        {auto.job && <TimeBar since={auto.since} usual={auto.usual} />}
       </>
       : <>
         <p className="auto-text"><b>Auto mode</b>: ChatGPT makes a résumé for every job of the day without one, one after another (through the ChatGPT bridge), and saves each PDF in your résumé folder. A job with no description anywhere (only an application form) gets your base résumé.{auto.note && <> <span className="auto-note">{auto.done ? `${auto.done} made${auto.based ? ` (${auto.based} with your base résumé)` : ""}. ` : ""}{auto.note}</span></>}</p>
@@ -440,5 +462,39 @@ export function AutoBar() {
       <summary>{auto.failed.length === 1 ? "1 job" : `${auto.failed.length} jobs`} to do by hand</summary>
       <ul>{auto.failed.map((entry, index) => <li key={index}><b>{entry.title}</b>: {entry.why}</li>)}</ul>
     </details>}
+  </div>;
+}
+
+/** What Auto mode is doing for its job now, in words. */
+export function autoStep(auto: AutoState): string {
+  if (auto.phase === "applying") return "Applying ChatGPT's changes to your résumé…";
+  if (auto.phase === "saving") return "Saving the PDF…";
+  return auto.progress ? progressText(auto.progress) : "Getting the job ready…";
+}
+
+/** The job's row brought into view (when it is on this page of the list), and flashed. */
+function showRow(id: string) {
+  const row = document.getElementById(`job-${id}`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+}
+
+const clock = (ms: number) => { const seconds = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; };
+
+/** How long this job has taken so far, against how long one usually takes
+ * (timed in this run; a guess before the first): a bar that fills toward it,
+ * and "about 1:10 left", or "taking longer than usual". */
+export function TimeBar({ since, usual }: { since: number; usual: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  const took = Math.max(0, now - since);
+  const expected = usual ?? USUAL_GUESS;
+  const over = took > expected;
+  const share = Math.min(0.97, took / expected);
+  return <div className="time-bar" data-over={over || undefined}>
+    <span className="time-bar-track" role="progressbar" aria-label="Time on this job" aria-valuemin={0} aria-valuemax={Math.round(expected / 1000)} aria-valuenow={Math.round(took / 1000)}>
+      <span className="time-bar-fill" style={{ width: `${(share * 100).toFixed(1)}%` }} />
+    </span>
+    <span className="time-bar-text">{clock(took)} · {over ? "taking longer than usual" : `about ${clock(expected - took)} left`}{usual === null ? " (estimated)" : ""}</span>
   </div>;
 }
