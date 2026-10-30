@@ -603,6 +603,10 @@ own, changeable under Plans).
   Temporary Chat (`?temporary-chat=true`, Chris's choice): out of the
   member's history and memory. The stand-in page in the tests follows both
   layouts; the new one is built from those reports, not seen signed in.
+  Auto mode works on the day shown (`AutoBar day`), so jobs left without a
+  résumé on an earlier day can be done too; an earlier day stops when its
+  jobs are done (no new ones come), today waits for new ones. Viewing another
+  day while it runs, the bar says which day's jobs it is on.
   **Tailor for any job** (Today, members; `jobs-any-job.tsx`, Chris's
   choice): a job found elsewhere, its description pasted (company, title and
   link optional), Ask ChatGPT for me or copy and paste, then the PDF.
