@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** The largest résumé taken to print: a whole one in JSON is far less. */
+const LARGEST = 400_000;
 const say = (text: string, status: number) => new Response(text, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 
 /** A résumé as a PDF: `?job=<id>` the signed-in member's résumé made for that
@@ -39,6 +41,34 @@ export async function GET(request: Request) {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": attachmentHeader(name, asked.get("inline") === "1"),
+      "Content-Length": String(pdf.byteLength),
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
+/** A résumé not kept on KIASA (tailored for a job not on its list), sent as
+ * `{ profile }`, printed for the signed-in member and given back as a PDF. */
+export async function POST(request: Request) {
+  const me = await jobsViewer();
+  if (!me?.member) return say("Please sign in.", 401);
+  const body = await request.text().catch(() => "");
+  if (!body || body.length > LARGEST) return say("That résumé could not be read.", 400);
+  let sent: unknown;
+  try { sent = (JSON.parse(body) as { profile?: unknown }).profile; } catch { return say("That résumé could not be read.", 400); }
+  const parsed = ProfileSchema.safeParse(sent);
+  if (!parsed.success) return say("That résumé could not be read.", 400);
+  let pdf: Uint8Array<ArrayBuffer>;
+  try {
+    pdf = await resumePdf(parsed.data);
+  } catch (error) {
+    console.error("Résumé PDF failed:", error);
+    return say("The PDF could not be made just now. Please try again in a minute.", 503);
+  }
+  return new Response(pdf, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": attachmentHeader(pdfName(parsed.data.info.name), false),
       "Content-Length": String(pdf.byteLength),
       "Cache-Control": "private, no-store",
     },

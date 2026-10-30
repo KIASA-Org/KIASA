@@ -134,13 +134,17 @@ function fileName(header: string) {
 /** A résumé PDF (made on the server, a few seconds): into the member's folder
  * when one is chosen and allowed (`folder`, asked for at the click), in the
  * folders `within` (a job's: its day, then the job), else downloaded. `key`
- * remembers where it went, for copying its path later. */
-export async function savePdf(query: string, folder: FolderHandle | null, key?: string, within: string[] = []): Promise<Saved> {
+ * remembers where it went, for copying its path later. `query` asks for a kept
+ * one (`job=…`, `base=1`); `{ profile }` sends one not kept, to be printed. */
+export async function savePdf(query: string | { profile: unknown }, folder: FolderHandle | null, key?: string, within: string[] = []): Promise<Saved> {
   // Never waiting for ever: the server gives up within a minute, and so does this.
   let answer: Response;
   let blob: Blob;
   try {
-    answer = await fetch(`/jobs/resume/pdf?${query}`, { signal: AbortSignal.timeout(55_000) });
+    // (A résumé not kept on KIASA is sent along to be printed.)
+    answer = typeof query === "string"
+      ? await fetch(`/jobs/resume/pdf?${query}`, { signal: AbortSignal.timeout(55_000) })
+      : await fetch("/jobs/resume/pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(query), signal: AbortSignal.timeout(55_000) });
     if (!answer.ok) return { error: (await answer.text().catch(() => "")) || "The PDF could not be made. Please try again." };
     blob = await answer.blob();
   } catch (error) {

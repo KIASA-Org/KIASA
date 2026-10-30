@@ -603,6 +603,13 @@ own, changeable under Plans).
   Temporary Chat (`?temporary-chat=true`, Chris's choice): out of the
   member's history and memory. The stand-in page in the tests follows both
   layouts; the new one is built from those reports, not seen signed in.
+  **Tailor for any job** (Today, members; `jobs-any-job.tsx`, Chris's
+  choice): a job found elsewhere, its description pasted (company, title and
+  link optional), Ask ChatGPT for me or copy and paste, then the PDF.
+  **Nothing is kept**: `textForAnyJob` and `tailorAnyJob` read the base
+  résumé and save nothing; the PDF route's `POST` prints a résumé sent to it
+  (`{ profile }`, checked, members only), saved like the others in the
+  résumé folder (`<day>/<Company - Title>/`) or downloaded.
   Note: Playwright attaches to the extension's worker, so local tests cannot
   show Chrome's idle stop; they stop the worker from
   chrome://serviceworker-internals instead. Résumés made for jobs are
