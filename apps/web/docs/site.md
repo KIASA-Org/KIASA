@@ -607,6 +607,20 @@ own, changeable under Plans).
   résumé on an earlier day can be done too; an earlier day stops when its
   jobs are done (no new ones come), today waits for new ones. Viewing another
   day while it runs, the bar says which day's jobs it is on.
+  Bridge 1.3.1: ChatGPT's usage limit is read only from its own words ("You've
+  reached our limit…", "usage cap") in its notices or a short answer with no
+  code block, and only while it is not writing. 1.3.0 took "rate limit"
+  anywhere on the page (a résumé's "API rate limiting", a job's description)
+  for it, and stopped Auto mode again and again. Auto mode no longer stops for
+  ChatGPT's limit: it waits 15 minutes and tries the same job again ("Try
+  again now" to go sooner); trouble reaching ChatGPT (its page slow, the
+  bridge dropping) waits a minute, three times running at most. The answer
+  is taken as ChatGPT copies it: the bridge marks the page
+  (`data-kiasa-capture`), presses "Copy response", and `bridge/chatgpt-main.js`
+  (in the page's own world) hands that text to the bridge instead of the
+  clipboard (the member's clipboard is left alone). ChatGPT's new code viewer
+  may show a long answer only in part; reading the page is the fallback.
+  (The mark, not a message: a message arrives after the click.)
   **Tailor for any job** (Today, members; `jobs-any-job.tsx`, Chris's
   choice): a job found elsewhere, its description pasted (company, title and
   link optional), Ask ChatGPT for me or copy and paste, then the PDF.
