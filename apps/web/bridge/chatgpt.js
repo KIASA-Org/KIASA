@@ -2,16 +2,21 @@
 // KIASA's question in the message box (as a paste: ChatGPT turns a long one
 // into an attached text), sends it, waits for the whole answer, and gives it
 // back. ChatGPT's page changes over time, so each part is looked for in
-// several ways, and when one is not found the bridge says which.
+// several ways, and when one is not found the bridge says which. (ChatGPT's
+// page of October 2026 dropped the old markers, data-message-author-role,
+// #prompt-textarea and the conversation turns: the new ones come first.)
 (() => {
   const FIND = {
-    composer: ["#prompt-textarea", 'div.ProseMirror[contenteditable="true"]', 'form [contenteditable="true"]', 'textarea[name="prompt-textarea"]', "form textarea"],
-    send: ['[data-testid="send-button"]', "#composer-submit-button", 'button[aria-label="Send prompt"]', 'button[aria-label*="Send" i]', 'form button[type="submit"]'],
+    composer: ['form[data-chatgpt-composer] [contenteditable="true"]', 'div[role="textbox"][contenteditable="true"]', "#prompt-textarea", 'div.ProseMirror[contenteditable="true"]', 'form [contenteditable="true"]', 'textarea[name="prompt-textarea"]', "form textarea"],
+    send: ['[data-testid="send-button"]', "#composer-submit-button", 'button[aria-label="Send"]', 'button[aria-label="Send prompt"]', 'button[aria-label*="Send" i]', 'button[data-testid*="send" i]', 'form button[type="submit"]'],
     // Only ChatGPT's own Stop (of its answer): not, say, "Stop dictation".
     stop: ['[data-testid="stop-button"]', '#composer-submit-button[aria-label*="Stop" i]', 'button[aria-label="Stop streaming"]', 'button[aria-label="Stop generating"]'],
-    // Under a finished answer: its Copy button (shown once ChatGPT is done).
-    copied: ['[data-testid="copy-turn-action-button"]', 'button[aria-label="Copy"]'],
-    answer: ['[data-message-author-role="assistant"]', '[data-testid^="conversation-turn"]:has([data-message-author-role="assistant"])'],
+    // Under a finished answer: its Copy button (shown once ChatGPT is done; not
+    // a code block's own "Copy code", there while it is still writing).
+    copied: ['button[data-testid="copy-turn-action-button"]', 'button[aria-label="Copy response"]'],
+    // Signs it is still writing, besides its Stop button.
+    streaming: ['[data-is-streaming="true"]', ".result-streaming", ".result-thinking"],
+    answer: ['[data-content-search-unit-key$=":assistant"]', '[data-markdown-text-style="assistant-message"]', '[data-message-author-role="assistant"]', 'div[class*="MarkdownRoot-"]', ".markdown", '[class*="prose"]'],
     signIn: ['[data-testid="login-button"]', 'a[href*="/auth/login"]', 'button[data-testid="welcome-login-button"]'],
   };
   const LIMIT = /(reached|hit) (the |your |our )?(current )?(usage |message )?(limit|cap)|too many (requests|messages)|usage cap|rate limit/i;
@@ -22,6 +27,18 @@
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const usable = button => !!button && !button.disabled && button.getAttribute("aria-disabled") !== "true";
 
+  /** Whether ChatGPT is still writing: its Stop button (a button whose name
+   * starts with "Stop", but not "Stop dictation" and the like), or its own
+   * signs of streaming. */
+  function writing() {
+    if (first(FIND.stop) || first(FIND.streaming)) return true;
+    for (const button of document.querySelectorAll("button[aria-label]")) {
+      const name = button.getAttribute("aria-label") || "";
+      if (/^stop\b/i.test(name) && !/dictat|voice|record|shar|listen|aloud|video|camera/i.test(name)) return true;
+    }
+    return false;
+  }
+
   /** Looks asked for by the bridge's background (every 1.5 seconds while it
    * waits): a page Chrome hides (its window behind others) has its own timers
    * slowed to once a minute, so ChatGPT's finished answer would wait. */
@@ -31,9 +48,11 @@
   function until(check, timeout, stopped) {
     return new Promise(resolve => {
       const end = Date.now() + timeout;
-      let timer = 0;
-      const observer = new MutationObserver(() => look());
-      const look = () => {
+      let timer = 0, last = 0;
+      const observer = new MutationObserver(() => look(false));
+      const look = (asked = true) => {
+        if (!asked && Date.now() - last < 300) return false;
+        last = Date.now();
         const found = check();
         if (found || Date.now() > end || stopped?.()) {
           observer.disconnect();
@@ -68,10 +87,15 @@
     }
   }
 
-  /** Whether a turn's answer is finished: ChatGPT shows its Copy button under it then. */
+  /** Whether an answer is finished: ChatGPT shows its "Copy response" button
+   * under it then (in its turn, after it: the question before it has its own). */
   function finished(turn) {
-    const whole = turn.closest('article, [data-testid^="conversation-turn"]') || turn.parentElement;
-    for (const selector of FIND.copied) { try { if (whole?.querySelector(selector)) return true; } catch { /* as above */ } }
+    const whole = turn.closest('[data-turn-key], article, [data-testid^="conversation-turn"]') || turn.parentElement?.parentElement || turn;
+    for (const selector of FIND.copied) {
+      let buttons = [];
+      try { buttons = [...whole.querySelectorAll(selector)]; } catch { /* as above */ }
+      if (buttons.some(button => turn.contains(button) || (turn.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING))) return true;
+    }
     return false;
   }
 
@@ -104,19 +128,22 @@
       const turns = every(FIND.answer);
       const turn = turns.length > before ? turns[turns.length - 1] : null;
       const said = turn ? (turn.innerText || "") : "";
-      const page = document.body.innerText.slice(-4000);
+      // (The page's text without laying it out: cheap enough to read on each look.)
+      const page = (document.querySelector("main") || document.body).textContent.slice(-4000);
       if (LIMIT.test(said) || (!turn && LIMIT.test(page))) return { error: "ChatGPT says its usage limit is reached. Auto mode stops here; try again when ChatGPT allows." };
       if (turn && FAILED.test(said) && said.length < 400) return { error: `ChatGPT answered with an error: “${said.trim().slice(0, 160)}”` };
       if (said !== last) { last = said; steadySince = Date.now(); }
       if (Date.now() - reported > 5000) { reported = Date.now(); progress({ step: "thinking", seconds: Math.round((Date.now() - started) / 1000), chars: said.length }); }
-      const writing = !!first(FIND.stop);
-      // Finished: its Copy button is there; or (should ChatGPT rename its buttons) no Stop button and no change for eight seconds.
-      if (turn && said.trim() && !writing && finished(turn)) return { turn };
-      if (turn && !writing && said.trim() && Date.now() - steadySince > 8000) return { turn };
+      const busy = writing();
+      // Finished: its Copy button is there; or (should ChatGPT rename its buttons)
+      // not writing, a code block in it (KIASA's prompts ask for one), and no change for eight seconds.
+      if (turn && said.trim() && !busy && finished(turn)) return { turn };
+      if (turn && !busy && said.trim() && turn.querySelector("pre") && Date.now() - steadySince > 8000) return { turn };
       return null;
     }, 25 * 60 * 1000, stopped);
     if (stopped()) {
       first(FIND.stop)?.click();
+      [...document.querySelectorAll("button[aria-label]")].find(button => /^stop (streaming|generating|answer|response)/i.test(button.getAttribute("aria-label") || ""))?.click();
       throw new Error("Stopped.");
     }
     if (!done) throw new Error("ChatGPT did not finish answering within 25 minutes.");
