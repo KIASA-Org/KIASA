@@ -590,6 +590,19 @@ own, changeable under Plans).
   slowed) asks the page to look every 1.5 s; "finished" is ChatGPT's Copy
   button under the answer (else no Stop and no change for 8 s); only
   ChatGPT's own Stop button means "still writing" (not "Stop dictation").
+  Bridge 1.3.0: ChatGPT's page of October 2026 dropped
+  `data-message-author-role`, `#prompt-textarea` and the conversation-turn
+  markers (public reports from other tools that broke), so 1.2.x never saw
+  an answer ("ChatGPT is thinking", 0 characters). It now reads the new page
+  first: the composer in `form[data-chatgpt-composer]` (`role="textbox"`),
+  Send by its name, answers as `[data-content-search-unit-key$=":assistant"]`
+  (or the assistant-message text style, `MarkdownRoot-…`), finished when
+  "Copy response" shows after the answer in its `[data-turn-key]` turn (the
+  question before it has its own Copy), writing while a "Stop…" button or a
+  streaming sign shows; old markers stay as fallbacks. Each job is a
+  Temporary Chat (`?temporary-chat=true`, Chris's choice): out of the
+  member's history and memory. The stand-in page in the tests follows both
+  layouts; the new one is built from those reports, not seen signed in.
   Note: Playwright attaches to the extension's worker, so local tests cannot
   show Chrome's idle stop; they stop the worker from
   chrome://serviceworker-internals instead. Résumés made for jobs are

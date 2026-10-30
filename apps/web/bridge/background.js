@@ -2,6 +2,9 @@
 // ChatGPT tab of its own in the member's signed-in browser (a new chat each
 // time), and brings the whole answer back. One question at a time.
 const CHATGPT = "https://chatgpt.com/";
+// Each question in a new Temporary Chat (Chris's choice): fresh, kept out of
+// the member's chat history, and not using or changing ChatGPT's memory.
+const NEW_CHAT = CHATGPT + "?temporary-chat=true";
 let busy = false;
 
 /** Whether this browser is signed in to ChatGPT, asked as chatgpt.com's own
@@ -85,11 +88,11 @@ async function chatgptTab() {
   if (typeof kept === "number") {
     try {
       await chrome.tabs.get(kept);
-      await chrome.tabs.update(kept, { url: CHATGPT });
+      await chrome.tabs.update(kept, { url: NEW_CHAT });
       return kept;
     } catch { /* closed: a new one */ }
   }
-  const opened = await chrome.windows.create({ url: CHATGPT, focused: false, type: "normal", width: 560, height: 760 });
+  const opened = await chrome.windows.create({ url: NEW_CHAT, focused: false, type: "normal", width: 560, height: 760 });
   const tab = opened.tabs[0].id;
   await chrome.storage.session.set({ tab });
   return tab;

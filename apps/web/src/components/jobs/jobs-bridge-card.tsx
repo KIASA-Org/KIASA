@@ -26,7 +26,7 @@ export function BridgeStatusLine({ status, check, onSetUp }: { status: BridgeSta
       <b>Bridge installed</b> (version {status.version}), but ChatGPT did not say whether you are signed in. Open <a className="jobs-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">chatgpt.com</a> once, then {again}
     </>);
     case "outdated": return line("warn", <>
-      <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST}, which brings ChatGPT's answers back as soon as they are finished. {setUp("Update it")}
+      <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST}, which reads ChatGPT's new page (October 2026) and asks in Temporary Chats. {setUp("Update it")}
     </>);
     case "old": return line("warn", <>
       <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST} for Auto mode and reading job descriptions. {setUp("Update it")}
@@ -84,7 +84,7 @@ export function BridgeCard({ titled = true }: { titled?: boolean }) {
         : <span className="jobs-hint">Sends ChatGPT a one-line question (one message), to see the whole way work.</span>}
     </div>}
     {result && <p className={result.ok ? "resume-path-kept" : "b-form-error"} role="status">{result.ok && <Check />}{result.text}</p>}
-    {installed && <p className="jobs-hint">It opens ChatGPT in a small window of its own: leave it open while KIASA works. ChatGPT&apos;s own message limits still apply, and OpenAI&apos;s terms do not allow automated use of ChatGPT, so use it at your own risk to your ChatGPT account.</p>}
+    {installed && <p className="jobs-hint">It opens ChatGPT in a small window of its own, a new Temporary Chat for each job (kept out of your ChatGPT history): leave the window open while KIASA works. ChatGPT&apos;s own message limits still apply, and OpenAI&apos;s terms do not allow automated use of ChatGPT, so use it at your own risk to your ChatGPT account.</p>}
   </div>;
 }
 
