@@ -7,7 +7,10 @@
   const FIND = {
     composer: ["#prompt-textarea", 'div.ProseMirror[contenteditable="true"]', 'form [contenteditable="true"]', 'textarea[name="prompt-textarea"]', "form textarea"],
     send: ['[data-testid="send-button"]', "#composer-submit-button", 'button[aria-label="Send prompt"]', 'button[aria-label*="Send" i]', 'form button[type="submit"]'],
-    stop: ['[data-testid="stop-button"]', 'button[aria-label*="Stop" i]'],
+    // Only ChatGPT's own Stop (of its answer): not, say, "Stop dictation".
+    stop: ['[data-testid="stop-button"]', '#composer-submit-button[aria-label*="Stop" i]', 'button[aria-label="Stop streaming"]', 'button[aria-label="Stop generating"]'],
+    // Under a finished answer: its Copy button (shown once ChatGPT is done).
+    copied: ['[data-testid="copy-turn-action-button"]', 'button[aria-label="Copy"]'],
     answer: ['[data-message-author-role="assistant"]', '[data-testid^="conversation-turn"]:has([data-message-author-role="assistant"])'],
     signIn: ['[data-testid="login-button"]', 'a[href*="/auth/login"]', 'button[data-testid="welcome-login-button"]'],
   };
@@ -19,7 +22,12 @@
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const usable = button => !!button && !button.disabled && button.getAttribute("aria-disabled") !== "true";
 
-  /** Waits for `check` to give something, looking again on every change of the page (and at least each `ms`). */
+  /** Looks asked for by the bridge's background (every 1.5 seconds while it
+   * waits): a page Chrome hides (its window behind others) has its own timers
+   * slowed to once a minute, so ChatGPT's finished answer would wait. */
+  const lookers = new Set();
+
+  /** Waits for `check` to give something, looking again on every change of the page, each second, and each look the bridge asks for. */
   function until(check, timeout, stopped) {
     return new Promise(resolve => {
       const end = Date.now() + timeout;
@@ -30,12 +38,14 @@
         if (found || Date.now() > end || stopped?.()) {
           observer.disconnect();
           clearTimeout(timer);
+          lookers.delete(look);
           resolve(found || null);
           return true;
         }
         return false;
       };
       if (look()) return;
+      lookers.add(look);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
       const tick = () => { if (!look()) timer = setTimeout(tick, 1000); };
       timer = setTimeout(tick, 1000);
@@ -56,6 +66,13 @@
     } else {
       document.execCommand("insertText", false, text);
     }
+  }
+
+  /** Whether a turn's answer is finished: ChatGPT shows its Copy button under it then. */
+  function finished(turn) {
+    const whole = turn.closest('article, [data-testid^="conversation-turn"]') || turn.parentElement;
+    for (const selector of FIND.copied) { try { if (whole?.querySelector(selector)) return true; } catch { /* as above */ } }
+    return false;
   }
 
   /** The whole answer: its code block (the JSON), else all its text. */
@@ -93,8 +110,9 @@
       if (said !== last) { last = said; steadySince = Date.now(); }
       if (Date.now() - reported > 5000) { reported = Date.now(); progress({ step: "thinking", seconds: Math.round((Date.now() - started) / 1000), chars: said.length }); }
       const writing = !!first(FIND.stop);
-      // Finished: an answer, no Stop button, and no change for three seconds.
-      if (turn && !writing && said.trim() && Date.now() - steadySince > 3000) return { turn };
+      // Finished: its Copy button is there; or (should ChatGPT rename its buttons) no Stop button and no change for eight seconds.
+      if (turn && said.trim() && !writing && finished(turn)) return { turn };
+      if (turn && !writing && said.trim() && Date.now() - steadySince > 8000) return { turn };
       return null;
     }, 25 * 60 * 1000, stopped);
     if (stopped()) {
@@ -114,6 +132,7 @@
     let stopped = false;
     port.onMessage.addListener(async message => {
       if (message.type === "stop") { stopped = true; return; }
+      if (message.type === "look") { for (const look of [...lookers]) look(); return; }
       if (message.type !== "ask") return;
       // "Still working", while it waits: the bridge stays awake, and KIASA knows.
       const alive = setInterval(() => { try { port.postMessage({ type: "alive" }); } catch { /* gone */ } }, 10000);
