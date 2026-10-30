@@ -85,7 +85,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
           </label>
           : me.member && onResumes && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
       </div>
-      {me.member && day === today && <AutoBar />}
+      {me.member && <AutoBar day={day} />}
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
         {paging.items.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
       </ul>

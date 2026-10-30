@@ -7,7 +7,7 @@ import { baseResumeFor, tailorFromAnswer, textForJob, type TailorReport } from "
 import { Copy, Download } from "../site/icons";
 import { BridgeDialog, BridgeStatusLine } from "./jobs-bridge-card";
 import { askChatGPT, bridgeVersion, canRead, canRun, progressText, readJobPage, useBridgeStatus, type BridgeProgress } from "./jobs-bridge";
-import { linkLabel } from "./jobs-format";
+import { addDays, dayName, linkLabel } from "./jobs-format";
 import { canChooseFolder, copyText, folderPath, hasFile, jobPlace, pathOf, savePdf, savedName, writableFolder, type Saved } from "./jobs-resume-folder";
 import { ResumeFolder } from "./jobs-resume-folder-card";
 import { CopyButton, LOST, ReportLists } from "./jobs-resume-parts";
@@ -19,9 +19,10 @@ type JobNamed = Pick<Job, "id" | "company" | "title">;
 /** Auto mode: every job of the day without a résumé made for it, one after
  * another, through the KIASA ChatGPT Bridge. `based`: of those `done`, how
  * many have the base résumé (no description anywhere). `note`: why it
- * stopped, or waits. */
+ * stopped, or waits. `day`: whose jobs it works through (today's, or an
+ * earlier day's, for jobs left without one). */
 export type AutoState = {
-  on: boolean; job: JobNamed | null; progress: BridgeProgress | null; done: number; based: number;
+  on: boolean; day: string; job: JobNamed | null; progress: BridgeProgress | null; done: number; based: number;
   failed: { title: string; why: string }[]; note: string;
   /** The job's step after ChatGPT (applying its answer, saving the PDF), when it started, and how long one usually takes (ms; none yet). */
   phase: "applying" | "saving" | null; since: number; usual: number | null; timed: number;
@@ -29,9 +30,9 @@ export type AutoState = {
 /** `plain`: of the jobs with a résumé, those whose is the base résumé as it is. */
 type Tailoring = {
   made: Set<string>; plain: Set<string>; open: (job: Job) => void; copyPath: (job: JobNamed) => void; copying: Copying | null;
-  auto: AutoState; startAuto: () => void; stopAuto: () => void;
+  auto: AutoState; startAuto: (day: string) => void; stopAuto: () => void; today: string;
 };
-const IDLE: AutoState = { on: false, job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0 };
+const IDLE: AutoState = { on: false, day: "", job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0 };
 /** How long a job's résumé is guessed to take before one has been timed: ChatGPT thinks for a while. */
 export const USUAL_GUESS = 150_000;
 const LOST_REPORT: TailorReport = { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] };
@@ -78,7 +79,7 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
     onMade?.();
   };
 
-  const startAuto = async () => {
+  const startAuto = async (day: string) => {
     if (running.current) return;
     // (A bridge from before it stayed awake through a long wait is updated first.)
     if (!canRun(await bridgeVersion())) return setNeedBridge(true);
@@ -95,18 +96,20 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       tried.add(target.id);
       setAuto(current => ({ ...current, failed: [...current.failed, { title: [target.title, target.company].filter(Boolean).join(" · ") || "A job", why }] }));
     };
-    setAuto({ ...IDLE, on: true, note: "Starting…" });
+    setAuto({ ...IDLE, on: true, day, note: "Starting…" });
     const pause = (ms: number) => new Promise<void>(resolve => {
       const timer = window.setTimeout(resolve, ms);
       control.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
     });
     try {
       while (!control.signal.aborted) {
-        // The day's jobs as they are now (new ones join as they are posted).
-        const { data } = await supabase.rpc("jobs_on", { on_day: today });
+        // The day's jobs as they are now (today's: new ones join as they are posted).
+        const { data } = await supabase.rpc("jobs_on", { on_day: day });
         // Only jobs still to do (not applied, not skipped) without a résumé, in the list's order.
         const next = ((data ?? []) as Job[]).find(entry => !entry.status && !madeNow.current.has(entry.id) && !tried.has(entry.id));
         if (!next) {
+          // An earlier day gets no new jobs: done.
+          if (day !== today) { update({ job: null, progress: null, phase: null, note: `Every job to do ${onDay(day, today)} has its résumé.` }); break; }
           update({ job: null, progress: null, phase: null, note: "Every job to do today has its résumé. Waiting for new jobs…" });
           await pause(60_000);
           continue;
@@ -178,7 +181,7 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       }
     } finally {
       running.current = null;
-      setAuto(current => ({ ...current, on: false, job: null, progress: null, phase: null, note: current.note && !/^Starting|Waiting/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
+      setAuto(current => ({ ...current, on: false, job: null, progress: null, phase: null, note: current.note && !/^Starting|Waiting/.test(current.note) && !/^Every job to do today/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
     }
   };
   const stopAuto = () => running.current?.abort();
@@ -206,7 +209,7 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       : { job: target.id, state: "failed", text: `Copy this path: ${path}` });
   };
 
-  return <TailorContext.Provider value={{ made, plain, open: setJob, copyPath: target => void copyPath(target), copying, auto, startAuto: () => void startAuto(), stopAuto }}>
+  return <TailorContext.Provider value={{ made, plain, open: setJob, copyPath: target => void copyPath(target), copying, auto, startAuto: day => void startAuto(day), stopAuto, today }}>
     {children}
     {needBridge && <BridgeDialog onClose={() => setNeedBridge(false)} />}
     {job && <TailorDialog job={job} before={made.has(job.id)} onClose={() => setJob(null)}
@@ -430,30 +433,33 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
   </dialog>;
 }
 
-/** Auto mode on Today: off, a switch, what it does and how KIASA and ChatGPT
- * are connected; on, how far it has got, the job it is on and how ChatGPT is
- * doing, and Stop. What it could not do is listed, to do by hand. */
-export function AutoBar() {
+/** Auto mode on a day's list (today's, or an earlier day's, for jobs left
+ * without one): off, a switch, what it does and how KIASA and ChatGPT are
+ * connected; on, how far it has got, the job it is on and how ChatGPT is
+ * doing, and Stop. What it could not do is listed, to do by hand. Working on
+ * another day than the one shown, it says which. */
+export function AutoBar({ day }: { day: string }) {
   const tailor = useTailor();
   const { status, check } = useBridgeStatus();
   const [settingUp, setSettingUp] = useState(false);
   if (!tailor) return null;
-  const { auto, startAuto, stopAuto } = tailor;
+  const { auto, startAuto, stopAuto, today } = tailor;
+  const which = (shown: string) => onDay(shown, today);
   // No bridge, or one too old for Auto mode: its steps first.
-  const start = () => status?.state === "missing" || status?.state === "old" || status?.state === "outdated" ? setSettingUp(true) : startAuto();
+  const start = () => status?.state === "missing" || status?.state === "old" || status?.state === "outdated" ? setSettingUp(true) : startAuto(day);
   return <div className="auto-bar" data-on={auto.on || undefined}>
     {auto.on
       ? <>
         <span className="auto-dot" aria-hidden="true" />
         <p className="auto-text" role="status">
-          <b>Auto mode</b> · {auto.done} made{auto.based ? ` (${auto.based} with your base résumé)` : ""}
+          <b>Auto mode</b>{auto.day !== day ? <> (for the jobs {which(auto.day)})</> : null} · {auto.done} made{auto.based ? ` (${auto.based} with your base résumé)` : ""}
           {auto.job ? <> · now: <button type="button" className="jobs-link" onClick={() => showRow(auto.job!.id)}>{[auto.job.title, auto.job.company].filter(Boolean).join(" · ")}</button> · {autoStep(auto)}</> : auto.note ? <> · {auto.note}</> : null}
         </p>
         <button type="button" className="chat-pill" data-danger="" onClick={stopAuto}>Stop</button>
         {auto.job && <TimeBar since={auto.since} usual={auto.usual} />}
       </>
       : <>
-        <p className="auto-text"><b>Auto mode</b>: ChatGPT makes a résumé for every job of the day without one, one after another (through the ChatGPT bridge), and saves each PDF in your résumé folder. A job with no description anywhere (only an application form) gets your base résumé.{auto.note && <> <span className="auto-note">{auto.done ? `${auto.done} made${auto.based ? ` (${auto.based} with your base résumé)` : ""}. ` : ""}{auto.note}</span></>}</p>
+        <p className="auto-text"><b>Auto mode</b>: ChatGPT makes a résumé for every job to do {which(day)} without one, one after another (through the ChatGPT bridge), and saves each PDF in your résumé folder. A job with no description anywhere (only an application form) gets your base résumé.{auto.note && <> <span className="auto-note">{auto.done ? `${auto.done} made${auto.based ? ` (${auto.based} with your base résumé)` : ""}. ` : ""}{auto.note}</span></>}</p>
         <button type="button" className="jobs-button" data-primary="" onClick={start}>Start auto mode</button>
         <div className="auto-status"><BridgeStatusLine status={status} check={check} onSetUp={() => setSettingUp(true)} /></div>
       </>}
@@ -497,4 +503,9 @@ export function TimeBar({ since, usual }: { since: number; usual: number | null 
     </span>
     <span className="time-bar-text">{clock(took)} · {over ? "taking longer than usual" : `about ${clock(expected - took)} left`}{usual === null ? " (estimated)" : ""}</span>
   </div>;
+}
+
+/** A day as said in a sentence: "today", "yesterday", or "on Mon, Oct 26". */
+function onDay(day: string, today: string) {
+  return day === today ? "today" : day === addDays(today, -1) ? "yesterday" : `on ${dayName(day, today)}`;
 }
