@@ -46,6 +46,8 @@ const nextConfig: NextConfig = {
     // (All of playwright-core: it reads files such as its browsers.json by a
     // path the tracer cannot follow, and the PDF fails without them.)
     "/jobs/resume/pdf": ["./src/lib/resume/fonts/**/*", "./node_modules/@sparticuz/chromium/bin/**/*", "./node_modules/playwright-core/**/*"],
+    // The KIASA ChatGPT Bridge (a Chrome extension), zipped for members to install.
+    "/jobs/bridge.zip": ["./bridge/**/*"],
   },
   // Every page guarded (above); and the service worker behind "Alert me on this
   // computer" (public/sw.js): never cached, so a change reaches every browser,

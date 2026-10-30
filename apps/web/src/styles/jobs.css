@@ -458,3 +458,30 @@
 .resume-path-kept { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--leaf); }
 .resume-path-kept svg { width: 16px; height: 16px; }
 .resume-path-kept code { padding: 2px 8px; border-radius: 6px; background: var(--night-raised); font: 12.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink-soft); overflow-wrap: anywhere; }
+
+/* The ChatGPT bridge, and Auto mode on Today. */
+.bridge-card { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--card-line); }
+.bridge-card b { color: var(--ink); }
+.bridge-on { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 13px; font-weight: 600; color: var(--leaf); }
+.bridge-on svg { width: 14px; height: 14px; }
+.bridge-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 4px; }
+.auto-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--card-line); border-radius: 14px; background: var(--night-raised); }
+.auto-bar[data-on] { border-color: rgb(184 236 147 / 0.4); box-shadow: inset 3px 0 0 var(--leaf); }
+.auto-text { flex: 1 1 420px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.auto-text b { color: var(--ink); }
+.auto-note { color: #f2d36b; }
+.auto-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--leaf); animation: jobs-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .auto-dot { animation: none; } }
+.auto-failed { flex-basis: 100%; font-size: 13px; color: var(--ink-soft); }
+.auto-failed summary { width: fit-content; font-weight: 650; color: #f2d36b; cursor: pointer; }
+.auto-failed ul { display: grid; gap: 4px; margin-top: 6px; padding-left: 18px; list-style: disc; }
+.bridge-update { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid rgb(242 211 107 / 0.35); border-radius: 12px; }
+.bridge-status { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.bridge-status b { color: var(--ink); font-weight: 650; }
+.bridge-status-soft { color: var(--ink-faint, var(--ink-soft)); }
+.bridge-status-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #8a948c; transform: translateY(1px); }
+.bridge-status[data-state="ok"] .bridge-status-dot { background: var(--leaf); box-shadow: 0 0 0 3px rgb(184 236 147 / 0.18); }
+.bridge-status[data-state="warn"] .bridge-status-dot { background: #f2d36b; }
+.bridge-status[data-state="checking"] .bridge-status-dot { animation: jobs-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .bridge-status[data-state="checking"] .bridge-status-dot { animation: none; } }
+.auto-status { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--card-line); }

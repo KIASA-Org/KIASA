@@ -12,12 +12,13 @@ import { Copy, Download, Pencil } from "../site/icons";
 import { dayName, partsIn } from "./jobs-format";
 import { copyText, jobPlace, savePdf, writableFolder, type Saved } from "./jobs-resume-folder";
 import { ResumeFolder } from "./jobs-resume-folder-card";
+import { BridgeCard } from "./jobs-bridge-card";
 import { CopyButton, LOST, ReportLists } from "./jobs-resume-parts";
 import { useTailor } from "./jobs-tailor";
 import { ResumeEditor } from "./jobs-resume-editor";
 
 type Base = { profile: Profile; status: BaseStatus; updated_at: string };
-type Tailored = { job_id: string; updated_at: string; edited: boolean; jobs: { title: string | null; company: string | null; url: string } | null };
+type Tailored = { job_id: string; updated_at: string; edited: boolean; base: unknown; jobs: { title: string | null; company: string | null; url: string } | null };
 type Posting = { id: string; title: string | null; company: string | null };
 type Mode =
   // `next`: after saving, go on to write it with the init prompt (step 2).
@@ -47,7 +48,7 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
   const fetchAll = useCallback(async () => {
     const [found, made] = await Promise.all([
       supabase.from("resume_profiles").select("profile, status, updated_at").eq("user_id", me.id).maybeSingle(),
-      supabase.from("tailored_resumes").select("job_id, updated_at, edited, jobs(title, company, url)").eq("user_id", me.id).order("updated_at", { ascending: false }).limit(100),
+      supabase.from("tailored_resumes").select("job_id, updated_at, edited, base:report->base, jobs(title, company, url)").eq("user_id", me.id).order("updated_at", { ascending: false }).limit(100),
     ]);
     const parsed = ProfileSchema.safeParse(found.data?.profile);
     return {
@@ -156,6 +157,7 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
         {file.path && <span className="resume-path"><code>{file.path}</code><button type="button" className="chat-pill" onClick={() => void copyText(file.path!)}><Copy /> Copy path</button></span>}
       </div>}
       {!mode && <ResumeFolder />}
+      {!mode && <BridgeCard />}
     </section>
 
     {tailored.length > 0 && <section className="jobs-card" aria-labelledby="resume-made-title">
@@ -164,7 +166,7 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
       <ul className="jobs-ledger">
         {tailored.map(job => <li key={job.job_id}>
           <div className="jobs-ledger-main">
-            <p className="jobs-ledger-title">{job.jobs?.title ?? "A job"}{job.edited && <span className="jobs-you">Edited</span>}</p>
+            <p className="jobs-ledger-title">{job.jobs?.title ?? "A job"}{job.base === true && <span className="jobs-you">Base résumé (no description)</span>}{job.edited && <span className="jobs-you">Edited</span>}</p>
             <p className="jobs-row-meta">{job.jobs?.company && <span>{job.jobs.company}</span>}<span>{dayName(partsIn(zone, job.updated_at).day, today)}</span></p>
           </div>
           <div className="jobs-row-actions">

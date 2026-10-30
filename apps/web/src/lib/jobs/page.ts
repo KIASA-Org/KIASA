@@ -114,6 +114,59 @@ export async function descriptionFor(link: string): Promise<string | null> {
       if (text.length >= 80) return text.slice(0, 30000);
     } catch { /* the page, then */ }
   }
+  // Hiring sites whose pages are written in the browser (so KIASA's reading
+  // sees nothing) or may leave the description out: their public job feeds.
+  for (const feed of [workable, smartRecruiters, workday, ashby]) {
+    const text = await feed(link).catch(() => null);
+    if (text && text.length >= 80) return text.slice(0, 30000);
+  }
   const html = await readPage(link);
   return html ? descriptionFromPage(html) : null;
+}
+
+const json = async (link: string) => {
+  const text = await fetchText(link, "application/json", /json/i);
+  try { return text ? JSON.parse(text) as Record<string, unknown> : null; } catch { return null; }
+};
+const joined = (parts: unknown[]) => parts.map(part => typeof part === "string" ? plainText(part).trim() : "").filter(Boolean).join("\n\n");
+const linkOf = (link: string) => { try { return new URL(link); } catch { return null; } };
+
+/** Workable: apply.workable.com/<account>/j/<code>, or <account>.workable.com/j/<code>. */
+async function workable(link: string) {
+  const url = linkOf(link);
+  if (!url) return null;
+  const host = url.hostname.toLowerCase();
+  const path = host === "apply.workable.com" ? url.pathname.match(/^\/([\w-]+)\/j\/([0-9A-F]{6,})/i)
+    : /^[\w-]+\.workable\.com$/.test(host) && host !== "jobs.workable.com" ? [null, host.split(".")[0], url.pathname.match(/\/j\/([0-9A-F]{6,})/i)?.[1]] : null;
+  if (!path?.[1] || !path[2]) return null;
+  const job = await json(`https://apply.workable.com/api/v2/accounts/${encodeURIComponent(path[1])}/jobs/${encodeURIComponent(path[2])}`);
+  return job ? joined([job.description, job.requirements && `<h3>Requirements</h3>${job.requirements}`, job.benefits && `<h3>Benefits</h3>${job.benefits}`]) : null;
+}
+
+/** SmartRecruiters: jobs.smartrecruiters.com/<company>/<number>-<title>. */
+async function smartRecruiters(link: string) {
+  const path = linkOf(link)?.pathname.match(/^\/([\w-]+)\/(\d{6,})/);
+  if (!path || !/^(jobs|careers)\.smartrecruiters\.com$/i.test(linkOf(link)!.hostname)) return null;
+  const job = await json(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(path[1])}/postings/${path[2]}`);
+  const sections = ((job?.jobAd as { sections?: Record<string, { title?: string; text?: string }> } | undefined)?.sections) ?? {};
+  return joined(["jobDescription", "qualifications", "additionalInformation", "companyDescription"].map(key => sections[key]?.text && `<h3>${sections[key].title ?? ""}</h3>${sections[key].text}`));
+}
+
+/** Workday: <tenant>.wd<n>.myworkdayjobs.com/[<language>/]<site>/job/<…>. */
+async function workday(link: string) {
+  const url = linkOf(link);
+  if (!url || !/^[\w-]+\.wd\d+\.myworkdayjobs\.com$/i.test(url.hostname)) return null;
+  const path = url.pathname.match(/^(?:\/[a-z]{2}-[A-Z]{2})?\/([\w-]+)(\/job\/.+?)(?:\/apply.*)?$/);
+  if (!path) return null;
+  const job = await json(`https://${url.hostname}/wday/cxs/${url.hostname.split(".")[0]}/${path[1]}${path[2]}`);
+  return joined([(job?.jobPostingInfo as { jobDescription?: string } | undefined)?.jobDescription]);
+}
+
+/** Ashby: jobs.ashbyhq.com/<company>/<id>, from the company's whole board. */
+async function ashby(link: string) {
+  const path = link.match(/^https:\/\/jobs\.ashbyhq\.com\/([\w.%-]+)\/([0-9a-f-]{36})/i);
+  if (!path) return null;
+  const board = await json(`https://api.ashbyhq.com/posting-api/job-board/${path[1]}`);
+  const job = ((board?.jobs ?? []) as { id?: string; descriptionHtml?: string; descriptionPlain?: string }[]).find(entry => entry.id === path[2]);
+  return job ? (job.descriptionPlain?.trim() || joined([job.descriptionHtml])) : null;
 }

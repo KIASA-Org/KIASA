@@ -89,7 +89,7 @@ export function JobRow({ job, zone, resumes, resume, currency, today, act, count
         {posted && <span>Posted {clockIn(zone, job.posted_at)}</span>}
         {count && <span>{job.applied === 1 ? "1 on the team applied" : `${job.applied} on the team applied`}</span>}
         {used && job.status && job.status !== "skipped" && <span>With {used.title}</span>}
-        {tailored && <span className="jobs-tailored">Résumé made for it</span>}
+        {tailored && <span className="jobs-tailored">{tailor?.plain.has(job.id) ? "Base résumé (no description)" : "Résumé made for it"}</span>}
       </p>
       {job.my_note && <p className="jobs-row-note">{job.my_note}</p>}
     </div>

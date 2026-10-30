@@ -11,8 +11,10 @@ import { tidyProfile, validateProfile } from "./profile-form";
 import { ProfileSchema, type Profile } from "./schema";
 import { prompt } from "./server";
 
-/** What applying an answer did (the Resume Tailor App's report). */
-export type TailorReport = { ok: boolean; applied: string[]; unmatched: string[]; rejected: string[]; warnings: string[]; errors: string[] };
+/** What applying an answer did (the Resume Tailor App's report). `base`: no
+ * description could be found (the job's page is only a form), so the job's
+ * résumé is the member's base résumé as it is. */
+export type TailorReport = { ok: boolean; applied: string[]; unmatched: string[]; rejected: string[]; warnings: string[]; errors: string[]; base?: boolean };
 export type BaseStatus = "typed" | "imported" | "generated";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -81,8 +83,11 @@ export async function textForJob(job: string, kind: "tailor" | "init", descripti
       await siteClient().from("jobs").update({ description: found }).eq("id", job).is("description", null);
     }
   }
-  const jd = (typeof description === "string" && description.trim() ? description : kept).trim().slice(0, 30000);
+  const given = typeof description === "string" ? description.trim().slice(0, 30000) : "";
+  const jd = (given || kept).trim().slice(0, 30000);
   if (jd.length < 80) return { needsDescription: true, error: "KIASA has no description for this job yet. Paste it from the job's page." };
+  // One pasted (or read off the page by the ChatGPT bridge) when KIASA had none: kept for everyone.
+  if (given.length >= 80 && !kept.trim()) await siteClient().from("jobs").update({ description: given }).eq("id", job).is("description", null);
   const record = buildJobRecord(
     { company: posting.company ?? "", title: posting.title ?? "", jd, link: posting.url, about: "" },
     base,
@@ -123,6 +128,20 @@ export async function tailorFromAnswer(job: string, answer: string): Promise<{ s
   const { error } = await who.db.from("tailored_resumes").upsert({ job_id: job, user_id: who.me.id, profile: result.profile, report, edited: false });
   if (error) return { saved: false, report: { ...report, errors: ["That did not save. Please try again."] } };
   return { saved: true, report };
+}
+
+/** A job with no description anywhere (its page is only an application form):
+ * the member's base résumé, as it is, kept as their résumé for that job, so its
+ * PDF and "Copy résumé path" work as for any other. */
+export async function baseResumeFor(job: string): Promise<{ errors?: string[] }> {
+  const who = await member();
+  if (!who) return { errors: [ONLY] };
+  if (typeof job !== "string" || !ID.test(job)) return { errors: ["That job is not known."] };
+  const base = await baseOf(who.db, who.me.id);
+  if (!base) return { errors: ["Make your base résumé first."] };
+  const report: TailorReport = { ok: true, applied: [], unmatched: [], rejected: [], warnings: [], errors: [], base: true };
+  const { error } = await who.db.from("tailored_resumes").upsert({ job_id: job, user_id: who.me.id, profile: base, report, edited: false });
+  return error ? { errors: ["That did not save. Please try again."] } : {};
 }
 
 /** A tailored résumé changed by hand in the editor. */
