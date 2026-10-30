@@ -27,6 +27,21 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   return true;
 });
 
+/** Kept awake while it has work. Chrome stops an extension's background part
+ * after about 30 seconds with nothing it counts as activity, and waiting (for
+ * ChatGPT, or a slow job page) is not: it would stop mid-question, and KIASA
+ * would hear "The bridge stopped". A small call every 20 seconds counts. */
+let working = 0, keeper = null;
+function hold() {
+  if (working++ === 0) keeper = setInterval(() => { chrome.runtime.getPlatformInfo(() => {}); }, 20000);
+}
+function release() {
+  if (--working > 0) return;
+  working = 0;
+  clearInterval(keeper);
+  keeper = null;
+}
+
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== "kiasa") return;
   let stopped = false;
@@ -34,17 +49,21 @@ chrome.runtime.onConnect.addListener(port => {
   port.onMessage.addListener(async message => {
     if (message.type === "stop") { stopped = true; chat?.postMessage({ type: "stop" }); return; }
     if (message.type === "read") {
+      hold();
       try {
         port.postMessage({ type: "progress", step: "reading" });
         port.postMessage({ type: "answer", answer: await readJob(message.url, () => stopped) });
       } catch (error) {
         try { port.postMessage({ type: "error", error: String(error?.message || error) }); } catch { /* the page went */ }
+      } finally {
+        release();
       }
       return;
     }
     if (message.type !== "ask") return;
     if (busy) return port.postMessage({ type: "error", error: "The bridge is busy with another question. Wait for it, or stop it first." });
     busy = true;
+    hold();
     try {
       const answer = await ask(message.text, progress => { try { port.postMessage({ type: "progress", ...progress }); } catch { /* the page went */ } },
         opened => { chat = opened; }, () => stopped);
@@ -53,6 +72,7 @@ chrome.runtime.onConnect.addListener(port => {
       try { port.postMessage({ type: "error", error: String(error?.message || error) }); } catch { /* the page went */ }
     } finally {
       busy = false;
+      release();
     }
   });
 });
@@ -129,7 +149,10 @@ async function readJob(url, stopped) {
       await wait(1000);
       const info = await chrome.tabs.get(tab).catch(() => null);
       if (!info) throw new Error("The job's page was closed before it was read.");
-      const [run] = await chrome.scripting.executeScript({ target: { tabId: tab }, func: readDescription }).catch(() => []);
+      const [run] = await Promise.race([
+        chrome.scripting.executeScript({ target: { tabId: tab }, func: readDescription }).catch(() => []),
+        wait(8000).then(() => []),
+      ]);
       const found = run?.result;
       if (!found) continue;
       best = found;

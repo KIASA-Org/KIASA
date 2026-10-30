@@ -485,3 +485,18 @@
 .bridge-status[data-state="checking"] .bridge-status-dot { animation: jobs-pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .bridge-status[data-state="checking"] .bridge-status-dot { animation: none; } }
 .auto-status { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--card-line); }
+
+/* A job's row while Auto mode tailors it, and when its résumé is ready. */
+.jobs-row[data-working] { border-radius: 14px; background: rgb(184 236 147 / 0.06); box-shadow: inset 0 0 0 1px rgb(184 236 147 / 0.45); }
+.jobs-working { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--ink-soft); }
+.jobs-working p { display: flex; align-items: center; gap: 8px; }
+.jobs-working b { color: var(--leaf); font-weight: 650; }
+.jobs-ready { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 12.5px; color: var(--ink-soft); }
+.jobs-ready-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-weight: 650; color: #0d1a0f; background: var(--leaf); }
+.jobs-ready-badge svg { width: 12px; height: 12px; }
+.time-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; flex-basis: 100%; }
+.time-bar-track { position: relative; flex: 1 1 200px; max-width: 420px; height: 6px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / 0.08); }
+.time-bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--leaf); transition: width 1s linear; }
+.time-bar[data-over] .time-bar-fill { background: #f2d36b; }
+.time-bar-text { font-size: 12.5px; color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { .time-bar-fill { transition: none; } }

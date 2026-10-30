@@ -11,7 +11,7 @@ export type BridgeProgress = { step: "reading" | "opening" | "pasting" | "sent" 
 
 /** The bridge's version as downloaded now. Older ones still ask ChatGPT, but
  * cannot read a job's page (1.1.0), nor say whether ChatGPT is signed in (1.2.0). */
-export const BRIDGE_LATEST = "1.2.0";
+export const BRIDGE_LATEST = "1.2.1";
 const newer = (version: string, than: string) => {
   const [a, b] = [version, than].map(each => each.split(".").map(Number));
   for (let n = 0; n < 3; n++) if ((a[n] ?? 0) !== (b[n] ?? 0)) return (a[n] ?? 0) > (b[n] ?? 0);
@@ -19,6 +19,9 @@ const newer = (version: string, than: string) => {
 };
 /** Whether this bridge can read a job's page. */
 export const canRead = (version: string | null) => !!version && !newer("1.1.0", version);
+/** Whether this bridge can run Auto mode: from 1.2.1 it stays awake through a
+ * long wait (before, Chrome could stop it in the middle of a job). */
+export const canRun = (version: string | null) => !!version && !newer("1.2.1", version);
 /** Whether a newer bridge can be downloaded. */
 export const outdated = (version: string | null) => !!version && newer(BRIDGE_LATEST, version);
 

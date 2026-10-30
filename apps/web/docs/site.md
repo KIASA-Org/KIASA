@@ -575,7 +575,18 @@ own, changeable under Plans).
   do. The bridge asks chatgpt.com's own session (`/api/auth/session`), so no
   message is used; when ChatGPT does not say, "did not say" and Test the
   bridge remain. Asked when the page opens and each time the member comes
-  back to it. Résumés made for jobs are
+  back to it. **Auto mode** takes only To do jobs (not applied, not skipped)
+  without a résumé, in the list's order. The job it is on is outlined in the
+  list ("Tailoring with ChatGPT", its step, a `TimeBar`: time so far against
+  the average of jobs timed in this run, 2:30 guessed before one), as in the
+  bar, whose job name scrolls to its row. Jobs to do with a résumé say
+  **Ready to apply**, with a **Ready** filter. Bridge 1.2.1 keeps its
+  background awake while it works (Chrome stops it after ~30 s idle; that was
+  "The bridge stopped" on a member's run); if it still drops, Auto mode tries
+  the job again (stops after two drops in a row). Auto mode needs 1.2.1.
+  Note: Playwright attaches to the extension's worker, so local tests cannot
+  show Chrome's idle stop; they stop the worker from
+  chrome://serviceworker-internals instead. Résumés made for jobs are
   listed under Made for jobs (PDF, edit by hand, remove); the admins' Who list
   opens each member's. Each job's **description** comes from the Jobright bot
   (what the extension read), or is found for it (`descriptionFor` in

@@ -26,7 +26,7 @@ export function BridgeStatusLine({ status, check, onSetUp }: { status: BridgeSta
       <b>Bridge installed</b> (version {status.version}), but ChatGPT did not say whether you are signed in. Open <a className="jobs-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">chatgpt.com</a> once, then {again}
     </>);
     case "outdated": return line("warn", <>
-      <b>Bridge out of date</b> (version {status.version}; version {BRIDGE_LATEST} is here). It still works; updating lets KIASA show whether ChatGPT is signed in. {setUp("Update it")}
+      <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST}, which no longer stops in the middle of a job. {setUp("Update it")}
     </>);
     case "old": return line("warn", <>
       <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST} for Auto mode and reading job descriptions. {setUp("Update it")}
