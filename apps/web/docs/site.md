@@ -540,7 +540,42 @@ own, changeable under Plans).
   it offers **Copy résumé path** (Tailor again moves to its ⋮ menu): the
   file's whole path, saved first if it is not there, to paste in a job
   application's file box. Kept in that browser only (IndexedDB and
-  localStorage); other browsers download as before. Résumés made for jobs are
+  localStorage); other browsers download as before. **The KIASA ChatGPT
+  Bridge** (`bridge/`, a Chrome extension; downloaded from `/jobs/bridge.zip`,
+  made from those files; Résumés tab, with install steps and "Test the
+  bridge"): Chris chose it over OpenAI's API, knowing OpenAI's terms do not
+  allow automated use of ChatGPT (the card says so). On KIASA's pages it carries
+  a question to ChatGPT in the member's own signed-in browser (a small window
+  of its own, a new chat each time: the prompt pasted, sent, the whole answer
+  waited for and read, its JSON block) and the answer back
+  (`jobs-bridge.ts`). It gives **Ask ChatGPT for me** in the Tailor dialog
+  (steps 1 to 3, then Load PDF) and **Auto mode** on Today (`AutoBar`,
+  `TailorProvider`): every job of the day without a résumé made for it, one
+  after another, new ones as they come, each PDF into the résumé folder (none
+  without one: a page may not download dozens of files unasked); it stops on
+  ChatGPT's usage limit or a sign-in, and lists jobs to do by hand. ChatGPT's
+  page changes: `bridge/chatgpt.js` looks for each part several ways and
+  says which it could not find. **No description** (`descriptionFor`, then
+  the bridge): KIASA's server reads Greenhouse, Lever, Workable,
+  SmartRecruiters, Workday and Ashby from their public job feeds, else the
+  page's JSON-LD. Many hiring pages are written in the browser (Workable's
+  are empty to a server), so the bridge (1.1.0, permission to read all sites)
+  opens the job's page in a background tab and reads it (`readDescription`:
+  JSON-LD, else prose outside menus and forms, only if it reads like a job).
+  The page asks by **job id**; the bridge gets the link from
+  `/jobs/bridge/job` (members only), so it opens only KIASA's jobs whatever a
+  page asks. A description pasted or read is kept on the job for everyone.
+  None anywhere (only an application form): **Use my base résumé for this
+  job** (`baseResumeFor`; `report.base`), which Auto mode does by itself;
+  the row says "Base résumé (no description)". A 1.0 bridge is asked to
+  update (`BRIDGE_LATEST`). **Connection status** (bridge 1.2.0,
+  `useBridgeStatus`, `BridgeStatusLine`), on Today's Auto mode bar and the
+  bridge card: connected (the ChatGPT account's name and email), installed
+  but ChatGPT signed out, out of date, or not installed, each with what to
+  do. The bridge asks chatgpt.com's own session (`/api/auth/session`), so no
+  message is used; when ChatGPT does not say, "did not say" and Test the
+  bridge remain. Asked when the page opens and each time the member comes
+  back to it. Résumés made for jobs are
   listed under Made for jobs (PDF, edit by hand, remove); the admins' Who list
   opens each member's. Each job's **description** comes from the Jobright bot
   (what the extension read), or is found for it (`descriptionFor` in

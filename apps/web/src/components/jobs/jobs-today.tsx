@@ -8,6 +8,7 @@ import { addDays, dayName } from "./jobs-format";
 import { PlanStrip } from "./jobs-plans";
 import { Pager, usePages } from "./jobs-pager";
 import { JobRow, type JobActions } from "./jobs-row";
+import { AutoBar } from "./jobs-tailor";
 
 type Filter = "todo" | "applied" | "skipped" | "all";
 const FILTERS: { id: Filter; label: string }[] = [{ id: "todo", label: "To do" }, { id: "applied", label: "Applied" }, { id: "skipped", label: "Skipped" }, { id: "all", label: "All" }];
@@ -80,6 +81,7 @@ export function TodayView({ me, zone, today, day, jobs, loading, resumes, plans,
           </label>
           : me.member && onResumes && <button type="button" className="chat-pill" onClick={onResumes}>Add your résumé</button>}
       </div>
+      {me.member && day === today && <AutoBar />}
       <ul className="jobs-list" aria-busy={loading || undefined} aria-label={`${dayName(day, today)}'s jobs`}>
         {paging.items.map(job => <JobRow key={job.id} job={job} zone={zone} resumes={resumes} resume={resume} currency={currency} today={today} act={here} />)}
       </ul>
