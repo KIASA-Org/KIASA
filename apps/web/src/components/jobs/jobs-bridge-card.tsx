@@ -26,7 +26,7 @@ export function BridgeStatusLine({ status, check, onSetUp }: { status: BridgeSta
       <b>Bridge installed</b> (version {status.version}), but ChatGPT did not say whether you are signed in. Open <a className="jobs-link" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">chatgpt.com</a> once, then {again}
     </>);
     case "outdated": return line("warn", <>
-      <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST}, which reads ChatGPT&apos;s new page (October 2026) and asks in Temporary Chats. {setUp("Update it")}
+      <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST}: it no longer takes &ldquo;rate limiting&rdquo; in a résumé for ChatGPT&apos;s usage limit. {setUp("Update it")}
     </>);
     case "old": return line("warn", <>
       <b>Bridge out of date</b> (version {status.version}): update it to {BRIDGE_LATEST} for Auto mode and reading job descriptions. {setUp("Update it")}

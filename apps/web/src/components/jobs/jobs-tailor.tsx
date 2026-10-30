@@ -26,13 +26,15 @@ export type AutoState = {
   failed: { title: string; why: string }[]; note: string;
   /** The job's step after ChatGPT (applying its answer, saving the PDF), when it started, and how long one usually takes (ms; none yet). */
   phase: "applying" | "saving" | null; since: number; usual: number | null; timed: number;
+  /** Waiting to try again (ChatGPT's usage limit, or trouble reaching it): "Try again now" wakes it. */
+  waiting: boolean;
 };
 /** `plain`: of the jobs with a résumé, those whose is the base résumé as it is. */
 type Tailoring = {
   made: Set<string>; plain: Set<string>; open: (job: Job) => void; copyPath: (job: JobNamed) => void; copying: Copying | null;
-  auto: AutoState; startAuto: (day: string) => void; stopAuto: () => void; today: string;
+  auto: AutoState; startAuto: (day: string) => void; stopAuto: () => void; retryAuto: () => void; today: string;
 };
-const IDLE: AutoState = { on: false, day: "", job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0 };
+const IDLE: AutoState = { on: false, day: "", job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0, waiting: false };
 /** How long a job's résumé is guessed to take before one has been timed: ChatGPT thinks for a while. */
 export const USUAL_GUESS = 150_000;
 const LOST_REPORT: TailorReport = { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] };
@@ -59,6 +61,8 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
   // For Auto mode, which runs on beyond any one render.
   const madeNow = useRef(made);
   const running = useRef<AbortController | null>(null);
+  // Ends Auto mode's wait now ("Try again now").
+  const wake = useRef<(() => void) | null>(null);
   useEffect(() => { madeNow.current = made; }, [made]);
   useEffect(() => {
     let stopped = false;
@@ -89,8 +93,9 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
     running.current = control;
     const tried = new Set<string>();
     // The bridge dropping once (Chrome restarting it) is tried again; twice in a row stops.
-    let dropped = 0;
+    let dropped = 0, troubled = 0;
     const isDrop = (why: string) => /bridge stopped|bridge did not answer/i.test(why);
+    const clock = (ms: number) => new Date(Date.now() + ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     const update = (patch: Partial<AutoState>) => setAuto(current => ({ ...current, ...patch }));
     const fail = (target: JobNamed, why: string) => {
       tried.add(target.id);
@@ -98,9 +103,25 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
     };
     setAuto({ ...IDLE, on: true, day, note: "Starting…" });
     const pause = (ms: number) => new Promise<void>(resolve => {
-      const timer = window.setTimeout(resolve, ms);
-      control.signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
+      const done = () => { window.clearTimeout(timer); wake.current = null; resolve(); };
+      const timer = window.setTimeout(done, ms);
+      wake.current = done;
+      control.signal.addEventListener("abort", done, { once: true });
     });
+    /** Not the job's fault: waits, then the same job again. ChatGPT's usage
+     * limit waits 15 minutes, as long as it lasts; other trouble reaching
+     * ChatGPT (its page slow to open, the bridge dropping) a minute, three
+     * times running at most, then stops. False when it should stop. */
+    const waitOut = async (why: string) => {
+      const limit = /usage limit/i.test(why);
+      if (!limit && ++troubled > 3) { update({ note: why }); return false; }
+      const ms = limit ? 15 * 60_000 : 60_000;
+      update({ job: null, progress: null, phase: null, waiting: true,
+        note: limit ? `ChatGPT's usage limit is reached. Trying again at ${clock(ms)}.` : `${why} Trying again at ${clock(ms)}.` });
+      await pause(ms);
+      update({ waiting: false, note: "" });
+      return !control.signal.aborted;
+    };
     try {
       while (!control.signal.aborted) {
         // The day's jobs as they are now (today's: new ones join as they are posted).
@@ -126,11 +147,12 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
             const why = (error as Error).message;
             if (control.signal.aborted) break;
             if (isDrop(why) && ++dropped < 2) continue;
-            if (isDrop(why)) { update({ note: why }); break; }
+            if (isDrop(why)) { if (await waitOut(why)) continue; break; }
             fail(next, why);
             continue;
           }
           dropped = 0;
+          troubled = 0;
           if (found.text) text = await textForJob(next.id, "tailor", found.text).catch(lost);
           // None there either (often only an application form): the base résumé, as it is.
           if (!text.text && text.needsDescription) {
@@ -158,11 +180,13 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
           const why = (error as Error).message;
           if (control.signal.aborted) break;
           if (isDrop(why) && ++dropped < 2) continue;
-          if (/usage limit|not signed in|message box|bridge/i.test(why)) { update({ note: why }); break; }
+          // ChatGPT's limit, or trouble reaching it: waited out, then the same job again.
+          if (/usage limit|not signed in|message box|bridge|did not open|send button/i.test(why)) { if (await waitOut(why)) continue; break; }
           fail(next, why);
           continue;
         }
         dropped = 0;
+        troubled = 0;
         update({ phase: "applying", progress: null });
         const { saved, report } = await tailorFromAnswer(next.id, answer).catch(() => ({ saved: false, report: LOST_REPORT }));
         if (!saved) { fail(next, report.errors[0] ?? "ChatGPT's answer could not be used."); continue; }
@@ -181,10 +205,11 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       }
     } finally {
       running.current = null;
-      setAuto(current => ({ ...current, on: false, job: null, progress: null, phase: null, note: current.note && !/^Starting|Waiting/.test(current.note) && !/^Every job to do today/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
+      setAuto(current => ({ ...current, on: false, job: null, progress: null, phase: null, waiting: false, note: current.note && !/^Starting|Waiting/.test(current.note) && !/^Every job to do today/.test(current.note) ? current.note : control.signal.aborted ? "Stopped." : current.note }));
     }
   };
   const stopAuto = () => running.current?.abort();
+  const retryAuto = () => wake.current?.();
 
   const say = (next: Copying) => {
     setCopying(next);
@@ -209,7 +234,7 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
       : { job: target.id, state: "failed", text: `Copy this path: ${path}` });
   };
 
-  return <TailorContext.Provider value={{ made, plain, open: setJob, copyPath: target => void copyPath(target), copying, auto, startAuto: day => void startAuto(day), stopAuto, today }}>
+  return <TailorContext.Provider value={{ made, plain, open: setJob, copyPath: target => void copyPath(target), copying, auto, startAuto: day => void startAuto(day), stopAuto, retryAuto, today }}>
     {children}
     {needBridge && <BridgeDialog onClose={() => setNeedBridge(false)} />}
     {job && <TailorDialog job={job} before={made.has(job.id)} onClose={() => setJob(null)}
@@ -443,7 +468,7 @@ export function AutoBar({ day }: { day: string }) {
   const { status, check } = useBridgeStatus();
   const [settingUp, setSettingUp] = useState(false);
   if (!tailor) return null;
-  const { auto, startAuto, stopAuto, today } = tailor;
+  const { auto, startAuto, stopAuto, retryAuto, today } = tailor;
   const which = (shown: string) => onDay(shown, today);
   // No bridge, or one too old for Auto mode: its steps first.
   const start = () => status?.state === "missing" || status?.state === "old" || status?.state === "outdated" ? setSettingUp(true) : startAuto(day);
@@ -455,6 +480,7 @@ export function AutoBar({ day }: { day: string }) {
           <b>Auto mode</b>{auto.day !== day ? <> (for the jobs {which(auto.day)})</> : null} · {auto.done} made{auto.based ? ` (${auto.based} with your base résumé)` : ""}
           {auto.job ? <> · now: <button type="button" className="jobs-link" onClick={() => showRow(auto.job!.id)}>{[auto.job.title, auto.job.company].filter(Boolean).join(" · ")}</button> · {autoStep(auto)}</> : auto.note ? <> · {auto.note}</> : null}
         </p>
+        {auto.waiting && <button type="button" className="chat-pill" onClick={retryAuto}>Try again now</button>}
         <button type="button" className="chat-pill" data-danger="" onClick={stopAuto}>Stop</button>
         {auto.job && <TimeBar since={auto.since} usual={auto.usual} />}
       </>

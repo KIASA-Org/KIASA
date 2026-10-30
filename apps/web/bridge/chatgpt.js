@@ -19,8 +19,13 @@
     answer: ['[data-content-search-unit-key$=":assistant"]', '[data-markdown-text-style="assistant-message"]', '[data-message-author-role="assistant"]', 'div[class*="MarkdownRoot-"]', ".markdown", '[class*="prose"]'],
     signIn: ['[data-testid="login-button"]', 'a[href*="/auth/login"]', 'button[data-testid="welcome-login-button"]'],
   };
-  const LIMIT = /(reached|hit) (the |your |our )?(current )?(usage |message )?(limit|cap)|too many (requests|messages)|usage cap|rate limit/i;
+  // ChatGPT's own words when its limit is reached ("You've reached our limit of
+  // messages per hour", "You've hit your GPT-5 limit", "usage cap"). Looked for
+  // only in its notices and in a short answer with no code block: a résumé or a
+  // job's description saying "rate limiting" is not one.
+  const LIMIT = /you(['’]ve| have) (reached|hit) (our|your|the) (current )?([\w.-]+ )?(usage |message )?(limit|cap)|usage cap|(reached|hit) (the|your|our) (usage|message) limit/i;
   const FAILED = /something went wrong|an error occurred|network error|conversation not found/i;
+  const NOTICES = '[role="alert"], [role="status"], [data-testid*="error" i], [class*="text-token-text-error"]';
 
   const first = list => { for (const selector of list) { try { const found = document.querySelector(selector); if (found) return found; } catch { /* a selector this browser cannot read */ } } return null; };
   const every = list => { for (const selector of list) { try { const found = document.querySelectorAll(selector); if (found.length) return [...found]; } catch { /* as above */ } } return []; };
@@ -90,13 +95,37 @@
   /** Whether an answer is finished: ChatGPT shows its "Copy response" button
    * under it then (in its turn, after it: the question before it has its own). */
   function finished(turn) {
+    return !!copyButton(turn);
+  }
+  /** An answer's "Copy response" button: in its turn, after it. */
+  function copyButton(turn) {
     const whole = turn.closest('[data-turn-key], article, [data-testid^="conversation-turn"]') || turn.parentElement?.parentElement || turn;
     for (const selector of FIND.copied) {
       let buttons = [];
       try { buttons = [...whole.querySelectorAll(selector)]; } catch { /* as above */ }
-      if (buttons.some(button => turn.contains(button) || (turn.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING))) return true;
+      const found = buttons.find(button => turn.contains(button) || (turn.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+      if (found) return found;
     }
-    return false;
+    return null;
+  }
+
+  /** The answer as ChatGPT copies it (whole, as written): "Copy response"
+   * pressed, its text caught by chatgpt-main.js before the clipboard. None
+   * when that does not work within a few seconds: the page is read instead. */
+  function copiedAnswer(turn) {
+    const button = copyButton(turn);
+    if (!button) return Promise.resolve(null);
+    return new Promise(resolve => {
+      const finish = text => { clearTimeout(timer); window.removeEventListener("message", heard); document.documentElement.removeAttribute("data-kiasa-capture"); resolve(text); };
+      const heard = event => {
+        if (event.source === window && event.data?.source === "kiasa-bridge-copied" && typeof event.data.text === "string") finish(event.data.text);
+      };
+      const timer = setTimeout(() => finish(null), 4000);
+      window.addEventListener("message", heard);
+      // The page marked first (chatgpt-main.js sees it at once), then Copy pressed.
+      document.documentElement.setAttribute("data-kiasa-capture", String(Date.now()));
+      button.click();
+    });
   }
 
   /** The whole answer: its code block (the JSON), else all its text. */
@@ -128,13 +157,19 @@
       const turns = every(FIND.answer);
       const turn = turns.length > before ? turns[turns.length - 1] : null;
       const said = turn ? (turn.innerText || "") : "";
-      // (The page's text without laying it out: cheap enough to read on each look.)
-      const page = (document.querySelector("main") || document.body).textContent.slice(-4000);
-      if (LIMIT.test(said) || (!turn && LIMIT.test(page))) return { error: "ChatGPT says its usage limit is reached. Auto mode stops here; try again when ChatGPT allows." };
-      if (turn && FAILED.test(said) && said.length < 400) return { error: `ChatGPT answered with an error: “${said.trim().slice(0, 160)}”` };
+      // A short answer with no code block can be ChatGPT saying it cannot (its limit, an error).
+      const plain = turn && !turn.querySelector("pre") && said.length < 600;
+      // Its limit stops it only when it is not writing: "You've hit your GPT-5
+      // limit" can come with ChatGPT answering on with another model. A notice
+      // alone counts once no answer has come for ten seconds.
+      const quiet = !writing();
+      const notice = [...document.querySelectorAll(NOTICES)].map(each => (each.textContent || "").trim()).find(words => words.length < 600 && LIMIT.test(words));
+      const limited = quiet && ((plain && LIMIT.test(said)) || (notice && (!turn || plain) && Date.now() - started > 10000));
+      if (limited) return { error: `ChatGPT's usage limit is reached (“${(plain && LIMIT.test(said) ? said : notice).trim().slice(0, 160)}”).` };
+      if (plain && FAILED.test(said) && said.length < 400) return { error: `ChatGPT answered with an error: “${said.trim().slice(0, 160)}”` };
       if (said !== last) { last = said; steadySince = Date.now(); }
       if (Date.now() - reported > 5000) { reported = Date.now(); progress({ step: "thinking", seconds: Math.round((Date.now() - started) / 1000), chars: said.length }); }
-      const busy = writing();
+      const busy = !quiet;
       // Finished: its Copy button is there; or (should ChatGPT rename its buttons)
       // not writing, a code block in it (KIASA's prompts ask for one), and no change for eight seconds.
       if (turn && said.trim() && !busy && finished(turn)) return { turn };
@@ -148,7 +183,9 @@
     }
     if (!done) throw new Error("ChatGPT did not finish answering within 25 minutes.");
     if (done.error) throw new Error(done.error);
-    return answerOf(done.turn);
+    // As ChatGPT copies it (its page may show a long code block only in part); else as the page shows it.
+    const copied = await copiedAnswer(done.turn);
+    return copied && copied.includes("{") ? copied : answerOf(done.turn);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {

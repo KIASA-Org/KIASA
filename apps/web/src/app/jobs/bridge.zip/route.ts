@@ -4,7 +4,7 @@ import { join } from "node:path";
 export const runtime = "nodejs";
 
 /** The KIASA ChatGPT Bridge's files (the folder `bridge/`, sent along by next.config.ts). */
-const FILES = ["manifest.json", "background.js", "kiasa.js", "chatgpt.js"];
+const FILES = ["manifest.json", "background.js", "kiasa.js", "chatgpt.js", "chatgpt-main.js"];
 const FOLDER = "kiasa-chatgpt-bridge";
 
 const TABLE = Array.from({ length: 256 }, (_, n) => {
