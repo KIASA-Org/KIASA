@@ -30,14 +30,15 @@ export class Words {
     const rest = this.target.slice(now.length);
     const waiting = rest.trim().split(" ").length;
     // Far behind (opened mid-way), or in a hidden tab, whose timers a browser slows: all at once.
-    if (waiting > 30 || document.hidden) now = this.target;
+    if (waiting > 12 || document.hidden) now = this.target;
     else if (rest) {
       const lead = rest.length - rest.trimStart().length;
       const end = rest.indexOf(" ", lead);
       now += end === -1 ? rest : rest.slice(0, end);
     }
     this.draw(now);
-    if (now !== this.target) this.timer = window.setTimeout(() => this.step(), Math.max(30, Math.min(100, 250 / waiting)));
+    // Quick enough to feel live: a word every 18–45 ms, faster the further behind it is.
+    if (now !== this.target) this.timer = window.setTimeout(() => this.step(), Math.max(18, Math.min(45, 160 / waiting)));
   }
 }
 
