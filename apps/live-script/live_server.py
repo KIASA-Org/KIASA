@@ -207,6 +207,7 @@ def register_link() -> None:
 
 
 async def main() -> None:
+    ls.keep_fast()  # first thing: Windows must not slow this process down as it runs on
     from_link = any(arg.startswith("kiasa-live:") for arg in sys.argv[1:])
     register_link()
     service = Service(asyncio.get_running_loop())

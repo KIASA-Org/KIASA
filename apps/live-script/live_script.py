@@ -122,6 +122,39 @@ class Resampler:
         return np.interp(points, np.arange(len(y)), y).astype(np.float32)
 
 
+def keep_fast() -> None:
+    """Windows slows a long-running windowless process down after a while (its power
+    throttling, meant for background apps), which starved recognition until the app
+    emitted a few words a minute; a fresh process is not throttled yet, so a restart
+    always looked like a cure. Opt out of it, and run a little above normal priority
+    so the audio work is scheduled ahead of background chores."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    # Declare the signatures: left to ctypes' defaults, the 64-bit process handle is
+    # passed as a 32-bit int, every call fails quietly, and nothing changes.
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.SetPriorityClass.restype = wintypes.BOOL
+    kernel32.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    kernel32.SetProcessInformation.restype = wintypes.BOOL
+    me = kernel32.GetCurrentProcess()
+
+    class PowerThrottling(ctypes.Structure):
+        _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
+
+    PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1
+    PROCESS_POWER_THROTTLING_EXECUTION_SPEED = 0x1   # the "EcoQoS" slowdown
+    PROCESS_INFORMATION_POWER_THROTTLING = 4
+    state = PowerThrottling(PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, 0)
+    kernel32.SetProcessInformation(me, PROCESS_INFORMATION_POWER_THROTTLING, ctypes.byref(state), ctypes.sizeof(state))
+    ABOVE_NORMAL_PRIORITY_CLASS = 0x8000
+    kernel32.SetPriorityClass(me, ABOVE_NORMAL_PRIORITY_CLASS)
+
+
 def find_loopback(p: pyaudio.PyAudio) -> dict:
     """Find the loopback device for the default speakers/headphones."""
     wasapi = p.get_host_api_info_by_type(pyaudio.paWASAPI)
@@ -551,6 +584,7 @@ class Window:
 
 
 def main() -> None:
+    keep_fast()
     parser = argparse.ArgumentParser(description="Live captions of PC audio, saved to a text file.")
     parser.add_argument("--verbose", action="store_true", help="print timed caption events")
     args = parser.parse_args()
