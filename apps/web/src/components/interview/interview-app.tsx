@@ -8,7 +8,7 @@ import { DOWNLOAD_URL, OPEN_APP, useLiveCapture } from "./live-capture";
  * and the words as they come. The capture itself lives in the LiveCaptureProvider
  * (root layout), so it keeps running as the member moves around KIASA. */
 export function InterviewApp() {
-  const { phase, detail, problem, missing, hasText, on, turnOn, turnOff, dismissSetup, attachBox, scriptText } = useLiveCapture();
+  const { phase, detail, problem, missing, hasText, on, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText } = useLiveCapture();
   const [copied, setCopied] = useState(false);
 
   // The box the words are drawn into: the provider keeps the words, this shows them.
@@ -46,6 +46,14 @@ export function InterviewApp() {
           : <button type="button" className="jobs-button" data-primary="" onClick={turnOn} disabled={waiting && !missing}>Turn on live script</button>}
       </div>
     </div>
+
+    {/* The first run downloads the speech model (about 660 MB): show how far it has got. */}
+    {phase === "loading" && <div className="interview-progress" role="progressbar"
+      aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+      aria-label="Getting the speech model">
+      <span className="interview-progress-fill" data-waiting={progress === null || undefined}
+        style={progress === null ? undefined : { width: `${Math.max(2, Math.round(progress * 100))}%` }} />
+    </div>}
 
     {missing && <div className="jobs-card interview-setup">
       <p className="resume-folder-title">The app did not answer</p>

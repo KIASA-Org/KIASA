@@ -508,6 +508,13 @@
 .interview-title { margin-bottom: 6px; font-size: 26px; font-weight: 700; color: var(--ink); }
 .interview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .interview-setup { display: grid; justify-items: start; gap: 8px; }
+/* First run: how far the speech model download has got. */
+.interview-progress { position: relative; height: 8px; overflow: hidden; border-radius: 999px; background: rgb(236 255 243 / 0.08); }
+.interview-progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #6f9a5c, var(--leaf)); transition: width 0.25s ease; }
+/* Before any percentage arrives, a sliding stripe says it is working. */
+.interview-progress-fill[data-waiting] { width: 32%; animation: interview-progress-slide 1.3s ease-in-out infinite; }
+@keyframes interview-progress-slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+@media (prefers-reduced-motion: reduce) { .interview-progress-fill[data-waiting] { animation: none; width: 100%; opacity: 0.45; } }
 .interview-script { height: 58vh; min-height: 280px; padding: 20px 24px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--card-line); border-radius: 18px; background: var(--card); color: var(--ink); font-size: 21px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .interview-script:empty::before { content: attr(data-placeholder); color: var(--ink-mute); }
 .interview-note { max-width: 78ch; }

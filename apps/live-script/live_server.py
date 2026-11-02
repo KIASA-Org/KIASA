@@ -68,6 +68,7 @@ class Service:
         self.engine = None
         self.state = {"type": "state", "state": "loading", "detail": "Loading speech model..."}
         self.text = ""
+        self.shown_progress: tuple[int, int] | None = None
         self.last_page = time.monotonic()
 
     # Engine threads call this, so hand the event over to the server's own thread.
@@ -91,19 +92,35 @@ class Service:
     def send(self, message: dict) -> None:
         broadcast(self.clients, json.dumps(message))
 
-    def set_state(self, state: str, detail: str) -> None:
+    def set_state(self, state: str, detail: str, progress: float | None = None) -> None:
         self.state = {"type": "state", "state": state, "detail": detail}
+        if progress is not None:
+            self.state["progress"] = round(progress, 4)
         self.send(self.state)
 
     def load_model(self) -> None:
         try:
-            recognizer = ls.load_recognizer(self.put_status)
+            recognizer = ls.load_recognizer(self.put_status, self.put_progress)
             self.loop.call_soon_threadsafe(self.on_loaded, recognizer)
         except Exception as exc:
             self.put(("error", f"{type(exc).__name__}: {exc}"))
 
     def put_status(self, text: str) -> None:
         self.put(("status", text))
+
+    # The download calls this very often; the page only needs it when the whole number changes.
+    def put_progress(self, part: int, parts: int, fraction: float) -> None:
+        percent = int(fraction * 100)
+        last = self.shown_progress
+        # Only ever forward: the downloader winds its count back when it resumes a chunk.
+        if last is not None and last[0] == part and percent <= last[1]:
+            return
+        self.shown_progress = (part, percent)
+        self.loop.call_soon_threadsafe(
+            self.set_state, "loading",
+            f"Getting speech model (first run, about 660 MB) — part {part} of {parts}, {percent}%",
+            fraction,
+        )
 
     def on_loaded(self, recognizer) -> None:
         self.recognizer = recognizer
