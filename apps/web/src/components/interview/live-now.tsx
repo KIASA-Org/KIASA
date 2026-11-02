@@ -37,7 +37,11 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState("");        // everything heard so far, as it arrives
+  const [shown, setShown] = useState("");      // what is on screen, catching up word by word
+  const targetRef = useRef("");
+  const shownRef = useRef("");
+  const reveal = useRef(0);
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   // Picking cards: click one, drag across several, or hold Ctrl to add more; the chosen
@@ -114,28 +118,57 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     };
   }, [supabase, open]);
 
-  const sentences = useMemo(() => toSentences(text), [text]);
+  // The words arrive in bursts (the speech model emits several at a time). Show them one
+  // after another, fast, so the admin reads a live stream rather than blocks appearing.
+  useEffect(() => {
+    targetRef.current = text;
+    const run = () => {
+      const target = targetRef.current;
+      let now = shownRef.current;
+      if (now === target) return;
+      if (!target.startsWith(now)) now = "";              // the text was corrected: start again from it
+      const rest = target.slice(now.length);
+      const waiting = rest.trim() ? rest.trim().split(/\s+/).length : 0;
+      if (waiting > 12 || document.hidden) now = target;  // far behind, or hidden: catch up at once
+      else {
+        const lead = rest.length - rest.trimStart().length;
+        const end = rest.indexOf(" ", lead);
+        now += end === -1 ? rest : rest.slice(0, end);
+      }
+      shownRef.current = now;
+      setShown(now);
+      if (now !== target) reveal.current = window.setTimeout(run, Math.max(16, Math.min(40, 140 / Math.max(1, waiting))));
+    };
+    run();
+    return () => window.clearTimeout(reveal.current);
+  }, [text]);
+
+  const sentences = useMemo(() => toSentences(shown), [shown]);
   useEffect(() => { pickedRef.current = picked; }, [picked]);
   useEffect(() => { anchorRef.current = followAnchor; }, [followAnchor]);
   useEffect(() => { stillOnRef.current = stillOn; }, [stillOn]);
 
-  // Keep the newest sentence in view, unless the admin has scrolled up to read back; and,
-  // while a pick follows the sentence being written, keep copying the whole followed range
-  // (from the follow point to the last), so the clipboard always holds the latest words.
+  // Keep the newest sentence in view as the words appear, unless the admin scrolled up to read back.
   useEffect(() => {
-    sentencesRef.current = sentences;
     const el = box.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  }, [sentences]);
+
+  // Copying always works from the freshest words, never the catching-up display, so the
+  // clipboard holds everything heard so far even mid-reveal.
+  useEffect(() => {
+    const latest = toSentences(text);
+    sentencesRef.current = latest;
     if (anchorRef.current != null && stillOnRef.current) {
-      const text = textOf(chosenSet(pickedRef.current, anchorRef.current, sentences.length), sentences);
-      if (text) void navigator.clipboard.writeText(text).then(() => {
+      const picks = textOf(chosenSet(pickedRef.current, anchorRef.current, latest.length), latest);
+      if (picks) void navigator.clipboard.writeText(picks).then(() => {
         setOnClip(true);
         setBlocked(false);
         window.clearTimeout(okFlash.current);
         okFlash.current = window.setTimeout(() => setOnClip(false), 1500);
       }).catch(() => setBlocked(true));   // an extension or the OS refused the write — Ctrl+C still works
     }
-  }, [sentences]);
+  }, [text]);
 
   // Keep the clipboard dependable: re-copy when this tab regains focus, and let a plain
   // Ctrl+C always take the chosen cards' latest text.
@@ -169,6 +202,9 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const choose = (id: string) => {
     if (id === open) return;
     setText("");
+    setShown("");
+    targetRef.current = "";
+    shownRef.current = "";
     setPicked(new Set());
     setFollowAnchor(null);
     atBottom.current = true;

@@ -43,7 +43,10 @@ MODEL_FILES = {
     "joiner": "joiner.int8.onnx",
     "encoder": "encoder.int8.onnx",
 }
-NUM_THREADS = 1  # more threads used about 5 times the CPU in testing, mostly while idle
+# On one thread a long continuous stream fell minutes behind (recognition just under
+# real time, so the lag piled up). A few threads run it well ahead of real time.
+NUM_THREADS = min(6, max(2, (os.cpu_count() or 4) - 1))
+MAX_LAG_SECONDS = 4.0  # if it ever still falls this far behind, skip the oldest audio to stay live
 # Built as an .exe, its own files are unpacked beside it, and what it writes goes to the user's data.
 FROZEN = getattr(sys, "frozen", False)
 HERE = Path(sys._MEIPASS) if FROZEN else Path(__file__).resolve().parent
@@ -271,6 +274,13 @@ class Engine:
                     chunks.append(self.audio_q.get_nowait())
             except queue.Empty:
                 pass
+
+            # If recognition ever falls behind (a big backlog drained at once), drop the
+            # oldest audio and keep only the most recent, so the script stays live instead
+            # of drifting minutes back on a long stream. Each chunk is 50 ms.
+            max_chunks = int(MAX_LAG_SECONDS * 20)
+            if len(chunks) > max_chunks:
+                chunks = chunks[-max_chunks:]
 
             now = time.monotonic()
             if chunks:
