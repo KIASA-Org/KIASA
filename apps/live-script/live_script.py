@@ -127,11 +127,43 @@ def find_loopback(p: pyaudio.PyAudio) -> dict:
     raise RuntimeError("No WASAPI loopback device found for your default output.")
 
 
-def load_recognizer(status) -> sherpa_onnx.OnlineRecognizer:
+class _Quiet:
+    """Swallows the download bar's own output: the page shows the progress instead."""
+
+    def write(self, *_args) -> None: pass
+    def flush(self) -> None: pass
+    def isatty(self) -> bool: return False
+
+
+def _counting_bar(report):
+    """A download bar that reports how far along it is, instead of drawing itself."""
+    from tqdm import tqdm as base_tqdm
+
+    class Bar(base_tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs["disable"] = False   # it must count, even where bars are switched off
+            kwargs["file"] = _Quiet()
+            super().__init__(*args, **kwargs)
+
+        def update(self, n=1):
+            done = super().update(n)
+            if self.total:
+                report(min(1.0, self.n / self.total))
+            return done
+
+    return Bar
+
+
+def load_recognizer(status, on_progress=None) -> sherpa_onnx.OnlineRecognizer:
+    """`on_progress(part, parts, fraction)`, if given, follows each file as it downloads."""
     paths = {}
+    parts = len(MODEL_FILES)
     for i, (part, filename) in enumerate(MODEL_FILES.items(), start=1):
-        status(f"Getting speech model (first run downloads about 660 MB), part {i} of {len(MODEL_FILES)}...")
-        paths[part] = hf_hub_download(MODEL_REPO, filename, revision=MODEL_REVISION)
+        status(f"Getting speech model (first run downloads about 660 MB), part {i} of {parts}...")
+        extra = {}
+        if on_progress is not None:
+            extra["tqdm_class"] = _counting_bar(lambda fraction, i=i: on_progress(i, parts, fraction))
+        paths[part] = hf_hub_download(MODEL_REPO, filename, revision=MODEL_REVISION, **extra)
     status("Loading speech model...")
     return sherpa_onnx.OnlineRecognizer.from_transducer(
         **paths,

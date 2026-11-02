@@ -40,6 +40,8 @@ async function blocked() {
 
 type Capture = {
   phase: Phase; detail: string; problem: string; missing: boolean; hasText: boolean; on: boolean;
+  /** How far the first-run speech model download has got, 0–1, while it is going. */
+  progress: number | null;
   turnOn: () => void; turnOff: () => void; dismissSetup: () => void;
   attachBox: (el: HTMLDivElement | null) => void;
   scriptText: () => string;
@@ -66,6 +68,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
   const [problem, setProblem] = useState("");
   const [missing, setMissing] = useState(false);
   const [hasText, setHasText] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
 
   const socket = useRef<WebSocket | null>(null);
   const wantsStart = useRef(false);
@@ -106,6 +109,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
       } else if (message.type === "state") {
         setPhase(message.state);
         setDetail(message.detail);
+        setProgress(typeof message.progress === "number" ? message.progress : null);
         // Reconnecting (a reload) to an app that is already capturing: just follow it.
         if (message.state === "listening") { resuming.current = false; wantsStart.current = false; }
         if (message.state === "ready" && wantsStart.current) {
@@ -212,7 +216,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     if (ws) { ws.onclose = null; ws.close(); }
   }, [words]);
 
-  const value: Capture = { phase, detail, problem, missing, hasText, on, turnOn, turnOff, dismissSetup, attachBox, scriptText };
+  const value: Capture = { phase, detail, problem, missing, hasText, on, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText };
 
   return <CaptureContext.Provider value={value}>
     {children}
