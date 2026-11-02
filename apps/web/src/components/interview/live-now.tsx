@@ -129,7 +129,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
       if (!target.startsWith(now)) now = "";              // the text was corrected: start again from it
       const rest = target.slice(now.length);
       const waiting = rest.trim() ? rest.trim().split(/\s+/).length : 0;
-      if (waiting > 12 || document.hidden) now = target;  // far behind, or hidden: catch up at once
+      if (waiting > 5 || document.hidden) now = target;   // more than a few behind, or hidden: catch up at once
       else {
         const lead = rest.length - rest.trimStart().length;
         const end = rest.indexOf(" ", lead);
@@ -137,7 +137,8 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
       }
       shownRef.current = now;
       setShown(now);
-      if (now !== target) reveal.current = window.setTimeout(run, Math.max(16, Math.min(40, 140 / Math.max(1, waiting))));
+      // Fast enough that the word-by-word flow costs almost nothing against the member's own page.
+      if (now !== target) reveal.current = window.setTimeout(run, Math.max(10, Math.min(20, 60 / Math.max(1, waiting))));
     };
     run();
     return () => window.clearTimeout(reveal.current);

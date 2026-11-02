@@ -5,7 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
 import { scriptTopic } from "./live-words";
 
-const SEND_MS = 60;        // At most this often, for one member's words (kept short so the admin reads it live).
+const SEND_MS = 30;        // At most this often, for one member's words (kept short so the admin reads it live).
 // "Still here": a hidden tab's timers may run only once a minute, so words coming in say it too.
 const HEARTBEAT_MS = 15_000;
 
