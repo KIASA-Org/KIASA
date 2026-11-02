@@ -169,7 +169,8 @@ checked October 2026 across the database, the server and the browser):
   The store keeps pictures, PDFs, text, sound, film and office files as they
   are; anything else (a web page, an SVG) is kept as plain bytes, which a
   browser only downloads.
-- **Every page** sends a Content-Security-Policy (this site and Supabase only),
+- **Every page** sends a Content-Security-Policy (this site and Supabase only,
+  and the KIASA Live Script app on the member's own PC, for the Interview page),
   `X-Frame-Options: DENY` (no other site can show a KIASA page in a frame and
   trick a click), `nosniff`, a referrer policy and a permissions policy
   (camera, microphone and screen for KIASA only): `next.config.ts`, in
@@ -875,6 +876,24 @@ Paused, one shows offline; set offline, it does no work.
 
 To test it on this computer: run the file on the local copy, serve the site
 against it on port 3002, and run `npm run sims:local:e2e`.
+
+## KIASA Interview
+
+`/interview`, the tab after the Job desk, for approved members and admins: **Turn
+on live script** writes what the PC plays as text, word by word, on the member's
+own page. The KIASA Live Script app (`apps/live-script`, see its README) does the
+listening, on Windows 10 and 11, on the CPU. A website cannot start a program, so
+the page opens the app's `kiasa-live://` link and connects to it at
+`ws://127.0.0.1:8765`; if no app answers in 8 seconds it shows the download steps.
+Chrome asks once before a website may reach the PC.
+
+While the live script is on, the member is on the admin's **Live scripts** page
+(`/admin/live`), where an admin can read anyone's script word by word; the
+member's own page says so, for as long as it is on. The words go over a private
+channel and are never stored; turning the script off takes the member off the
+list at once, and a closed page drops off within 90 seconds. The app keeps a copy
+of each script on the PC when capture stops. It hears only what the PC plays (all of it, mixed), not the
+microphone. Capture stops by itself 15 seconds after the last page closes.
 
 ## Connecting accounts
 

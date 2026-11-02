@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Schibsted_Grotesk } from "next/font/google";
 import { bootstrapScript } from "@/components/intro/bootstrap";
+import { LiveCaptureProvider } from "@/components/interview/live-capture";
 import { RouteProgress } from "@/components/site/route-progress";
+import { publicSupabase } from "@/lib/accounts/server";
 import { company } from "@/content/site";
 import "./globals.css";
 import "@/styles/site.css";
@@ -32,6 +34,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return <html lang="en" className={`${grotesk.variable} ${newsreader.variable}`} suppressHydrationWarning>
     {/* Runs before first paint, so the entrance never flashes the finished mark first. */}
     <head><script id="kiasa-intro-bootstrap" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: bootstrapScript() }} /></head>
-    <body><RouteProgress />{children}</body>
+    <body><RouteProgress />
+      {/* Keeps a member's live script running as they move around KIASA (root layout
+          persists across navigation); does nothing for signed-out or public visitors. */}
+      {publicSupabase.url && publicSupabase.key
+        ? <LiveCaptureProvider realtime={publicSupabase}>{children}</LiveCaptureProvider>
+        : children}
+    </body>
   </html>;
 }

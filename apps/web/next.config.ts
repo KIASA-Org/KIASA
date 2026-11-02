@@ -9,6 +9,8 @@ const supabase = (() => {
   try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "").origin; } catch { return ""; }
 })();
 const live = supabase.replace(/^http/, "ws");
+// The KIASA Live Script app, on the member's own PC (the Interview page).
+const liveScript = `ws://127.0.0.1:${process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "8765"}`;
 const policy = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -16,7 +18,7 @@ const policy = [
   `img-src 'self' data: blob: ${supabase}`,
   "media-src 'self' blob:",
   "font-src 'self'",
-  `connect-src 'self' ${supabase} ${live}`,
+  `connect-src 'self' ${supabase} ${live} ${liveScript}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-src 'none'",
