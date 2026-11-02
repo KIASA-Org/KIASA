@@ -47,6 +47,13 @@ MODEL_FILES = {
 # real time, so the lag piled up). A few threads run it well ahead of real time.
 NUM_THREADS = min(6, max(2, (os.cpu_count() or 4) - 1))
 MAX_LAG_SECONDS = 4.0  # if it ever still falls this far behind, skip the oldest audio to stay live
+# Both the capture and the recognition stream are retired for fresh ones at a quiet moment
+# this far into a session (every word kept), so nothing that builds up inside them over a
+# long run can slow it down or stop it. The capture is also reopened on its own if it
+# stops delivering: it can die quietly (a device reset, a driver quirk, the default output
+# changing) with no error at all, leaving the loop feeding silence forever.
+REFRESH_MINUTES = 8
+CAPTURE_STALL_SECONDS = 45  # harmless when nothing is playing: it just opens the same capture again
 # Built as an .exe, its own files are unpacked beside it, and what it writes goes to the user's data.
 FROZEN = getattr(sys, "frozen", False)
 HERE = Path(sys._MEIPASS) if FROZEN else Path(__file__).resolve().parent
@@ -286,44 +293,74 @@ class Engine:
         self.stop = threading.Event()
         self.pa = None
         self.stream = None
+        self.rate = 0
+        self.channels = 0
 
     def status(self, text: str) -> None:
         self.ui_q.put(("status", text))
+
+    def _open_capture(self) -> None:
+        """Open the loopback capture, or open it again: it follows whatever the default
+        output is now, and a fresh stream replaces one that has quietly stopped."""
+        dev = find_loopback(self.pa)
+        rate = int(dev["defaultSampleRate"])
+        channels = int(dev["maxInputChannels"])
+
+        def callback(in_data, frame_count, time_info, status):
+            self.audio_q.put(in_data)
+            return (None, pyaudio.paContinue)
+
+        new = self.pa.open(
+            format=pyaudio.paInt16,
+            channels=channels,
+            rate=rate,
+            input=True,
+            input_device_index=dev["index"],
+            frames_per_buffer=rate // 20,  # 50 ms chunks
+            stream_callback=callback,
+        )
+        old, self.stream, self.rate, self.channels = self.stream, new, rate, channels
+        if old is not None:
+            try:
+                old.stop_stream()
+                old.close()
+            except OSError:
+                pass
+        self.status(f"Listening to: {dev['name']}")
 
     def run(self) -> None:
         try:
             recognizer = self.recognizer or load_recognizer(self.status)
             self.pa = pyaudio.PyAudio()
-            dev = find_loopback(self.pa)
-            rate = int(dev["defaultSampleRate"])
-            channels = int(dev["maxInputChannels"])
-
-            def callback(in_data, frame_count, time_info, status):
-                self.audio_q.put(in_data)
-                return (None, pyaudio.paContinue)
-
-            self.stream = self.pa.open(
-                format=pyaudio.paInt16,
-                channels=channels,
-                rate=rate,
-                input=True,
-                input_device_index=dev["index"],
-                frames_per_buffer=rate // 20,  # 50 ms chunks
-                stream_callback=callback,
-            )
-            self.status(f"Listening to: {dev['name']}")
-            self._recognize_loop(recognizer, channels, Resampler(rate))
+            self._open_capture()
+            self._recognize_loop(recognizer)
         except Exception as exc:
             self.ui_q.put(("error", f"{type(exc).__name__}: {exc}"))
 
-    def _recognize_loop(self, recognizer, channels: int, resample: Resampler) -> None:
-        stream = recognizer.create_stream()
-        # The model loses the first second or two if speech is already playing when it starts.
-        stream.accept_waveform(SR, np.zeros(SR, dtype=np.float32))
+    def _recognize_loop(self, recognizer) -> None:
+        def fresh_stream():
+            s = recognizer.create_stream()
+            # The model loses the first second or two if speech is already playing when it starts.
+            s.accept_waveform(SR, np.zeros(SR, dtype=np.float32))
+            return s
+
+        def reopen_capture() -> None:
+            nonlocal resample, channels
+            try:
+                self._open_capture()
+                resample = Resampler(self.rate)
+                channels = self.channels
+            except Exception as exc:
+                self.status(f"Capture stopped ({exc}); trying again")
+
+        stream = fresh_stream()
+        resample = Resampler(self.rate)
+        channels = self.channels
         punctuator = Punctuator()
+        committed: list[str] = []  # the words of streams already retired (see the refresh below)
         words: list[str] = []
         shown = ""
-        last_audio = last_change = time.monotonic()
+        last_audio = last_change = last_chunk = last_refresh = last_try = time.monotonic()
         paused = True
 
         while not self.stop.is_set():
@@ -344,6 +381,13 @@ class Engine:
 
             now = time.monotonic()
             if chunks:
+                last_chunk = now
+            # The capture has stopped, or gone a long while without a chunk: open it again.
+            if (not self.stream.is_active() or now - last_chunk > CAPTURE_STALL_SECONDS) and now - last_try > 5:
+                last_try = last_chunk = now
+                reopen_capture()
+                chunks = []  # anything drained came from the stream just closed
+            if chunks:
                 raw = np.frombuffer(b"".join(chunks), dtype=np.int16).reshape(-1, channels)
                 audio = resample(raw.mean(axis=1).astype(np.float32) / 32768.0)
             else:
@@ -358,7 +402,7 @@ class Engine:
             while recognizer.is_ready(stream):
                 recognizer.decode_stream(stream)
 
-            latest = clean_words(recognizer.get_result(stream))
+            latest = committed + clean_words(recognizer.get_result(stream))
             if latest != words:
                 words = latest
                 last_change = now
@@ -367,6 +411,12 @@ class Engine:
             elif not paused and now - last_change >= PAUSE_SECONDS:
                 paused = True  # the speaker stopped, so the newest words can be punctuated too
                 text = punctuator.format(words, hold=0)
+                # A quiet moment well into the session: retire both streams for fresh ones.
+                if now - last_refresh > REFRESH_MINUTES * 60:
+                    committed = list(words)
+                    stream = fresh_stream()
+                    reopen_capture()
+                    last_refresh = now
             else:
                 continue
             if text != shown:
