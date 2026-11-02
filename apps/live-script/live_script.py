@@ -215,6 +215,11 @@ class Punctuator:
             )
         )
         self.settled: list[str] = []  # final marks for the earliest words
+        # Words whose marks are final are written out once and kept, so a long
+        # session does not re-punctuate its whole transcript on every new word.
+        self.done_text = ""
+        self.done_words = 0
+        self.capital_next = True
 
     def _marks(self, words: list[str]) -> list[str]:
         """The mark after each word, or "" for none."""
@@ -240,12 +245,35 @@ class Punctuator:
             self.settled += marks[:last_end + 1]
 
         all_marks = self.settled[:start] + marks
-        out = []
-        new_sentence = True
-        for word, mark in zip(words, all_marks):
-            out.append((word[0].upper() + word[1:] if new_sentence else word) + mark)
-            new_sentence = mark in (".", "?", "!") and mark != ""
-        return fix_terms(" ".join(out))
+
+        def written(index: int, capital: bool) -> tuple[str, bool]:
+            word = words[index]
+            mark = all_marks[index] if index < len(all_marks) else ""
+            return (word[0].upper() + word[1:] if capital else word) + mark, mark in (".", "?", "!") and mark != ""
+
+        # Everything whose mark is settled is written out once and remembered, so the work
+        # here stays the same size however long the session runs.
+        final = min(len(self.settled), len(words))
+        if final > self.done_words:
+            batch = []
+            capital = self.capital_next
+            for index in range(self.done_words, final):
+                piece, capital = written(index, capital)
+                batch.append(piece)
+            self.capital_next = capital
+            chunk = fix_terms(" ".join(batch))
+            self.done_text += (" " + chunk) if self.done_text else chunk
+            self.done_words = final
+
+        tail = []
+        capital = self.capital_next
+        for index in range(self.done_words, len(words)):
+            piece, capital = written(index, capital)
+            tail.append(piece)
+        if not tail:
+            return self.done_text
+        rest = fix_terms(" ".join(tail))
+        return (self.done_text + " " + rest) if self.done_text else rest
 
 
 class Engine:
