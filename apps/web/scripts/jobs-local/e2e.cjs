@@ -67,7 +67,7 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(new Date());
   const token = Date.now().toString(36);
   const titles = [`E2E Frontend Engineer ${token}`, `E2E Platform Engineer ${token}`, `E2E Data Engineer ${token}`];
-  // Each with its title and a company the address does not say, so the bot has nothing to read (no request leaves this computer).
+  // Each with its title and a company the address does not say (no request leaves this computer).
   const links = [
     `${titles[0]} | Testco Group | https://boards.greenhouse.io/testco/jobs/${token}1`,
     `${titles[1]}\tPlatformco Ltd\thttps://jobs.lever.co/platformco/${token}2?utm_source=newsletter`,
@@ -206,7 +206,13 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await admin.page.locator(".jobs-bot-says", { hasText: "Saved 3 jobs for today" }).waitFor({ timeout: 10000 });
     const saved = Date.now() - started;
     await Promise.all([appears(ana.page, ".jobs-row-title", titles[0]), appears(ben.page, ".jobs-row-title", titles[0])]);
-    await admin.page.locator(".jobs-bot-says", { hasText: "Done: 3 jobs named" }).waitFor({ timeout: 15000 });
+    // Only saved: the links stay in the box for Send, and nothing goes to the Jobright bot.
+    const box = await admin.page.getByLabel("Job links").inputValue();
+    if (!box.includes(token)) throw new Error(`the box holds: ${box.slice(0, 80)}`);
+    const { data: pasted } = await site.from("jobs").select("id").like("url", `%${token}%`);
+    const { count: asked } = await site.from("job_reads").select("job_id", { count: "exact", head: true }).in("job_id", pasted.map(job => job.id));
+    if (asked) throw new Error(`${asked} pasted links were sent to the bot`);
+    await admin.page.getByRole("button", { name: "Clear the box" }).click();
     return `saved ${saved} ms after pasting, on their lists ${Date.now() - started} ms`;
   });
 
@@ -226,6 +232,51 @@ const appears = (page, selector, text, timeout = 10000) => page.waitForFunction(
     await admin.page.getByRole("dialog").getByRole("button", { name: "Take them back" }).click();
     await admin.page.locator(".jobs-bot-says", { hasText: "Taken back" }).waitFor({ timeout: 10000 });
     await ana.page.waitForFunction(title => ![...document.querySelectorAll(".jobs-row-title")].some(node => node.textContent.includes(title)), spare, { timeout: 10000 });
+  });
+
+  await step("Send hands pasted links to the Jobright bot: it says why they wait, each is read, and the job gains its description and company", async () => {
+    const sent = [`https://jobs.example.com/sent-one/${token}`, `https://jobs.example.com/sent-two/${token}`];
+    const key = `kbot_e2e_${token}_${"0".repeat(40)}`;
+    const hash = require("crypto").createHash("sha256").update(key).digest("hex");
+    const { data: bot, error } = await site.from("job_bots").insert({ name: "E2E bot", computer: "E2E-PC" }).select("id").single();
+    if (error) throw error;
+    try {
+      const { error: keyError } = await site.from("job_bot_keys").insert({ bot_id: bot.id, key_hash: `\\x${hash}` });
+      if (keyError) throw keyError;
+      const says = text => admin.page.locator(".jobs-bot-says", { hasText: text }).last().waitFor({ timeout: 10000 });
+      const rpc = async (name, args) => {
+        const { data, error: failed } = await createClient(env.url, env.publishable, { auth: { persistSession: false } }).rpc(name, args);
+        if (failed) throw failed;
+        return data;
+      };
+      await paste(admin.page, sent.join("\n"));
+      await says("Saved 2 jobs for today");
+      await admin.page.getByRole("button", { name: "Send to the Jobright bot" }).click();
+      await admin.page.locator(".jobs-bot-you", { hasText: "2 links sent to the Jobright bot" }).waitFor({ timeout: 10000 });
+      if (await admin.page.getByLabel("Job links").inputValue()) throw new Error("the box did not empty on Send");
+      // A bot too old to read is told plainly, and is handed nothing.
+      const old = await rpc("job_bot_check_in", { bot_key: key, info: { state: "ready", computer: "E2E-PC", version: "1.2.0" } });
+      if (old.reads.length) throw new Error("an old bot was handed links");
+      await says("is version 1.2.0 and cannot read links yet");
+      // The bot, as Job Saving Bot does it.
+      const answer = await rpc("job_bot_check_in", { bot_key: key, info: { state: "ready", computer: "E2E-PC", version: "1.3.0", can_read: true } });
+      const one = answer.reads.find(read => read.url === sent[0]);
+      const two = answer.reads.find(read => read.url === sent[1]);
+      if (!one || !two) throw new Error(`handed ${JSON.stringify(answer.reads)}`);
+      await says("reading the links: 0 of 2");
+      const title = `E2E Read Title ${token}`;
+      const description = "What the job is, read by the bot's browser. ".repeat(10);
+      await rpc("job_bot_read_done", { bot_key: key, reads: [{ job: one.job, ok: true, title, company: "Read Company", location: "Remote", description }] });
+      await says("reading the links: 1 of 2");
+      await appears(ana.page, ".jobs-row-title", title);
+      await rpc("job_bot_read_done", { bot_key: key, reads: [{ job: two.job, ok: false, message: "The page did not show a job description." }] });
+      await says("Done: 1 job read, with job description and company; 1 link I could not read");
+      const { data: job } = await site.from("jobs").select("title, company, location, description").eq("id", one.job).single();
+      if (job.title !== title || job.company !== "Read Company" || job.location !== "Remote" || job.description !== description.trim()) throw new Error(`the job reads ${JSON.stringify(job).slice(0, 200)}`);
+      await site.from("jobs").delete().in("url", sent);
+    } finally {
+      await site.from("job_bots").delete().eq("id", bot.id);
+    }
   });
 
   await step("Ana marks one Applied: the admin's desk and Ben's list count her at once", async () => {

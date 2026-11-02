@@ -65,7 +65,7 @@ const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
     await site.from("avatars").upsert({ user_id: member.id, path: where });
   }
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  sql(`truncate public.payments, public.positions, public.interviews, public.applications, public.plans, public.resumes, public.jobs;
+  sql(`truncate public.payments, public.positions, public.interviews, public.applications, public.plans, public.resumes, public.jobs cascade;
        update public.job_settings set timezone = '${zone.replace(/'/g, "")}', currency = 'USD' where id = 1;`);
 
   // Thirty days of links, posted in the morning (today's: forty of them).

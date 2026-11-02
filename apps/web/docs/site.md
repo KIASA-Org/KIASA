@@ -175,8 +175,9 @@ checked October 2026 across the database, the server and the browser):
   trick a click), `nosniff`, a referrer policy and a permissions policy
   (camera, microphone and screen for KIASA only): `next.config.ts`, in
   production builds.
-- The jobs bot's page reader checks the address each connection is really
-  made to (a name that points somewhere private a moment later is refused).
+- The page reader behind tailored résumés (`src/lib/jobs/page.ts`) checks the
+  address each connection is really made to (a name that points somewhere
+  private a moment later is refused).
 - In Supabase's settings (done by hand): "Allow new users to sign up" off,
   "Confirm email" and "Secure email change" on, and Realtime's "Allow public
   access" off.
@@ -450,15 +451,23 @@ own, changeable under Plans).
   any text (bare links, `Title | Company | link` lines, a newsletter); there is
   no button: the bot saves every link at once (tracking parts taken off,
   LinkedIn and Indeed links reduced to the job's own address, a link already
-  posted left out, so each job is posted once), says so with an Undo, then
-  reads each posting, twelve at a time on the server (`readJobs` in
-  `src/lib/jobs/actions.ts`: admins only, public addresses only, six seconds
-  each), for its title, the company hiring and where: first from what the page
-  tells search engines (schema.org JobPosting), then from its title; a hiring
-  site's own name is never taken for the company, and what an admin typed is
-  kept. It reports each job as it goes, and those whose page would not say, to
-  be named with ✎. The day's list below shows, for each job, how many on the
-  team have applied, its interviews, offers and hires, and who is where.
+  posted left out, so each job is posted once) and says so with an Undo. A paste
+  saves just the links, and they stay in the box. **Send** (or Enter) hands what
+  is in the box to the Jobright bot (`jobs_ask_bot`,
+  `supabase/migrations/20261102090000_job_reads.sql`): any link not yet on the
+  list is saved, and each one waits in `job_reads` for a free bot. The bot's own
+  Chrome opens it, the Job Intelligence extension scans the page (its
+  `ui/get-tab-state`, never its Save: nothing goes to the board, the Google Sheet
+  or Jobright, and no card is used), and `job_bot_read_done` writes the job
+  description, company, title and place on the job. What an admin typed with the
+  link stays; sending a link again reads it afresh. A closed job's page (sent on
+  to the site's list, or a title like "Sorry, we couldn't find anything") gives
+  nothing and counts as failed. The Jobs bot says live how far it has got, why
+  links are waiting (no bot, offline, too old, on a run), and which could not be
+  read, to be named with ✎. Ten are handed over at a time, after any run waiting.
+  Bots before 1.3.0 are handed none. The day's list below shows, for each job,
+  how many on the team have applied, its interviews, offers and hires, and who is
+  where.
 - **The Jobright bot** (Jobs tab, under the jobs bot;
   `src/components/jobs/jobs-jobright.tsx`,
   `supabase/migrations/20261029210000_jobright_bot.sql`). Job Saving Bot, the
@@ -935,7 +944,8 @@ Once, in this order:
    `supabase/migrations/20261029180000_security.sql` (admins by account, tries counted, meeting channels and chat files locked down), then
    `supabase/migrations/20261029210000_jobright_bot.sql` (the Jobright bot: a computer's Job Saving Bot, run from the job desk), then
    `supabase/migrations/20261029230000_admin_devices.sql` (admins on their own devices only; then switch on the hook under Authentication → Hooks → Customize Access Token → `public.custom_access_token_hook`), then
-   `supabase/migrations/20261030090000_resume_tailor.sql` (tailored résumés: each job's description, members' base résumés and those made for jobs).
+   `supabase/migrations/20261030090000_resume_tailor.sql` (tailored résumés: each job's description, members' base résumés and those made for jobs), then
+   `supabase/migrations/20261102090000_job_reads.sql` (links sent to the Jobright bot for its browser to read).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto

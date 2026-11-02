@@ -82,25 +82,6 @@ export function parseLinks(text: string): { jobs: PastedJob[]; skipped: number }
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—" };
-const decode = (text: string) => text
-  .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-  .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-  .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole)
-  .replace(/\s+/g, " ").trim();
-
-function meta(html: string, name: string) {
-  const tag = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]*>`, "i"))?.[0];
-  return tag ? decode(tag.match(/content=["']([^"']*)["']/i)?.[1] ?? "") || null : null;
-}
-
-export type PageFacts = { title: string | null; company: string | null; location: string | null };
-
-/** Hiring sites' own names: never taken for the company hiring. */
-const SITE_NAMES = /^(greenhouse|lever|ashby|workday|linkedin|indeed|glassdoor|ziprecruiter|smartrecruiters|workable|bamboohr|jobvite|recruitee|breezy|teamtailor|wellfound|angellist|monster|dice|built ?in|otta|jobs?|careers?)\b/i;
-const word = (value: unknown) => typeof value === "string" ? decode(value) || null : null;
-const records = (value: unknown): Record<string, unknown>[] =>
-  (Array.isArray(value) ? value : [value]).filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
-
 /** The job as the page describes it for search engines (schema.org JobPosting,
  * the data Google for Jobs reads): most hiring sites give it. */
 function posting(html: string): Record<string, unknown> | null {
@@ -117,23 +98,6 @@ function posting(html: string): Record<string, unknown> | null {
       if (type === "JobPosting" || (Array.isArray(type) && type.includes("JobPosting"))) return record;
       if (record["@graph"]) queue.push(record["@graph"]);
     }
-  }
-  return null;
-}
-
-/** Where a posting is: "Remote" (with where from, if it says), or its city and country. */
-function placeOf(job: Record<string, unknown>) {
-  const remote = String(job.jobLocationType ?? "").toUpperCase() === "TELECOMMUTE";
-  const allowed = records(job.applicantLocationRequirements).map(entry => word(entry.name)).filter((name): name is string => !!name);
-  if (remote) return allowed.length ? `Remote (${allowed.slice(0, 2).join(", ")})` : "Remote";
-  for (const spot of records(job.jobLocation)) {
-    const address = spot.address;
-    if (typeof address === "string") return word(address);
-    const [parts] = records(address);
-    if (!parts) continue;
-    const country = typeof parts.addressCountry === "object" ? records(parts.addressCountry)[0]?.name : parts.addressCountry;
-    const said = [parts.addressLocality, parts.addressRegion, country].map(word).filter(Boolean).join(", ");
-    if (said) return said;
   }
   return null;
 }
@@ -161,38 +125,4 @@ export function descriptionFromPage(html: string): string | null {
   const job = posting(html);
   const text = typeof job?.description === "string" ? plainText(job.description) : "";
   return text.length >= 80 ? text.slice(0, 30000) : null;
-}
-
-/** What a job's own page says about it: first what it tells search engines
- * (its title, the company hiring and where), then its title, read in the known
- * ways the hiring sites write them. A hiring site's own name is never the company. */
-export function factsFromPage(link: string, html: string): PageFacts {
-  const host = (() => { try { return new URL(link).hostname.toLowerCase(); } catch { return ""; } })();
-  const job = posting(html);
-  const told: PageFacts = job ? {
-    title: word(job.title),
-    company: (() => { const name = word(typeof job.hiringOrganization === "string" ? job.hiringOrganization : records(job.hiringOrganization)[0]?.name); return name && !SITE_NAMES.test(name) ? name : null; })(),
-    location: placeOf(job),
-  } : { title: null, company: null, location: null };
-  const said = meta(html, "og:title") ?? decode(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
-  const read = ((): PageFacts => {
-    if (!said) return { title: null, company: null, location: null };
-    let match = said.match(/^(.+?) hiring (.+?) in (.+?) \| LinkedIn$/i);
-    if (match) return { company: match[1], title: match[2], location: match[3] };
-    match = said.match(/^Job Application for (.+) at (.+)$/i);
-    if (match) return { title: match[1], company: match[2], location: null };
-    if (/indeed\./.test(host)) {
-      match = said.match(/^(.+?) - (.+?) - (.+?)(?: \| Indeed\.com)?$/i);
-      if (match) return { title: match[1], company: match[2], location: match[3] };
-    }
-    if (host === "jobs.lever.co" && said.includes(" - ")) {
-      const [company, ...rest] = said.split(" - ");
-      return { title: rest.join(" - "), company, location: null };
-    }
-    const title = said.replace(/\s*[|–—-]\s*(LinkedIn|Indeed(\.com)?|Glassdoor|Careers?|Jobs?|Job Board)\s*$/i, "");
-    const site = meta(html, "og:site_name");
-    return { title: title || null, company: site && !SITE_NAMES.test(site) ? site : null, location: null };
-  })();
-  const keep = (value: string | null, size: number) => value ? value.slice(0, size) : null;
-  return { title: keep(told.title ?? read.title, 200), company: keep(told.company ?? read.company, 120), location: keep(told.location ?? read.location, 120) };
 }
