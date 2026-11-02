@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Script Demo</title>
+<style>
+  body { margin: 0; padding: 24px; background: #1f1f1f; color: #fff; font: 20px/1.5 "Segoe UI", sans-serif; }
+  button { font: inherit; padding: 10px 24px; border: 0; border-radius: 8px; background: #3b82f6; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin-left: 12px; font-size: 14px; color: #aaa; }
+  #script { margin-top: 20px; height: 70vh; overflow-y: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<button id="toggle" disabled>Turn on captions</button>
+<span id="status">Connecting...</span>
+<div id="script"></div>
+<script>
+  const button = document.getElementById("toggle");
+  const statusText = document.getElementById("status");
+  const script = document.getElementById("script");
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  let state = "loading";
+  let shown = "";
+  let target = "";
+
+  // The model delivers words in small bursts, so show them one at a time.
+  function reveal() {
+    if (shown !== target) {
+      if (!target.startsWith(shown)) {
+        shown = target.split(" ").slice(0, shown.split(" ").length).join(" ");
+      } else {
+        const rest = target.slice(shown.length);
+        const next = rest.trimStart().indexOf(" ");
+        const length = rest.length - rest.trimStart().length + (next === -1 ? rest.trimStart().length : next);
+        shown += rest.slice(0, length);
+      }
+      const follow = script.scrollTop + script.clientHeight >= script.scrollHeight - 40;
+      script.textContent = shown;
+      if (follow) script.scrollTop = script.scrollHeight;
+    }
+    const waiting = target.length > shown.length ? target.slice(shown.length).trim().split(" ").length : 1;
+    setTimeout(reveal, Math.max(30, Math.min(100, 250 / waiting)));
+  }
+  reveal();
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === "text") {
+      target = message.text;
+      if (!target) { shown = ""; script.textContent = ""; }
+    } else if (message.type === "state") {
+      state = message.state;
+      statusText.textContent = message.detail;
+      button.disabled = state === "loading";
+      button.textContent = state === "listening" ? "Turn off captions" : "Turn on captions";
+    } else if (message.type === "error") {
+      statusText.textContent = "Error: " + message.message;
+    }
+  };
+  ws.onclose = () => { statusText.textContent = "Not connected. Is the service running?"; button.disabled = true; };
+  button.onclick = () => ws.send(JSON.stringify({ action: state === "listening" ? "stop" : "start" }));
+</script>
+</body>
+</html>

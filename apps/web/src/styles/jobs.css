@@ -501,3 +501,50 @@
 .time-bar-text { font-size: 12.5px; color: var(--ink-soft); }
 @media (prefers-reduced-motion: reduce) { .time-bar-fill { transition: none; } }
 .any-job-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+
+/* ───────── The Interview page: the live script ───────── */
+.interview { display: grid; gap: 16px; padding-block: 24px 32px; }
+.interview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.interview-title { margin-bottom: 6px; font-size: 26px; font-weight: 700; color: var(--ink); }
+.interview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.interview-setup { display: grid; justify-items: start; gap: 8px; }
+.interview-script { height: 58vh; min-height: 280px; padding: 20px 24px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--card-line); border-radius: 18px; background: var(--card); color: var(--ink); font-size: 21px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.interview-script:empty::before { content: attr(data-placeholder); color: var(--ink-mute); }
+.interview-note { max-width: 78ch; }
+@media (max-width: 640px) {
+  .interview-script { padding: 14px 16px; font-size: 18px; }
+}
+/* While the live script is on, this bar follows the member onto every KIASA page. */
+.live-watch-bar { position: fixed; z-index: 90; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 10px 12px 10px 16px; border: 1px solid rgb(242 211 107 / 0.5); border-radius: 999px; background: #1c1a10; box-shadow: 0 10px 30px rgb(0 0 0 / 0.5); font-size: 14px; line-height: 1.4; color: var(--ink-soft); }
+.live-watch-bar b { color: #f2d36b; font-weight: 650; }
+.live-watch-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #f2d36b; box-shadow: 0 0 0 3px rgb(242 211 107 / 0.2); }
+.live-watch-off { flex: none; height: 32px; padding: 0 14px; border-radius: 999px; background: var(--night-control); color: var(--ink); font-size: 13.5px; font-weight: 650; cursor: pointer; transition: background-color 0.15s; }
+.live-watch-off:hover { background: #2a2a2a; }
+@media (max-width: 560px) { .live-watch-bar { font-size: 13px; padding: 8px 10px 8px 14px; } }
+
+/* The admin's Live scripts: whose is on, beside the one being read. */
+.live-now { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); align-items: start; gap: 16px; }
+.live-now-list { display: grid; gap: 4px; }
+.live-now-person { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; width: 100%; padding: 10px; border-radius: 12px; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+.live-now-person:hover { background: rgb(236 255 243 / 0.06); }
+.live-now-person[aria-current] { background: rgb(184 236 147 / 0.14); }
+.live-now-dot { background: var(--leaf); transform: none; }
+.live-now-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.live-now-since { font-size: 12.5px; color: var(--ink-mute); }
+.live-now-reading { display: grid; gap: 10px; min-width: 0; }
+.live-cards { display: grid; align-content: start; gap: 5px; min-height: 120px; max-height: 66vh; padding: 8px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--card-line); border-radius: 14px; background: #0a120d; }
+.live-cards-empty { margin: 0; padding: 14px; color: var(--ink-mute); font-size: 14px; }
+.live-card { position: relative; margin: 0; padding: 7px 12px; border: 1px solid transparent; border-radius: 9px; background: var(--night-raised); color: var(--ink-soft); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; user-select: none; cursor: pointer; transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease; }
+.live-card:hover { background: #16211a; color: var(--ink); }
+/* The sentence still being written: brighter, with a soft caret after it. */
+.live-card[data-live] { color: var(--ink); border-color: rgb(184 236 147 / 0.22); }
+.live-card[data-live]::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 4px; vertical-align: text-bottom; border-radius: 1px; background: var(--leaf); animation: live-caret 1.05s steps(1) infinite; }
+@keyframes live-caret { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .live-card[data-live]::after { animation: none; } }
+/* Chosen cards, to copy. */
+.live-card[data-picked] { background: rgb(184 236 147 / 0.15); border-color: var(--leaf); color: var(--ink); }
+.live-card[data-following] { box-shadow: 0 0 0 1px var(--leaf); }
+@media (max-width: 760px) {
+  .live-now { grid-template-columns: minmax(0, 1fr); }
+  .live-card { font-size: 13.5px; }
+}

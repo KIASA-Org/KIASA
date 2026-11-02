@@ -283,11 +283,12 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .app-bar-brand { display: inline-flex; flex: none; align-items: center; gap: 10px; color: var(--ink); }
 .app-bar-brand .practice-mark { width: 34px; height: 34px; }
 .app-bar-word { font-size: 18px; font-weight: 700; letter-spacing: 0.08em; }
-.app-bar-tabs { display: flex; align-self: stretch; gap: 2px; }
-.app-bar-tab { display: inline-flex; align-items: center; padding: 0 14px; color: var(--ink-soft); font-size: 15px; font-weight: 600; box-shadow: inset 0 -2px 0 transparent; transition: color 0.2s, box-shadow 0.2s; }
+.app-bar-tabs { display: flex; align-self: stretch; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.app-bar-tabs::-webkit-scrollbar { display: none; }
+.app-bar-tab { display: inline-flex; flex: none; align-items: center; padding: 0 14px; white-space: nowrap; color: var(--ink-soft); font-size: 15px; font-weight: 600; box-shadow: inset 0 -2px 0 transparent; transition: color 0.2s, box-shadow 0.2s; }
 .app-bar-tab:hover { color: var(--ink); }
 .app-bar-tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--leaf); }
-.app-bar-me { position: relative; margin-left: auto; }
+.app-bar-me { position: relative; flex: none; margin-left: auto; }
 .app-bar-who { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 5px; border-radius: 999px; color: var(--ink); cursor: pointer; transition: background-color 0.2s; }
 .app-bar-who:hover, .app-bar-who[aria-expanded="true"] { background: rgb(236 255 243 / 0.07); }
 .app-bar .account-initials { width: 36px; height: 36px; border-radius: 50%; font-size: 13px; }
