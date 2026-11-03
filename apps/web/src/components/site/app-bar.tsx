@@ -10,7 +10,7 @@ import { useMark } from "./ranks";
 import { ChevronDown, Leave } from "./icons";
 import { YourPhoto } from "./your-photo";
 
-export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "live";
+export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live";
 /** Who is signed in, as the bar shows them. `id` and `photo` once accounts are connected. */
 export type AppPerson = { id?: string; name: string; detail: string; admin: boolean; photo?: string | null };
 
@@ -23,6 +23,7 @@ const AREAS: { area: AppArea; href: string; label: string; admins?: true }[] = [
   { area: "chat", href: "/chat", label: "Chat" },
   { area: "jobs", href: "/jobs", label: "Job desk" },
   { area: "interview", href: "/interview", label: "Interview" },
+  { area: "apply", href: "/apply", label: "Auto apply" },
 ];
 
 /** The bar along the top of KIASA's private areas (the admin's console, Chat
