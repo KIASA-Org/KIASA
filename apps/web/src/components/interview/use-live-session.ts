@@ -101,8 +101,7 @@ export function useLiveSession(me: string, realtime: { url: string; key: string 
     return () => { stop(); };
   }, [on, start, stop]);
 
-  // A row left by an earlier page (closed, or reloaded) is not this page's.
-  useEffect(() => { removeRow(); }, [removeRow]);
-
+  // A row left by a closed page goes stale and drops off by itself. It is not for a page
+  // opening to clear it: that row may be another tab's, with the script still on.
   return { live, changed };
 }
