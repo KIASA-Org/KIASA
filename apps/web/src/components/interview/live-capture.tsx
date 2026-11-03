@@ -1,19 +1,20 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { Words } from "./live-words";
 import { useLiveSession } from "./use-live-session";
 
 /** The KIASA Live Script app on this PC (apps/live-script): a small service that
- * turns what the PC plays into text. This provider sits in the root layout, so
+ * turns what the PC plays into text, with KIASA's own speech model or with Windows'
+ * Live Captions, as the member chooses. This provider sits in the root layout, so
  * once the member turns the live script on it keeps running as they move around
  * KIASA (to the Job desk and back), not only on the Interview page. While it is
  * on, a KIASA admin can read it, and the bar below says so on every page. */
 const PORT = process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "8765";
 const SERVICE = `ws://127.0.0.1:${PORT}/ws`;
 const APP_LINK = "kiasa-live://start";
-const DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/live-script-1.0.0/KIASA-Live-Script.zip";
+const DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/live-script-1.1.0/KIASA-Live-Script.zip";
 /** How long the app has to answer before the page offers the download. */
 const ANSWER_MS = 8000;
 const RETRY_MS = 800;
@@ -24,7 +25,26 @@ const RESUMING = "kiasa-live-capturing";
 const rememberOn = (on: boolean) => { try { if (on) sessionStorage.setItem(RESUMING, "1"); else sessionStorage.removeItem(RESUMING); } catch { /* fine */ } };
 const wasOn = () => { try { return sessionStorage.getItem(RESUMING) === "1"; } catch { return false; } };
 
-export type Phase = "off" | "looking" | "loading" | "ready" | "listening" | "failed";
+export type Phase = "off" | "looking" | "loading" | "ready" | "connecting" | "listening" | "failed";
+
+/** Where the words come from. Each member's choice, kept in their browser. */
+export type Source = "kiasa" | "system";
+const SOURCE_KEY = "kiasa-live-source";
+let pickedSource: Source | null = null; // for a browser that will not store it
+const sourceListeners = new Set<() => void>();
+const chosenSource = (): Source => {
+  if (pickedSource) return pickedSource;
+  try { return localStorage.getItem(SOURCE_KEY) === "system" ? "system" : "kiasa"; } catch { return "kiasa"; }
+};
+const chooseSource = (source: Source) => {
+  pickedSource = source;
+  try { localStorage.setItem(SOURCE_KEY, source); } catch { /* It lasts until this page is reloaded. */ }
+  sourceListeners.forEach(listener => listener());
+};
+const onSourceChange = (listener: () => void) => {
+  sourceListeners.add(listener);
+  return () => { sourceListeners.delete(listener); };
+};
 
 /** Chrome asks before a website may reach this PC (Local Network Access); if the member said no, no connection can work. */
 export const BLOCKED = "Your browser is blocking KIASA from reaching the app on this PC. Click the icon left of the address, open Site settings, allow KIASA to reach this PC (it may say Local network), then reload this page.";
@@ -40,6 +60,10 @@ async function blocked() {
 
 type Capture = {
   phase: Phase; detail: string; problem: string; missing: boolean; hasText: boolean; on: boolean;
+  /** The capture in use, or else the one chosen. */
+  source: Source; chooseSource: (source: Source) => void;
+  /** The app on this PC is too old for the capture chosen. */
+  outdated: boolean;
   /** How far the first-run speech model download has got, 0–1, while it is going. */
   progress: number | null;
   turnOn: () => void; turnOff: () => void; dismissSetup: () => void;
@@ -69,6 +93,9 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
   const [missing, setMissing] = useState(false);
   const [hasText, setHasText] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [outdated, setOutdated] = useState(false);
+  const chosen = useSyncExternalStore(onSourceChange, chosenSource, () => "kiasa" as const);
+  const [inUse, setInUse] = useState<Source | null>(null);
 
   const socket = useRef<WebSocket | null>(null);
   const wantsStart = useRef(false);
@@ -77,6 +104,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
   const retry = useRef<number>(0);
   const again = useRef<() => void>(() => {});
   const resuming = useRef(false);
+  const appSources = useRef<string[]>([]);
   const [words] = useState(() => new Words());
 
   const on = phase === "listening";
@@ -93,29 +121,53 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     return () => { stopped = true; };
   }, [realtime.url, realtime.key]);
 
+  /** Start the chosen capture, if the app on this PC has it. An app from before system
+   * live capture would take the request for its own kind: closing on it instead lets it
+   * idle away, and the page asks for the new one. */
+  const start = useCallback((ws: WebSocket) => {
+    const source = chosenSource();
+    if (source !== "kiasa" && !appSources.current.includes(source)) {
+      wantsStart.current = false;
+      resuming.current = false;
+      rememberOn(false);
+      socket.current = null;
+      ws.onclose = null;
+      ws.close();
+      setPhase("off");
+      setOutdated(true);
+      return;
+    }
+    ws.send(JSON.stringify({ action: "start", source }));
+  }, []);
+
   const connect = useCallback(() => {
     if (socket.current) return;
+    appSources.current = [];
     const ws = new WebSocket(SERVICE);
     socket.current = ws;
     ws.onmessage = event => {
       const message = JSON.parse(event.data as string);
-      if (message.type === "text") {
+      if (message.type === "hello") {
+        appSources.current = message.sources ?? [];
+      } else if (message.type === "text") {
         words.set(message.text);
         setHasText(!!message.text);
         sessionChanged();
       } else if (message.type === "error") {
         wantsStart.current = false;
-        setProblem(`Something went wrong: ${message.message}`);
+        rememberOn(false);
+        setProblem(message.plain ? message.message : `Something went wrong: ${message.message}`);
       } else if (message.type === "state") {
         setPhase(message.state);
         setDetail(message.detail);
         setProgress(typeof message.progress === "number" ? message.progress : null);
+        setInUse(message.source ?? null);
         // Reconnecting (a reload) to an app that is already capturing: just follow it.
-        if (message.state === "listening") { resuming.current = false; wantsStart.current = false; }
-        if (message.state === "ready" && wantsStart.current) {
+        if (message.state === "listening" || message.state === "connecting") { resuming.current = false; wantsStart.current = false; }
+        if ((message.state === "ready" || message.state === "failed") && wantsStart.current) {
           wantsStart.current = false;
           setProblem("");
-          ws.send(JSON.stringify({ action: "start" }));
+          start(ws);
         }
       }
     };
@@ -148,7 +200,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
         retry.current = window.setTimeout(() => again.current(), RETRY_MS);
       });
     };
-  }, [words, sessionChanged]);
+  }, [words, sessionChanged, start]);
 
   useEffect(() => { again.current = connect; }, [connect]);
 
@@ -156,21 +208,20 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     rememberOn(true);
     setProblem("");
     setMissing(false);
+    setOutdated(false);
     wantsStart.current = true;
     opened.current = false;
     deadline.current = Date.now() + ANSWER_MS;
     const ws = socket.current;
-    if (ws?.readyState === WebSocket.OPEN && phase === "ready") {
+    if (ws?.readyState === WebSocket.OPEN && (phase === "ready" || phase === "failed")) {
       wantsStart.current = false;
-      ws.send(JSON.stringify({ action: "start" }));
-    } else if (ws?.readyState === WebSocket.OPEN && phase === "failed") {
-      ws.send(JSON.stringify({ action: "start" }));
+      start(ws);
     } else if (!ws || ws.readyState !== WebSocket.OPEN) {
       setPhase("looking");
       window.clearTimeout(retry.current);
       connect();
     }
-  }, [phase, connect]);
+  }, [phase, connect, start]);
 
   const turnOff = useCallback(() => {
     rememberOn(false);
@@ -183,6 +234,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     socket.current = null;
     if (ws) { ws.onclose = null; ws.close(); }
     setPhase("off");
+    setInUse(null);
     setHasText(false);
     words.set("");
   }, [words]);
@@ -193,6 +245,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     wantsStart.current = false;
     window.clearTimeout(retry.current);
     setMissing(false);
+    setOutdated(false);
     setPhase("off");
   }, []);
 
@@ -216,7 +269,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     if (ws) { ws.onclose = null; ws.close(); }
   }, [words]);
 
-  const value: Capture = { phase, detail, problem, missing, hasText, on, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText };
+  const value: Capture = { phase, detail, problem, missing, hasText, on, source: inUse ?? chosen, chooseSource, outdated, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText };
 
   return <CaptureContext.Provider value={value}>
     {children}

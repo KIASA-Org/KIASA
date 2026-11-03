@@ -890,19 +890,34 @@ against it on port 3002, and run `npm run sims:local:e2e`.
 
 `/interview`, the tab after the Job desk, for approved members and admins: **Turn
 on live script** writes what the PC plays as text, word by word, on the member's
-own page. The KIASA Live Script app (`apps/live-script`, see its README) does the
-listening, on Windows 10 and 11, on the CPU. A website cannot start a program, so
-the page opens the app's `kiasa-live://` link and connects to it at
-`ws://127.0.0.1:8765`; if no app answers in 8 seconds it shows the download steps.
-Chrome asks once before a website may reach the PC.
+own page. Members and admins each choose where the words come from, and everything
+after that is the same:
+
+- **KIASA live capture**: KIASA's own speech model, on Windows 10 and 11, on the CPU.
+  It downloads the model (about 660 MB) the first time it is turned on.
+- **System live capture**: Windows' own Live Captions (Windows 11, version 22H2 or
+  newer), with nothing more to download from KIASA. The status says *Connecting*,
+  then *Connected*; the captions window is minimised while it works, and goes back as
+  it was found when the script is turned off. If it is closed, it is opened again.
+  If another program opened it as administrator, Windows lets KIASA neither read
+  nor close it: the page asks the member to close it, and connects by itself when
+  they do.
+
+The KIASA Live Script app (`apps/live-script`, see its README) does either. A website
+cannot start a program, so the page opens the app's `kiasa-live://` link and connects
+to it at `ws://127.0.0.1:8765`; if no app answers in 8 seconds it shows the download
+steps, and an app too old for system live capture is asked to be updated. Chrome asks
+once before a website may reach the PC.
 
 While the live script is on, the member is on the admin's **Live scripts** page
 (`/admin/live`), where an admin can read anyone's script word by word; the
 member's own page says so, for as long as it is on. The words go over a private
 channel and are never stored; turning the script off takes the member off the
 list at once, and a closed page drops off within 90 seconds. The app keeps a copy
-of each script on the PC when capture stops. It hears only what the PC plays (all of it, mixed), not the
-microphone. Capture stops by itself 15 seconds after the last page closes.
+of each script on the PC when capture stops. KIASA live capture hears only what the
+PC plays (all of it, mixed), not the microphone; system live capture hears the
+microphone as well if the member turned that on in Live Captions' settings. Capture
+stops by itself 15 seconds after the last page closes.
 
 ## Connecting accounts
 

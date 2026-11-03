@@ -506,7 +506,20 @@
 .interview { display: grid; gap: 16px; padding-block: 24px 32px; }
 .interview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .interview-title { margin-bottom: 6px; font-size: 26px; font-weight: 700; color: var(--ink); }
+.interview-head > :first-child { flex: 1 1 320px; min-width: 0; } /* a long status wraps here, and leaves the buttons in place */
 .interview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* KIASA live capture, or system live capture. */
+.interview-source { display: inline-flex; gap: 2px; height: 38px; padding: 3px; border-radius: 19px; background: var(--night-control); }
+.interview-source button { padding: 0 14px; border-radius: 16px; color: var(--ink-soft); font-size: 13.5px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.interview-source button:hover { color: var(--ink); }
+.interview-source button[aria-checked="true"] { background: rgb(184 236 147 / 0.14); color: var(--leaf); }
+.interview-source button:disabled { cursor: default; }
+.interview-source button:disabled:not([aria-checked="true"]) { opacity: 0.45; }
+.interview-source button:disabled:not([aria-checked="true"]):hover { color: var(--ink-soft); }
+@media (max-width: 560px) {
+  .interview-source { width: 100%; }
+  .interview-source button { flex: 1; padding: 0 6px; font-size: 13px; }
+}
 .interview-setup { display: grid; justify-items: start; gap: 8px; }
 /* First run: how far the speech model download has got. */
 .interview-progress { position: relative; height: 8px; overflow: hidden; border-radius: 999px; background: rgb(236 255 243 / 0.08); }
