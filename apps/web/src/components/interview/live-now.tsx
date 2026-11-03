@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { browserClient } from "@/lib/accounts/browser";
+import { useLiveCapture } from "./live-capture";
 import { scriptTopic } from "./live-words";
 
 type Session = { user_id: string; started_at: string };
@@ -86,9 +87,25 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
 
   const stillOn = !!open && sessions.some(session => session.user_id === open);
 
+  // An admin's own script, written in this very tab, is read straight from the capture. It
+  // cannot come over its channel: a tab has one connection, which already holds that channel
+  // to send on and does not hear itself. Asking for the channel again gives back the same one,
+  // so nothing would ever arrive, and closing it would cut off anyone else reading these words.
+  const { me, on: writingHere, scriptText, onScript } = useLiveCapture();
+  const mine = !!open && open === me && writingHere;
+  useEffect(() => {
+    if (!mine) return;
+    const show = () => {
+      setText(scriptText());
+      setOpening(false);
+    };
+    show();
+    return onScript(show);
+  }, [mine, scriptText, onScript]);
+
   // The script open now: the whole of it when it opens, then each change.
   useEffect(() => {
-    if (!open) return;
+    if (!open || mine) return;
     let channel: RealtimeChannel | null = null;
     let stopped = false;
     let cur = "";
@@ -116,7 +133,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
       stopped = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [supabase, open]);
+  }, [supabase, open, mine]);
 
   // The words arrive in bursts (the speech model emits several at a time). Show them one
   // after another, fast, so the admin reads a live stream rather than blocks appearing.

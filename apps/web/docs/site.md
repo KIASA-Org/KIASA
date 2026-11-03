@@ -910,8 +910,8 @@ steps, and an app too old for system live capture is asked to be updated. Chrome
 once before a website may reach the PC.
 
 While the live script is on, the member is on the admin's **Live scripts** page
-(`/admin/live`), where an admin can read anyone's script word by word; the
-member's own page says so, for as long as it is on. The words go over a private
+(`/admin/live`), where an admin can read anyone's script word by word, their own
+too; the member's own page says so, for as long as it is on. The words go over a private
 channel and are never stored; turning the script off takes the member off the
 list at once, and a closed page drops off within 90 seconds. The app keeps a copy
 of each script on the PC when capture stops. KIASA live capture hears only what the

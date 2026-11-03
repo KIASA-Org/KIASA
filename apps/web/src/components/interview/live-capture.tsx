@@ -69,6 +69,9 @@ type Capture = {
   turnOn: () => void; turnOff: () => void; dismissSetup: () => void;
   attachBox: (el: HTMLDivElement | null) => void;
   scriptText: () => string;
+  /** Who this is, and a way to hear each change of the script being written in this tab. */
+  me: string | null;
+  onScript: (listener: () => void) => () => void;
 };
 const CaptureContext = createContext<Capture | null>(null);
 
@@ -105,10 +108,16 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
   const again = useRef<() => void>(() => {});
   const resuming = useRef(false);
   const appSources = useRef<string[]>([]);
+  const scriptListeners = useRef(new Set<() => void>());
   const [words] = useState(() => new Words());
 
   const on = phase === "listening";
   const scriptText = useCallback(() => words.target, [words]);
+  const onScript = useCallback((listener: () => void) => {
+    const listeners = scriptListeners.current;
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
   const session = useLiveSession(me ?? "", realtime, scriptText, on && !!me);
   const sessionChanged = session.changed;
 
@@ -153,6 +162,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
         words.set(message.text);
         setHasText(!!message.text);
         sessionChanged();
+        scriptListeners.current.forEach(listener => listener());
       } else if (message.type === "error") {
         wantsStart.current = false;
         rememberOn(false);
@@ -269,7 +279,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     if (ws) { ws.onclose = null; ws.close(); }
   }, [words]);
 
-  const value: Capture = { phase, detail, problem, missing, hasText, on, source: inUse ?? chosen, chooseSource, outdated, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText };
+  const value: Capture = { phase, detail, problem, missing, hasText, on, source: inUse ?? chosen, chooseSource, outdated, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText, me, onScript };
 
   return <CaptureContext.Provider value={value}>
     {children}
