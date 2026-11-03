@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KIASA settings</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #050a07;
+    --panel: #0d1611;
+    --line: #2a3d32;
+    --text: #eefcf2;
+    --soft: #a3b8aa;
+    --accent: #b7ee8b;
+    --bad: #ffa597;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; overflow-y: auto; padding: 22px 26px 8px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  header img { width: 48px; height: 48px; }
+  h1 { font-size: 21px; font-weight: 600; margin: 0; }
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choice {
+    display: flex; gap: 9px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 11px 13px; cursor: pointer;
+  }
+  .choice:has(input:checked) { border-color: var(--accent); }
+  .choice input { accent-color: var(--accent); margin: 0; }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field > span { display: block; margin-bottom: 4px; color: var(--soft); font-size: 13.5px; }
+  input[type=text], input[type=password], select {
+    width: 100%; height: 38px; padding: 0 11px;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 7px;
+    font: inherit;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .row { display: grid; gap: 10px; }
+  .address { grid-template-columns: 104px 1fr 92px; }
+  .login { grid-template-columns: 1fr 1fr; }
+  .hint { color: var(--soft); font-size: 13px; margin: -6px 0 14px; }
+  footer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 26px 18px; border-top: 1px solid var(--line);
+  }
+  #status { flex: 1; font-size: 13.5px; min-height: 19px; overflow-wrap: anywhere; }
+  #status.bad { color: var(--bad); }
+  #status.good { color: var(--accent); }
+  button {
+    height: 38px; padding: 0 16px; border-radius: 7px; font: inherit; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--text);
+    white-space: nowrap;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0a1a0f; }
+  button:disabled { opacity: .55; cursor: default; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<form id="form" autocomplete="off" style="display:contents">
+<main>
+  <header>
+    <img src="logo.png" alt="">
+    <h1>KIASA settings</h1>
+  </header>
+
+  <fieldset>
+    <legend>KIASA connection</legend>
+    <label class="field">
+      <span id="link-label">Paste the code from the Auto apply page of KIASA</span>
+      <input type="text" id="link" placeholder="KIASA-APP1." spellcheck="false">
+    </label>
+    <p class="hint" id="link-hint">This lets you and the KIASA admins see that this browser is working. Only its status is sent, never what is on a page.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>How should KIASA connect to the internet?</legend>
+    <div class="choices">
+      <label class="choice"><input type="radio" name="mode" value="proxy" checked> Use a proxy</label>
+      <label class="choice"><input type="radio" name="mode" value="direct"> No proxy</label>
+    </div>
+  </fieldset>
+
+  <div id="proxy-fields">
+    <label class="field">
+      <span>Paste your proxy here to fill in the boxes below</span>
+      <input type="text" id="paste" placeholder="address:port:username:password" spellcheck="false">
+    </label>
+
+    <div class="row address">
+      <label class="field"><span>Type</span>
+        <select id="scheme">
+          <option value="http">HTTP</option>
+          <option value="https">HTTPS</option>
+          <option value="socks5">SOCKS5</option>
+        </select>
+      </label>
+      <label class="field"><span>Address</span><input type="text" id="host" spellcheck="false"></label>
+      <label class="field"><span>Port</span><input type="text" id="port" inputmode="numeric" spellcheck="false"></label>
+    </div>
+    <div class="row login">
+      <label class="field"><span>Username</span><input type="text" id="username" spellcheck="false"></label>
+      <label class="field"><span>Password</span><input type="password" id="password"></label>
+    </div>
+    <p class="hint">Your password is stored encrypted, and only your Windows account on this computer can read it.</p>
+  </div>
+</main>
+
+<footer>
+  <div id="status" role="status"></div>
+  <button type="button" id="test">Test connection</button>
+  <button type="submit" id="save" class="primary">Save</button>
+</footer>
+</form>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fields = ["scheme", "host", "port", "username", "password"];
+
+  const say = (text, kind) => {
+    $("status").textContent = text || "";
+    $("status").className = kind || "";
+  };
+  const mode = () => document.querySelector("input[name=mode]:checked").value;
+  const showFields = () => { $("proxy-fields").hidden = mode() !== "proxy"; $("test").hidden = mode() !== "proxy"; };
+  const collect = () => ({
+    enabled: mode() === "proxy",
+    scheme: $("scheme").value,
+    host: $("host").value.trim(),
+    port: $("port").value.trim(),
+    username: $("username").value.trim(),
+    password: $("password").value,
+    link: $("link").value.trim(),
+  });
+  const post = async (path, body) => {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return res.json();
+  };
+  const busy = (on) => { $("test").disabled = on; $("save").disabled = on; };
+
+  document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", () => { say(""); showFields(); }));
+
+  $("paste").addEventListener("input", async () => {
+    const text = $("paste").value.trim();
+    if (!text) return say("");
+    const got = await post("parse", { text });
+    if (got.error) return say(got.error, "bad");
+    fields.forEach((f) => { $(f).value = got[f] ?? ""; });
+    $("password").placeholder = "";
+    $("paste").value = "";
+    say("Filled in. Test the connection, or save.");
+  });
+
+  $("test").addEventListener("click", async () => {
+    busy(true);
+    say("Testing the connection. This can take up to 30 seconds.");
+    try {
+      const got = await post("test", collect());
+      if (got.error) say(got.error, "bad");
+      else say("It works. Websites will see the address " + got.address + ".", "good");
+    } catch { say("The test could not run. Please try again.", "bad"); }
+    busy(false);
+  });
+
+  $("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    busy(true);
+    say("Saving.");
+    try {
+      const got = await post("save", collect());
+      if (got.error) { say(got.error, "bad"); busy(false); return; }
+      say("Saved.", "good");
+      window.close();
+    } catch { say("Could not save. Please try again.", "bad"); busy(false); }
+  });
+
+  (async () => {
+    const res = await fetch("state");
+    const state = await res.json();
+    document.querySelector(`input[name=mode][value=${state.firstRun || state.enabled ? "proxy" : "direct"}]`).checked = true;
+    if (state.scheme) $("scheme").value = state.scheme;
+    $("host").value = state.host || "";
+    $("port").value = state.port || "";
+    $("username").value = state.username || "";
+    if (state.hasPassword) $("password").placeholder = "Saved. Leave empty to keep it.";
+    if (state.linked) {
+      $("link-label").textContent = "Connected to KIASA. Paste a new code to replace it.";
+    }
+    if (state.notice) say(state.notice, "bad");
+    showFields();
+  })();
+</script>
+</body>
+</html>

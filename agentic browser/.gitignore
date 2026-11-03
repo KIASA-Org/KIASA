@@ -1,0 +1,15 @@
+# Browser profiles (cookies and saved logins)
+profiles/
+
+# Compiled binaries
+*.exe
+*.test
+/stealth-app
+/dist/
+
+# Environment files
+.env
+.env.*
+
+# Generated reports
+stealth_report.png
