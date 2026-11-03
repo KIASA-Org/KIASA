@@ -48,6 +48,11 @@ func SettingsPath() string {
 	return filepath.Join(DataDir(), "settings.json")
 }
 
+// LogPath is the log file.
+func LogPath() string {
+	return filepath.Join(LogDir(), "kiasa.log")
+}
+
 // ProfileDir is the browser profile.
 func ProfileDir() string {
 	return filepath.Join(DataDir(), "Profile")

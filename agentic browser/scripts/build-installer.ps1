@@ -32,6 +32,9 @@ try {
 
         Compress-Archive -Path $app, $icon -DestinationPath $payload -CompressionLevel Optimal
 
+        # Go leaves an up-to-date program as it is, which would keep the payload
+        # added to it last time and add another. Start from nothing.
+        Remove-Item -LiteralPath $setup -Force -ErrorAction SilentlyContinue
         & go build -trimpath -ldflags $ldflags -o $setup .\cmd\setup
         if ($LASTEXITCODE -ne 0) {
             throw "Building KIASA-Setup.exe failed with exit code $LASTEXITCODE."

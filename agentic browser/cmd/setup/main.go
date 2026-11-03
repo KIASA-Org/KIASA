@@ -16,6 +16,7 @@ import (
 	"unicode/utf16"
 
 	"stealth-app/internal/brand"
+	"stealth-app/internal/winmsg"
 )
 
 const payloadMarker = "KIASA001"
@@ -42,7 +43,15 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "KIASA setup failed:", err)
+		winmsg.Error("KIASA Setup", "KIASA could not be installed.\n\n"+err.Error())
 		os.Exit(1)
+	}
+	// A fresh install opens KIASA at once, so the person goes straight on to
+	// connecting it. Updating, checking and uninstalling do not.
+	if !*verify && !*uninstall {
+		if err := exec.Command(brand.AppExe(dir)).Start(); err != nil {
+			winmsg.Info("KIASA Setup", "KIASA was installed. Open it from the KIASA shortcut on your Desktop.")
+		}
 	}
 }
 

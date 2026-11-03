@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 	"stealth-app/internal/link"
 	"stealth-app/internal/settings"
 	"stealth-app/internal/settingsui"
+	"stealth-app/internal/winmsg"
 	"stealth-app/proxy"
 )
 
@@ -48,6 +50,8 @@ func main() {
 	stealthCheck := flag.Bool("stealth-check", false, "open the browser-fingerprint test page and save its report instead of KIASA's Auto apply page")
 	closeWhenDone := flag.Bool("close-when-done", false, "close a visible browser as soon as the report is saved; by default it stays open until you close it or press Ctrl+C")
 	flag.Parse()
+	closeLog := keepLog()
+	defer closeLog()
 
 	// The browser works only while connected to KIASA: it needs a connection code
 	// from the Auto apply page, and KIASA must accept it. Without one the settings
@@ -74,7 +78,7 @@ func main() {
 				case errors.Is(err, link.ErrNotConnected):
 					needWindow, notice = true, "KIASA does not accept this browser's code any more. Make a new one on the Auto apply page and paste it here."
 				default:
-					log.Fatal("[-] Could not reach KIASA. Check your internet connection and open the KIASA Browser again.")
+					fatalf("Could not reach KIASA. Check your internet connection and open the KIASA Browser again.")
 				}
 			}
 		}
@@ -83,7 +87,7 @@ func main() {
 		}
 		exe, err := findChrome()
 		if err != nil {
-			log.Fatalf("[-] %v", err)
+			fatalf("%v", err)
 		}
 		changed, err := settingsui.Show(settingsui.Options{
 			BrowserExe:    exe,
@@ -93,14 +97,14 @@ func main() {
 			Notice:        notice,
 		})
 		if err != nil {
-			log.Fatalf("[-] Could not open the settings window: %v", err)
+			fatalf("Could not open the settings window: %v", err)
 		}
 		if !changed {
 			log.Println("[*] The KIASA Browser needs the connection code from the Auto apply page, so it did not start. Open it again and paste the code.")
 			return
 		}
 		if saved, err = settings.Load(brand.SettingsPath()); err != nil && !errors.Is(err, settings.ErrNotSet) {
-			log.Fatalf("[-] Saved settings could not be read: %v", err)
+			fatalf("Saved settings could not be read: %v", err)
 		}
 		needWindow, notice = false, ""
 	}
@@ -113,14 +117,15 @@ func main() {
 	// would drop the proxy and connect directly. The arguments aren't printed
 	// because they may contain proxy credentials.
 	if flag.NArg() > 0 {
-		log.Fatal("[-] Unexpected argument after the flags. Booleans need =, as in -headless=false")
+		fatalf("Unexpected argument after the flags. Booleans need =, as in -headless=false")
 	}
 
 	// 1. Pre-flight Proxy Check
 	log.Println("[*] Running pre-flight network verification...")
 	egressIP, err := proxy.ValidateProxy(*proxyURL)
 	if err != nil {
-		log.Fatalf("[-] Network validation failed: %v", err)
+		log.Printf("[-] Network validation failed: %v\n", err)
+		fatalf("The proxy did not work. %s Open the KIASA Browser with -settings to change it.", settingsui.Explain(err))
 	}
 	log.Printf("[+] Connection verified. Egress IP / Mode: %s\n", egressIP)
 
@@ -181,7 +186,14 @@ func main() {
 	if requestedChannel == "auto" {
 		requestedChannel = ""
 	}
+	log.Println("[*] Preparing the browser. The first time this downloads about 100 MB, so it can take a minute.")
+	driver, err := prepareDriver()
+	if err != nil {
+		log.Printf("[-] Preparing the browser failed: %v\n", err)
+		fatalf("KIASA could not prepare its browser for first use. Check your internet connection and open it again. If it keeps happening, send the file %s to KIASA.", brand.LogPath())
+	}
 	page, err := engine.Start(browser.LaunchOptions{
+		Driver:        driver,
 		ProfileName:   *profile,
 		ProfileDir:    profileDir(*profile),
 		Headless:      *headless,
@@ -191,7 +203,8 @@ func main() {
 		FixedViewport: *fixedViewport,
 	})
 	if err != nil {
-		log.Fatalf("[-] Browser launch failed: %v", err)
+		log.Printf("[-] Browser launch failed: %v\n", err)
+		fatalf("The browser could not start. Please try again; if it keeps happening, send the file %s to KIASA.", brand.LogPath())
 	}
 	log.Printf("[+] Browser launched (%s).\n", engine.Channel())
 
@@ -309,4 +322,57 @@ func findChrome() (string, error) {
 		}
 	}
 	return "", errors.New("Google Chrome was not found. Install Google Chrome, then open KIASA again.")
+}
+
+// fatalf ends the program with a message that stays on the screen until it is read.
+func fatalf(format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+	log.Println("[-] " + message)
+	winmsg.Error("KIASA Browser", message)
+	os.Exit(1)
+}
+
+// keepLog also writes the log to a file in the app's data folder, which is started
+// afresh when it grows past a megabyte. It returns what closes the file.
+func keepLog() func() {
+	path := brand.LogPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return func() {}
+	}
+	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if info, err := os.Stat(path); err == nil && info.Size() > 1<<20 {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+	file, err := os.OpenFile(path, flags, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	// The file comes first: a console that is not there must not stop it being written.
+	log.SetOutput(io.MultiWriter(file, os.Stderr))
+	return func() { file.Close() }
+}
+
+// driverOptions says where the driver is. Each use gets its own: the library fills
+// in an options value it is given, and one that was filled in earlier makes it take
+// over the program's log.
+func driverOptions() *playwright.RunOptions {
+	return &playwright.RunOptions{
+		DriverDirectory: filepath.Join(brand.DataDir(), "driver"),
+		// Chrome itself is already installed, as the settings window needs it.
+		SkipInstallBrowsers: true,
+	}
+}
+
+// prepareDriver makes sure the driver that controls Chrome is on this computer. It
+// is downloaded once (about 100 MB), into the app's data folder, so a computer that
+// has never run it works too. It returns the options to start the browser with.
+func prepareDriver() (*playwright.RunOptions, error) {
+	driver, err := playwright.NewDriver(driverOptions())
+	if err != nil {
+		return nil, err
+	}
+	if err := driver.DownloadDriver(); err != nil {
+		return nil, err
+	}
+	return driverOptions(), nil
 }
