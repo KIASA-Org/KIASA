@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	formSel   = `form#application-form, form[class*="application" i], form`
-	submitSel = `button[type="submit"], button[aria-label*="submit" i]`
+	// Ashby renders its application inside div#root, not a <form>; the stand-in uses
+	// #application-form, so both are accepted.
+	formSel   = `#application-form, #root`
+	submitSel = `button:has-text("Submit Application"), button[type="submit"]`
 )
 
 // Ashby applies on Ashby job postings.
@@ -39,33 +41,54 @@ func IsJobLink(link string) bool {
 	return host == "ashbyhq.com" || strings.HasSuffix(host, ".ashbyhq.com")
 }
 
-// Open loads the posting, reveals the application form if it is behind an Apply button, and
-// returns the frame that holds it.
+// Open loads the job and brings up its application form. Ashby only mounts the form after a
+// client-side "Apply for this Job" from the posting page: a direct load of the .../application
+// URL renders nothing, so Open goes to the posting, presses Apply, and waits for the fields.
 func (a *Ashby) Open(page playwright.Page, link string) (playwright.Frame, error) {
-	if _, err := page.Goto(link, playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-		Timeout:   playwright.Float(30000),
-	}); err != nil {
-		return nil, err
+	visit := func(u string) {
+		page.Goto(u, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateDomcontentloaded, Timeout: playwright.Float(30000)})
 	}
-	form := page.Locator(a.Form).First()
-	if err := form.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(6000),
-	}); err != nil {
-		// The form may be behind an "Apply" button.
-		apply := page.GetByRole(*playwright.AriaRoleButton, playwright.PageGetByRoleOptions{Name: "Apply"})
-		if n, _ := apply.Count(); n > 0 {
-			_ = apply.First().Click(playwright.LocatorClickOptions{Timeout: playwright.Float(6000)})
-		}
-		if err := form.WaitFor(playwright.LocatorWaitForOptions{
-			State:   playwright.WaitForSelectorStateVisible,
-			Timeout: playwright.Float(12000),
-		}); err != nil {
-			return nil, ats.ErrNoForm
-		}
+	visit(link)
+	// A form already on the page (the stand-in, or an already-open one).
+	if a.formReady(page, 6000) {
+		return page.MainFrame(), nil
 	}
-	return page.MainFrame(), nil
+	// The form mounts only after Apply on the posting page; a direct .../application is blank.
+	if posting := postingURL(link); posting != link {
+		visit(posting)
+	}
+	if clickApply(page) && a.formReady(page, 20000) {
+		return page.MainFrame(), nil
+	}
+	return nil, ats.ErrNoForm
+}
+
+// formReady waits for a sign the application form has mounted.
+func (a *Ashby) formReady(page playwright.Page, timeout float64) bool {
+	anchor := page.Locator(`button:has-text("Submit Application"), input#_systemfield_email, input#_systemfield_name`).First()
+	return anchor.WaitFor(playwright.LocatorWaitForOptions{State: playwright.WaitForSelectorStateVisible, Timeout: playwright.Float(timeout)}) == nil
+}
+
+// clickApply waits for an "Apply for this Job" button or link to appear (React mounts it a
+// moment after the page loads), then presses it.
+func clickApply(page playwright.Page) bool {
+	apply := page.Locator(`button:has-text("Apply for this Job"), a:has-text("Apply for this Job"), button:has-text("Apply Now"), button:has-text("Apply")`).First()
+	if apply.WaitFor(playwright.LocatorWaitForOptions{State: playwright.WaitForSelectorStateVisible, Timeout: playwright.Float(20000)}) != nil {
+		return false
+	}
+	return apply.Click(playwright.LocatorClickOptions{Timeout: playwright.Float(10000)}) == nil
+}
+
+// postingURL drops the /application step and any query, to get the posting page.
+func postingURL(link string) string {
+	u, err := url.Parse(strings.TrimSpace(link))
+	if err != nil {
+		return link
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/application")
+	return u.String()
 }
 
 // dropdown reads and fills Ashby's React dropdowns, which open a list of options on a key

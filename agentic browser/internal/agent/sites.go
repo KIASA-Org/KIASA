@@ -13,6 +13,9 @@ import (
 	"stealth-app/internal/lever"
 )
 
+// SiteFor exposes the site dispatcher to tools and other packages.
+func SiteFor(link string) (ats.Site, bool) { return siteFor(link) }
+
 // siteFor picks the handler for a job's application site, or says none fits yet.
 func siteFor(link string) (ats.Site, bool) {
 	switch {
