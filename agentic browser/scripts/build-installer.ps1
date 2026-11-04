@@ -1,5 +1,8 @@
 param(
-    [string]$Version = "1.0.0"
+    [string]$Version = "1.0.0",
+    # More build settings, and another folder for the result: only for testing an update end to end.
+    [string]$ExtraFlags = "",
+    [string]$OutDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,13 +12,13 @@ if ($Version -notmatch '^\d+\.\d+\.\d+([+-][0-9A-Za-z.-]+)?$') {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-$dist = Join-Path $root "dist"
+$dist = if ($OutDir) { $OutDir } else { Join-Path $root "dist" }
 $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("kiasa-setup-" + [guid]::NewGuid().ToString("N"))
 $app = Join-Path $dist "KIASA.exe"
 $setup = Join-Path $dist "KIASA-Setup.exe"
 $payload = Join-Path $temp "payload.zip"
 $icon = Join-Path $root "assets\kiasa.ico"
-$ldflags = "-s -w -X stealth-app/internal/brand.Version=$Version"
+$ldflags = "-s -w -X stealth-app/internal/brand.Version=$Version $ExtraFlags".Trim()
 
 New-Item -ItemType Directory -Force -Path $dist, $temp | Out-Null
 

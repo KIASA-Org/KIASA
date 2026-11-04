@@ -16,10 +16,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"stealth-app/internal/modelserver"
 )
+
+// defaultPublicKey is KIASA's public key, set when the program is built for this PC.
+var defaultPublicKey = ""
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8787", "where to listen: keep this on 127.0.0.1, the tunnel connects to it")
@@ -28,10 +32,13 @@ func main() {
 	workers := flag.Int("workers", 1, "how many requests the model works on at once")
 	contextSize := flag.Int("context", 8192, "how much text, in tokens, the model holds at once")
 	database := flag.String("database", "https://lghgwvqgigbmcnxbhdwi.supabase.co", "KIASA's database, which checks each browser's key")
-	publicKey := flag.String("public-key", os.Getenv("KIASA_PUBLIC_KEY"), "KIASA's public key, the one every page of the site has")
+	publicKey := flag.String("public-key", firstOf(os.Getenv("KIASA_PUBLIC_KEY"), defaultPublicKey), "KIASA's public key, the one every page of the site has")
 	address := flag.String("address", "", "where browsers can reach this server, which it tells KIASA")
 	keyFile := flag.String("key-file", filepath.Join(os.Getenv("LOCALAPPDATA"), "KIASA", "model-server-key.txt"), "this server's own key, for telling KIASA where it is")
+	tunnel := flag.String("tunnel", "", "cloudflared, to open a tunnel and tell KIASA its address")
 	flag.Parse()
+	closeLog := keepLog()
+	defer closeLog()
 
 	if *publicKey == "" {
 		log.Fatal("KIASA's public key is needed: set KIASA_PUBLIC_KEY or use -public-key.")
@@ -53,12 +60,33 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go server.Run(ctx)
-	if *address != "" {
+
+	// How the model is, said at once: a window that opens and looks fine should be fine.
+	switch health := server.HealthNow(ctx); {
+	case !health.Ollama:
+		log.Println("[!] Ollama is not answering. Start Ollama: browsers will wait until it is back.")
+	case !health.Installed:
+		log.Printf("[!] Ollama does not have %s. Run: ollama pull %s\n", *model, *model)
+	default:
+		log.Printf("[+] Ollama is running and has %s.\n", *model)
+	}
+
+	current := &whereTo{wake: make(chan struct{}, 1)}
+	current.set(*address)
+	if *tunnel != "" {
+		go modelserver.RunTunnel(ctx, *tunnel, "http://"+*listen, func(found string) {
+			if found != "" {
+				log.Printf("[+] Browsers can reach this server at %s\n", found)
+			}
+			current.set(found)
+		})
+	}
+	if *address != "" || *tunnel != "" {
 		key, err := os.ReadFile(*keyFile)
 		if err != nil {
 			log.Fatalf("[-] This server's key could not be read: %v", err)
 		}
-		go tellKIASA(ctx, *database, *publicKey, strings.TrimSpace(string(key)), *address, server)
+		go tellKIASA(ctx, *database, *publicKey, strings.TrimSpace(string(key)), current, server)
 	}
 
 	front := &http.Server{
@@ -81,27 +109,81 @@ func main() {
 	}
 }
 
-// tellKIASA says where this server is every so often, which is also how browsers and the Auto
-// apply page know it is on.
-func tellKIASA(ctx context.Context, database, publicKey, key, address string, server *modelserver.Server) {
+// whereTo is where browsers can reach this server right now, which a new tunnel changes.
+type whereTo struct {
+	mu      sync.Mutex
+	address string
+	wake    chan struct{}
+}
+
+func (w *whereTo) set(address string) {
+	w.mu.Lock()
+	w.address = address
+	w.mu.Unlock()
+	select {
+	case w.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (w *whereTo) get() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.address
+}
+
+// tellKIASA says where this server is every so often, which is also how browsers and the admins'
+// Model tab know it is on. A new address is told at once.
+func tellKIASA(ctx context.Context, database, publicKey, key string, current *whereTo, server *modelserver.Server) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	said := false
+	told := ""
 	for {
-		err := report(ctx, client, database, publicKey, key, address, server)
-		switch {
-		case err != nil && ctx.Err() == nil:
-			log.Printf("[!] Could not tell KIASA where this server is: %v\n", err)
-			said = false
-		case err == nil && !said:
-			log.Printf("[+] KIASA knows this server is at %s.\n", address)
-			said = true
+		if address := current.get(); address != "" {
+			err := report(ctx, client, database, publicKey, key, address, server)
+			switch {
+			case err != nil && ctx.Err() == nil:
+				log.Printf("[!] Could not tell KIASA where this server is: %v\n", err)
+				told = ""
+			case err == nil && told != address:
+				log.Printf("[+] KIASA has this server's address. Keep this window open: closing it turns the model off for the team.\n")
+				told = address
+			}
 		}
 		select {
 		case <-ctx.Done():
 			return
+		case <-current.wake:
 		case <-time.After(reportEvery):
 		}
 	}
+}
+
+func firstOf(texts ...string) string {
+	for _, text := range texts {
+		if text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+// keepLog also writes the log to a file. It never holds a question, an answer or a résumé.
+func keepLog() func() {
+	folder := filepath.Join(os.Getenv("LOCALAPPDATA"), "KIASA", "logs")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		return func() {}
+	}
+	path := filepath.Join(folder, "model-server.log")
+	flags := os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if info, err := os.Stat(path); err == nil && info.Size() > 1<<20 {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	}
+	file, err := os.OpenFile(path, flags, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, file))
+	return func() { file.Close() }
 }
 
 // reportEvery is how fresh the admins' Model server tab is.

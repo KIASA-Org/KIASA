@@ -20,8 +20,6 @@ const (
 	StartPage = "https://browserleaks.com/ip"
 	// BrowserExeName is the renamed browser inside the browser folder.
 	BrowserExeName = "kiasa-browser.exe"
-	// UninstallKey is the installed app's entry under HKEY_CURRENT_USER.
-	UninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\KIASA`
 	// PolicyKey is where the installer sets the browser's own policies, under
 	// HKEY_CURRENT_USER. Google Chrome reads a different key, so it is not affected.
 	PolicyKey = `Software\Policies\Chromium`
@@ -47,14 +45,36 @@ var (
 	DataFolder = Name
 	// LocalTest is "on" only in the local test build.
 	LocalTest = ""
+	// InstallFolder is the folder of the program itself, under the user's Programs folder.
+	InstallFolder = Name
+	// UninstallKey is the installed app's entry under HKEY_CURRENT_USER.
+	UninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\KIASA`
+	// UpdateKey is the public half of the release key: the browser installs an update only if
+	// that key's private half signed it. The private half is on the owner's PC, and nowhere else.
+	UpdateKey = "5CBLYAOfaTjwKYvR8w4Tb6dBIAUOU6obDKoaTLp3AoA="
+	// UpdateFile is where the browser reads which version is current. Empty means the site's.
+	UpdateFile = ""
 )
+
+// UpdateAddress is where the browser reads which version is current.
+func UpdateAddress() string {
+	if UpdateFile != "" {
+		return UpdateFile
+	}
+	return SiteURL + "/browser/latest.json"
+}
+
+// UpdateDir holds a downloaded update until it is installed.
+func UpdateDir() string {
+	return filepath.Join(DataDir(), "update")
+}
 
 // IsLocalTest says this is the build for trying the app against a local copy of KIASA.
 func IsLocalTest() bool { return LocalTest == "on" }
 
 // InstallDir is where the installer puts the app, for this Windows user only.
 func InstallDir() string {
-	return filepath.Join(localAppData(), "Programs", Name)
+	return filepath.Join(localAppData(), "Programs", InstallFolder)
 }
 
 // DataDir holds what belongs to the person and survives an update: settings, the
