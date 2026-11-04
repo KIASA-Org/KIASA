@@ -2,7 +2,7 @@ import { Download } from "../site/icons";
 
 /** Where the KIASA Browser zip is published (a GitHub release, as the Live Script is).
  * Update this when a new build is released. */
-export const BROWSER_DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.1.2/KIASA-Browser.zip";
+export const BROWSER_DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.2.0/KIASA-Browser.zip";
 
 /** The Auto apply page: setting up the KIASA Browser on this PC. The agent that
  * applies for jobs, and its link to KIASA's model server, come after this. */
