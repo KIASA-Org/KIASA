@@ -87,11 +87,40 @@
   <input type="hidden" id="token" name="token" value="abc">
 
   <button type="button">Add another</button>
+  <div id="code-wrap" style="display:none">
+    <p id="code-note"></p>
+    <div class="field-wrapper"><label for="security_code">Security code</label><input id="security_code" type="text"></div>
+    <p id="code-error" class="field-error"></p>
+  </div>
+
   <button id="send" type="submit">Submit application</button>
 </form>
 <script>
+  // How a real form behaves at submit: the first press (with everything filled) emails a code and
+  // asks for it; entering the right code confirms. A test can set __needCode=false for a form that
+  // confirms at once, or change __expectCode.
   window.sent = false;
-  document.getElementById("application-form").addEventListener("submit", event => { event.preventDefault(); window.sent = true; });
+  window.__needCode = true;
+  window.__expectCode = "246810";
+  // Like the real form, submission is driven by the page's own code, not native HTML validation,
+  // so the handler below is the gate (an empty required field does not stop the submit event).
+  document.getElementById("application-form").noValidate = true;
+  document.getElementById("application-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const wrap = document.getElementById("code-wrap");
+    if (window.__needCode && !wrap.dataset.shown) {
+      wrap.dataset.shown = "1";
+      wrap.style.display = "";
+      document.getElementById("code-note").textContent = "A verification code was sent to you. Enter the 6-character security code to confirm you're a human.";
+      return;
+    }
+    if (!window.__needCode || document.getElementById("security_code").value === window.__expectCode) {
+      window.sent = true;
+      document.body.innerHTML = "<h1>Thank you for applying to Acme</h1><p>We have received your application.</p>";
+    } else {
+      document.getElementById("code-error").textContent = "That code was not accepted.";
+    }
+  });
 
   // Written like the real dropdown component: arrow down opens it, a list appears with this
   // id, and a chosen value is shown in a box of its own.

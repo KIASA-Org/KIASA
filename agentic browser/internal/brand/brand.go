@@ -54,7 +54,17 @@ var (
 	UpdateKey = "5CBLYAOfaTjwKYvR8w4Tb6dBIAUOU6obDKoaTLp3AoA="
 	// UpdateFile is where the browser reads which version is current. Empty means the site's.
 	UpdateFile = ""
+	// GmailClientID and GmailClientSecret identify KIASA's Google app, so the browser can read a
+	// member's own Gmail (read-only) to finish a form that emails a code. They are set when the
+	// browser is built, from the owner's client file, and are kept out of this public repository.
+	GmailClientID     = ""
+	GmailClientSecret = ""
 )
+
+// GmailTokenPath is where a member's sealed Gmail access is kept, on their PC only.
+func GmailTokenPath() string {
+	return filepath.Join(DataDir(), "gmail-token.bin")
+}
 
 // UpdateAddress is where the browser reads which version is current.
 func UpdateAddress() string {

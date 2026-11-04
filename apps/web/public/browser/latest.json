@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "url": "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.3.0/KIASA-Setup.exe",
-  "sha256": "b4e784da1a2fa385e3aac35db8a5c04af0191e820ef50920db31a11ff22ad33b",
-  "signature": "goA8FcKkcaU5Xph4XNGGY2RUc28LiQOq7zD0PGh0ObzMRPdLrtwaj3vHoE2mFf2K35wkMhiro0JK4qQGoqogBw=="
+  "version": "1.4.0",
+  "url": "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.4.0/KIASA-Setup.exe",
+  "sha256": "b17579da53c88c19725f024e3b24046ccbd3d26d7f675195bc41f82bbfd8a3da",
+  "signature": "va3HPhIYsSCEZCO53b06A2KC9YErM+I1pCKmgKVJ0V2Ygt+bYb8nV235krm8eeYN1GcSNAJvMzyq418v+j0rCg=="
 }

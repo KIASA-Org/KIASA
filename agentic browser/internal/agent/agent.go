@@ -17,13 +17,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mxschmitt/playwright-go"
 
 	"stealth-app/internal/answers"
+	"stealth-app/internal/ats"
 	"stealth-app/internal/brand"
-	"stealth-app/internal/greenhouse"
+	"stealth-app/internal/gmail"
 	"stealth-app/internal/link"
 )
 
@@ -43,6 +45,10 @@ type Config struct {
 	Allowed func(address string) bool
 	// Client makes the requests to the model server.
 	Client *http.Client
+	// Gmail reads a member's own Gmail for verification codes; nil when this build has no Google app.
+	Gmail *gmail.Client
+	// GmailOpen opens Google's Allow page in the member's own Chrome, for connecting.
+	GmailOpen func(address string) error
 }
 
 const followUpRounds = 3
@@ -73,7 +79,9 @@ func Run(ctx context.Context, cfg Config) {
 	// A résumé left from a run that did not end well has no reason to stay.
 	os.RemoveAll(cfg.WorkDir)
 	l := &loop{cfg: cfg}
+	var connecting atomic.Bool
 	for {
+		l.gmailStep(ctx, &connecting)
 		rest := l.step(ctx)
 		select {
 		case <-ctx.Done():
@@ -119,10 +127,10 @@ func (l *loop) step(ctx context.Context) time.Duration {
 		l.sayWhy(work)
 		return l.cfg.RestIdle
 	}
-	if work.Mode != "fill" {
+	if work.Mode != "fill" && work.Mode != "apply" {
 		// A newer page asked for more than this version can do.
 		l.release(work.Job.ID)
-		l.say("waiting", "This version of the KIASA Browser only fills forms.")
+		l.say("waiting", "Please update the KIASA Browser.")
 		return l.cfg.RestIdle
 	}
 	return l.fill(ctx, work)
@@ -214,8 +222,9 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 		l.say("waiting", "Model server is off.")
 		return l.cfg.RestIdle
 	}
-	if !greenhouse.IsJobLink(job.URL) {
-		l.report(job.ID, "skipped", "This is not a Greenhouse job.", nil)
+	site, ok := siteFor(job.URL)
+	if !ok {
+		l.report(job.ID, "skipped", "The KIASA Browser cannot apply on this job's site yet.", nil)
 		return time.Second
 	}
 
@@ -234,8 +243,8 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 		return l.cfg.RestBetween
 	}
 
-	frame, err := greenhouse.Open(tab, job.URL)
-	if errors.Is(err, greenhouse.ErrNoForm) {
+	frame, err := site.Open(tab, job.URL)
+	if errors.Is(err, ats.ErrNoForm) {
 		if l.stopped(ctx, tab) {
 			l.release(job.ID)
 			return l.cfg.RestIdle
@@ -253,10 +262,10 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 		Experience []json.RawMessage `json:"experience"`
 	}
 	json.Unmarshal(work.Resume, &entries)
-	if err := greenhouse.Expand(frame, len(entries.Education), len(entries.Experience)); err != nil {
+	if err := site.Prepare(frame, len(entries.Education), len(entries.Experience)); err != nil {
 		return failed("Could not add room for your history", err)
 	}
-	scanned, err := greenhouse.Scan(frame)
+	scanned, err := site.Scan(frame)
 	if err != nil {
 		return failed("Could not read the form", err)
 	}
@@ -278,14 +287,13 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 		Info:   info,
 	}
 
-	known := map[string]bool{}
 	var asks []answers.Ask
-	var problems []greenhouse.Problem
-	var stillEmpty []greenhouse.Question
+	var problems []ats.Problem
+	var stillEmpty []answers.Question
 	filled := 0
 	batch := scanned
 	for round := 0; round <= followUpRounds && len(batch) > 0; round++ {
-		asked.Questions = toQuestions(batch)
+		asked.Questions = labelled(batch)
 		reply, err := server.Ask(ctx, asked, func(now answers.Progress) {
 			switch {
 			case now.State == answers.StateQueued && now.Position > 0:
@@ -307,13 +315,14 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 		}
 		asks = append(asks, reply.Asks...)
 		l.say("working", "Filling the form: "+name)
-		problems = append(problems, greenhouse.Fill(frame, batch, toAnswers(reply.Answers), files)...)
-		filled += len(reply.Answers)
-		for _, q := range batch {
-			known[q.ID] = true
+		gaps, err := site.Fill(frame, reply.Answers, files)
+		if err != nil {
+			return failed("Could not fill the form", err)
 		}
-		var fresh []greenhouse.Question
-		fresh, stillEmpty, err = greenhouse.Unanswered(frame, known)
+		problems = append(problems, gaps...)
+		filled += len(reply.Answers)
+		var fresh []answers.Question
+		fresh, stillEmpty, err = site.Unanswered(frame)
 		if err != nil {
 			return failed("Could not read the form back", err)
 		}
@@ -328,18 +337,23 @@ func (l *loop) fill(ctx context.Context, work link.Work) time.Duration {
 	if outcome == "failed" && reason == "" {
 		reason = "The form could not be completed."
 	}
+	// In apply mode, a form that filled cleanly is submitted; otherwise it is only filled.
+	if outcome == "filled" && work.Mode == "apply" {
+		return l.submit(ctx, work, site, frame, filled)
+	}
 	l.report(job.ID, outcome, reason, asks)
 	log.Printf("[+] A job ended as %s after %d answers.\n", outcome, filled)
-	l.say("working", "Filled, not sent: "+name)
 	if outcome == "waiting" {
 		l.say("waiting", "A job needs your answer on the Auto apply page.")
+	} else {
+		l.say("working", "Filled, not sent: "+name)
 	}
 	return l.cfg.RestBetween
 }
 
 // judge decides what became of a job. Questions only the member can answer come first: until
 // they answer, nothing else about the job matters.
-func judge(asks []answers.Ask, problems []greenhouse.Problem, stillEmpty, unasked []greenhouse.Question, filled int) (string, string) {
+func judge(asks []answers.Ask, problems []ats.Problem, stillEmpty, unasked []answers.Question, filled int) (string, string) {
 	if len(asks) > 0 {
 		return "waiting", plural(len(asks), "question needs", "questions need") + " your answer."
 	}
@@ -347,7 +361,7 @@ func judge(asks []answers.Ask, problems []greenhouse.Problem, stillEmpty, unaske
 		return "failed", p.Label + ": " + p.Why
 	}
 	for _, q := range stillEmpty {
-		if q.Kind != greenhouse.KindFile {
+		if q.Kind != ats.KindFile {
 			return "failed", q.Label + ": still empty after filling."
 		}
 		return "failed", q.Label + ": the file did not attach."
@@ -365,23 +379,14 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-func toQuestions(list []greenhouse.Question) []answers.Question {
-	out := make([]answers.Question, 0, len(list))
-	for _, q := range list {
-		// Some forms give a box no wording: there is nothing there to ask anyone.
-		label := q.Label
-		if label == "" {
-			label = q.ID
+// labelled gives any wordless box its id as a label, so there is something to ask about.
+func labelled(list []answers.Question) []answers.Question {
+	out := make([]answers.Question, len(list))
+	for i, q := range list {
+		if q.Label == "" {
+			q.Label = q.ID
 		}
-		out = append(out, answers.Question{ID: q.ID, Kind: q.Kind, Label: label, Required: q.Required, Hint: q.Hint, Options: q.Options})
-	}
-	return out
-}
-
-func toAnswers(list []answers.Answer) []greenhouse.Answer {
-	out := make([]greenhouse.Answer, 0, len(list))
-	for _, a := range list {
-		out = append(out, greenhouse.Answer{ID: a.ID, Values: a.Values})
+		out[i] = q
 	}
 	return out
 }

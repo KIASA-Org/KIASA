@@ -77,7 +77,7 @@ async function sendToBot(supabase: SupabaseClient, text: string, onPosted: () =>
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 const ended = (read: Read) => read.state === "done" || read.state === "failed";
-/** Reading links came with Job Saving Bot 1.3.0. */
+/** Reading links came with Job Saving Bot 1.4.0. */
 const canRead = (version: string | null) => {
   const [major, minor] = (version ?? "").split(".").map(Number);
   return major > 1 || (major === 1 && minor >= 3);

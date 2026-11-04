@@ -1,9 +1,9 @@
 import { Download } from "../site/icons";
 
 /** The newest KIASA Browser. Update these when a new build is released. */
-export const BROWSER_VERSION = "1.3.0";
+export const BROWSER_VERSION = "1.4.0";
 /** Where the KIASA Browser zip is published (a GitHub release, as the Live Script is). */
-export const BROWSER_DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.3.0/KIASA-Browser.zip";
+export const BROWSER_DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/browser-1.4.0/KIASA-Browser.zip";
 
 /** The Auto apply page: setting up the KIASA Browser on this PC. */
 export function ApplySetup() {

@@ -43,6 +43,9 @@ type Engine struct {
 	context   playwright.BrowserContext
 	channel   string
 	forwarder *proxy.Forwarder
+
+	gmailMu  sync.Mutex
+	gmailTab playwright.Page
 }
 
 func NewEngine() *Engine {

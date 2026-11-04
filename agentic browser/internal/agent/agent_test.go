@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -15,8 +17,9 @@ import (
 	"github.com/mxschmitt/playwright-go"
 
 	"stealth-app/internal/answers"
+	"stealth-app/internal/ats"
 	"stealth-app/internal/brand"
-	"stealth-app/internal/greenhouse"
+	"stealth-app/internal/gmail"
 	"stealth-app/internal/link"
 )
 
@@ -56,15 +59,15 @@ func TestAllowedServer_ThisPCOnlyInTheLocalTestBuild(t *testing.T) {
 
 func TestJudge(t *testing.T) {
 	ask := []answers.Ask{{ID: "a", Label: "A"}}
-	problem := []greenhouse.Problem{{ID: "b", Label: "Phone", Why: "too long"}}
-	empty := []greenhouse.Question{{ID: "c", Label: "Why?", Kind: greenhouse.KindLongText}}
-	emptyFile := []greenhouse.Question{{ID: "resume", Label: "Resume/CV", Kind: greenhouse.KindFile}}
+	problem := []ats.Problem{{ID: "b", Label: "Phone", Why: "too long"}}
+	empty := []answers.Question{{ID: "c", Label: "Why?", Kind: ats.KindLongText}}
+	emptyFile := []answers.Question{{ID: "resume", Label: "Resume/CV", Kind: ats.KindFile}}
 	cases := []struct {
 		name            string
 		asks            []answers.Ask
-		problems        []greenhouse.Problem
-		stillEmpty      []greenhouse.Question
-		unasked         []greenhouse.Question
+		problems        []ats.Problem
+		stillEmpty      []answers.Question
+		unasked         []answers.Question
 		outcome, reason string
 	}{
 		{"all done", nil, nil, nil, nil, "filled", "Nothing was sent"},
@@ -91,6 +94,7 @@ type standIns struct {
 	asked   [][]answers.Question
 	asks    []answers.Ask
 	stop    string
+	mode    string
 	pings   []string
 	modelUp bool
 	kiasa   *httptest.Server
@@ -101,8 +105,14 @@ func (s *standIns) serveKIASA(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
+	case strings.HasSuffix(r.URL.Path, "/browser_agent_gmail"):
+		json.NewEncoder(w).Encode(map[string]any{"want_connect": false, "want_disconnect": false, "email": ""})
 	case strings.HasSuffix(r.URL.Path, "/browser_agent_next_job"):
-		work := map[string]any{"mode": "fill", "model_server": s.model.URL, "stop": "no_jobs"}
+		mode := s.mode
+		if mode == "" {
+			mode = "fill"
+		}
+		work := map[string]any{"mode": mode, "model_server": s.model.URL, "stop": "no_jobs"}
 		if len(s.jobs) > 0 {
 			delete(work, "stop")
 			work["job"] = s.jobs[0]
@@ -190,6 +200,11 @@ func madeUpAnswer(q answers.Question) []string {
 		}
 		return []string{"New York"}
 	case answers.KindChoice, answers.KindMultiChoice:
+		if len(q.Options) == 0 {
+			// A dropdown whose options were not read in time; the real model is told the
+			// options and would answer freely. Keep the fake model from panicking.
+			return []string{"Yes"}
+		}
 		return []string{q.Options[0]}
 	case answers.KindCheckbox:
 		return []string{"yes"}
@@ -401,13 +416,80 @@ func TestLoop_GivesTheJobBackForAnUntrustedServer(t *testing.T) {
 	}
 }
 
-func TestLoop_SkipsAJobThatIsNotOnGreenhouse(t *testing.T) {
+func TestLoop_SkipsAnUnsupportedSite(t *testing.T) {
 	s, cfg := start(t)
 	other := job()
-	other["url"] = "https://jobs.lever.co/acme/1"
+	other["url"] = "https://acme.wd1.myworkdayjobs.com/en-US/careers/job/1"
 	s.jobs = []map[string]any{other}
 	report, _ := runOne(t, s, cfg)
 	if report["outcome"] != "skipped" {
 		t.Fatalf("report = %+v", report)
+	}
+}
+
+// gmailStore is a tiny token store for the fake Gmail.
+type gmailStore struct {
+	tok gmail.Token
+	has bool
+}
+
+func (g *gmailStore) Save(t gmail.Token) error  { g.tok, g.has = t, true; return nil }
+func (g *gmailStore) Load() (gmail.Token, bool) { return g.tok, g.has }
+
+func gmailMessageJSON(subject, body string) string {
+	part := map[string]any{"mimeType": "multipart/alternative",
+		"headers": []map[string]any{{"name": "From", "value": "Greenhouse <no-reply@greenhouse.io>"}, {"name": "Subject", "value": subject}},
+		"parts":   []any{map[string]any{"mimeType": "text/plain", "body": map[string]any{"data": base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte(body))}}}}
+	msg := map[string]any{"internalDate": strconv.FormatInt(time.Now().UnixMilli(), 10), "payload": part}
+	data, _ := json.Marshal(msg)
+	return string(data)
+}
+
+func fakeGmail(code string) *gmail.Client {
+	transport := func(method, address string, headers, form map[string]string) (int, []byte, error) {
+		switch {
+		case strings.Contains(address, "/profile"):
+			return 200, []byte(`{"emailAddress":"ana@example.com"}`), nil
+		case strings.Contains(address, "/messages/"):
+			return 200, []byte(gmailMessageJSON("Security code", "Your verification code is "+code+".")), nil
+		case strings.Contains(address, "/messages"):
+			return 200, []byte(`{"messages":[{"id":"c1"}]}`), nil
+		}
+		return 404, []byte("{}"), nil
+	}
+	return gmail.New(gmail.Config{ClientID: "id", ClientSecret: "s", Transport: transport,
+		Store: &gmailStore{tok: gmail.Token{Access: "a", Refresh: "r", ExpiresAt: time.Now().Add(time.Hour)}, has: true}})
+}
+
+func TestLoop_AppliesAndEntersTheEmailedCode(t *testing.T) {
+	s, cfg := start(t)
+	s.jobs = []map[string]any{job()}
+	s.mode = "apply"
+	cfg.Gmail = fakeGmail("246810")
+	cfg.GmailOpen = func(string) error { return nil }
+	report, l := runOne(t, s, cfg)
+	if report["outcome"] != "applied" {
+		t.Fatalf("report = %+v", report)
+	}
+	sent, err := l.tab.MainFrame().Evaluate("() => window.sent")
+	if err != nil || sent != true {
+		t.Errorf("the form should have been sent: %v, %v", sent, err)
+	}
+}
+
+func TestLoop_WaitsForTheMemberWhenGmailIsNotConnected(t *testing.T) {
+	s, cfg := start(t)
+	s.jobs = []map[string]any{job()}
+	s.mode = "apply"
+	report, l := runOne(t, s, cfg)
+	if report["outcome"] != "waiting" {
+		t.Fatalf("report = %+v", report)
+	}
+	if reason, _ := report["reason"].(string); !strings.Contains(reason, "Connect your Gmail") {
+		t.Errorf("reason = %q", reason)
+	}
+	sent, _ := l.tab.MainFrame().Evaluate("() => window.sent")
+	if sent == true {
+		t.Error("nothing should have been sent without the code")
 	}
 }
