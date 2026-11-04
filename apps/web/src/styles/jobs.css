@@ -49,6 +49,7 @@
 .jobs-button[data-primary] { background: var(--leaf); color: var(--night); }
 .jobs-button[data-primary]:hover { background: #cdf6ad; }
 .jobs-button:disabled { opacity: 0.45; cursor: default; transform: none; }
+.jobs-button[data-running]:disabled { opacity: 1; background: var(--night-control); color: var(--leaf); }
 .jobs-link { font-weight: 650; color: var(--leaf); cursor: pointer; }
 .jobs-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
