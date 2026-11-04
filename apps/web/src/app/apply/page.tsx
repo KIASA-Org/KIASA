@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ChatWatch } from "@/components/chat/chat-watch";
 import { ApplyBrowsers } from "@/components/apply/apply-browsers";
+import { ApplyDetails } from "@/components/apply/apply-details";
 import { ApplySetup } from "@/components/apply/apply-setup";
+import { ApplyWork } from "@/components/apply/apply-work";
 import { AppBar } from "@/components/site/app-bar";
 import { RanksProvider } from "@/components/site/ranks";
 import { accountsLive, publicSupabase, ranks, signedIn } from "@/lib/accounts/server";
@@ -28,7 +30,9 @@ export default async function ApplyPage() {
         <AppBar area="apply" person={{ id: me.id, name: me.name, detail: me.admin ? "Admin" : "Team", admin: me.admin, photo: me.photo }} realtime={publicSupabase} />
       </div>
       <main id="main-content" tabIndex={-1} className="jobs-main"><ApplySetup />
+        <ApplyDetails realtime={publicSupabase} me={me.id} />
         <ApplyBrowsers realtime={publicSupabase} admin={me.admin} me={me.id} />
+        <ApplyWork realtime={publicSupabase} me={me.id} admin={me.admin} />
       </main>
       <ChatWatch me={me.id} realtime={publicSupabase} />
     </div>

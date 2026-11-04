@@ -54,7 +54,7 @@ func Parse(text string) (Code, error) {
 		return Code{}, errors.New("This code is damaged. Copy it again from the Auto apply page.")
 	}
 	u, err := url.Parse(in.U)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
+	if err != nil || u.Host == "" || (u.Scheme != "https" && !(brand.IsLocalTest() && u.Scheme == "http" && u.Hostname() == "127.0.0.1")) {
 		return Code{}, errors.New("This code does not point to KIASA.")
 	}
 	return Code{URL: strings.TrimRight(in.U, "/"), Key: in.K, Secret: in.S}, nil
@@ -103,11 +103,16 @@ var client = &http.Client{Timeout: 15 * time.Second}
 // CheckIn tells KIASA how the browser is. It returns ErrNotConnected when the code
 // is no longer accepted.
 func CheckIn(ctx context.Context, code Code, status Status) error {
-	body, err := json.Marshal(map[string]any{"agent_key": code.Secret, "info": status})
+	return call(ctx, code, "browser_agent_check_in", map[string]any{"agent_key": code.Secret, "info": status}, nil)
+}
+
+// call runs one of the browser's functions in KIASA's database, and reads its answer.
+func call(ctx context.Context, code Code, function string, args map[string]any, out any) error {
+	body, err := json.Marshal(args)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, code.URL+"/rest/v1/rpc/browser_agent_check_in", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, code.URL+"/rest/v1/rpc/"+function, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -119,9 +124,12 @@ func CheckIn(ctx context.Context, code Code, status Status) error {
 		return errors.New("could not reach KIASA")
 	}
 	defer res.Body.Close()
-	reply, _ := io.ReadAll(io.LimitReader(res.Body, 8<<10))
+	reply, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		return nil
+		if out == nil {
+			return nil
+		}
+		return json.Unmarshal(reply, out)
 	}
 	if strings.Contains(string(reply), `"28000"`) {
 		return ErrNotConnected

@@ -13,6 +13,7 @@ import type { SimDesk } from "@/lib/sims/server";
 import { SimsDesk } from "./sims-desk";
 import { TeamsDesk } from "./teams-desk";
 import { LiveNow } from "../interview/live-now";
+import { ModelDesk } from "./model-desk";
 
 /** `id` and `photo` once accounts are connected: their square is then their photo, which they can change there. */
 type Admin = { name: string; role: string; id?: string; photo?: string | null };
@@ -62,6 +63,15 @@ export function LiveScriptsView({ names, admin, ranks }: { names: Record<string,
   return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
     <AdminFrame admin={admin} live area="live">
       <LiveNow names={names} realtime={publicSupabase} />
+    </AdminFrame>
+  </RanksProvider>;
+}
+
+/** The admin's model server (`/admin/model`): how the model is, and whose browsers are connected to it. */
+export function ModelServerView({ admin, ranks }: { admin: Admin; ranks: Ranks }) {
+  return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
+    <AdminFrame admin={admin} live area="model">
+      <ModelDesk realtime={publicSupabase} />
     </AdminFrame>
   </RanksProvider>;
 }

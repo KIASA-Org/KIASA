@@ -16,6 +16,9 @@ const ONLINE_MS = 60_000;
 const ANSWER_MS = 20_000;
 /** The link that opens the app on this PC, which its Setup registers. */
 const APP_LINK = "kiasa-browser://start";
+/** On the local test site it opens the local test build, because the real one only ever
+ * connects to KIASA's own database. */
+const appLink = () => window.location.hostname === "127.0.0.1" ? "kiasa-browser-local://start" : APP_LINK;
 const STATES: Record<Agent["state"], string> = {
   new: "Not started yet", idle: "KIASA agent is running", working: "Applying", waiting: "Needs you", paused: "Paused", error: "Problem",
 };
@@ -125,7 +128,7 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
       setPressedAt(null);
       return;
     }
-    const withCode = `${APP_LINK}?code=${encodeURIComponent(connectionCode(realtime.url, realtime.key, data))}`;
+    const withCode = `${appLink()}?code=${encodeURIComponent(connectionCode(realtime.url, realtime.key, data))}`;
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- it opens the app, not a page
     window.location.assign(withCode);
     if (!target) {
@@ -134,6 +137,12 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
     }
     if (target) remember(me, target);
     void reload.current();
+  };
+
+  /** An admin stops a member's agent. Their browser stays open, and finishes the job in hand. */
+  const stopAgent = async (owner: string) => {
+    const { error } = await supabase.from("apply_control").upsert({ user_id: owner, mode: "off" }, { onConflict: "user_id" });
+    setProblem(error ? "That did not work. Please try again." : null);
   };
 
   return <section className="jobs-card apply-browsers" aria-labelledby="apply-browsers-title">
@@ -171,6 +180,7 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
             <p className="apply-meta">{[agent.computer, agent.version && `version ${agent.version}`, `seen ${seenText(agent.seen_at, now)}`].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="apply-actions">
+            <button type="button" className="chat-pill" onClick={() => void stopAgent(agent.owner)}>Stop agent</button>
             <button type="button" className="chat-pill" onClick={() => setRemoving(agent)}>Disconnect</button>
           </div>
         </li>;

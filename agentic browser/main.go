@@ -17,6 +17,7 @@ import (
 	"github.com/mxschmitt/playwright-go"
 
 	"stealth-app/browser"
+	"stealth-app/internal/agent"
 	"stealth-app/internal/brand"
 	"stealth-app/internal/link"
 	"stealth-app/internal/settings"
@@ -288,6 +289,13 @@ func main() {
 		}); err != nil {
 			log.Printf("[!] Could not open the IP page: %v\n", err)
 		}
+		// The agent works in tabs of its own, for as long as the browser is open.
+		go agent.Run(linkCtx, agent.Config{
+			Code:    conn.current,
+			NewTab:  engine.NewTab,
+			Status:  status.set,
+			WorkDir: filepath.Join(brand.DataDir(), "work"),
+		})
 	}
 
 	if keepOpen {
@@ -465,7 +473,7 @@ func keepLog() func() {
 // over the program's log.
 func driverOptions() *playwright.RunOptions {
 	return &playwright.RunOptions{
-		DriverDirectory: filepath.Join(brand.DataDir(), "driver"),
+		DriverDirectory: brand.DriverHome(),
 		// Chrome itself is already installed, as the settings window needs it.
 		SkipInstallBrowsers: true,
 	}

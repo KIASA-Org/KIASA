@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -64,6 +65,14 @@ func (e *Engine) BringToFront() error {
 		return nil
 	}
 	return pages[len(pages)-1].BringToFront()
+}
+
+// NewTab opens a tab beside the member's own.
+func (e *Engine) NewTab() (playwright.Page, error) {
+	if e.context == nil {
+		return nil, errors.New("the browser is not open")
+	}
+	return e.context.NewPage()
 }
 
 func (e *Engine) Start(opts LaunchOptions) (playwright.Page, error) {

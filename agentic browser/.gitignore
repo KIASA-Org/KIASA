@@ -13,3 +13,6 @@ profiles/
 
 # Generated reports
 stealth_report.png
+
+# The owner's own prompt: this repository is public, and the model server reads it from this PC.
+internal/modelserver/prompts/MASTER_PROMPT.md

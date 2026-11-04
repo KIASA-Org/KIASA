@@ -10,7 +10,7 @@ import { useMark } from "./ranks";
 import { ChevronDown, Leave } from "./icons";
 import { YourPhoto } from "./your-photo";
 
-export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live";
+export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "model";
 /** Who is signed in, as the bar shows them. `id` and `photo` once accounts are connected. */
 export type AppPerson = { id?: string; name: string; detail: string; admin: boolean; photo?: string | null };
 
@@ -20,6 +20,7 @@ const AREAS: { area: AppArea; href: string; label: string; admins?: true }[] = [
   { area: "teams", href: "/admin/teams", label: "Teams", admins: true },
   { area: "simulated", href: "/admin/simulated", label: "Simulated", admins: true },
   { area: "live", href: "/admin/live", label: "Live scripts", admins: true },
+  { area: "model", href: "/admin/model", label: "Model", admins: true },
   { area: "chat", href: "/chat", label: "Chat" },
   { area: "jobs", href: "/jobs", label: "Job desk" },
   { area: "interview", href: "/interview", label: "Interview" },
@@ -63,7 +64,7 @@ export function AppBar({ area, person, realtime, live = true }: {
         <LeafMark className="practice-mark" weight={3.4} />
         <span className="app-bar-word">KIASA</span>
       </Link>
-      <nav className="app-bar-tabs" aria-label="KIASA">
+      <nav className="app-bar-tabs" data-many={person.admin || undefined} aria-label="KIASA">
         {AREAS.filter(entry => !entry.admins || person.admin).map(entry =>
           <Link key={entry.area} href={entry.href} className="app-bar-tab" aria-current={entry.area === area ? "page" : undefined}>{entry.label}</Link>)}
       </nav>
