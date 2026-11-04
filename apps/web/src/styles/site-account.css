@@ -79,6 +79,24 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 
 /* ───────── Admin ───────── */
 .admin-header { height: auto; }
+.model-desk { display: grid; gap: 16px; padding-block: clamp(24px, 3vw, 40px); }
+.model-title { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.2; font-weight: 600; }
+.model-card { padding: clamp(18px, 2vw, 26px); border: 1px solid var(--line-strong); border-radius: 18px; background: var(--night-raised); }
+.model-card-title { font-size: 18px; font-weight: 600; }
+.model-card-title span { margin-left: 4px; font-weight: 500; color: var(--ink-mute); }
+.model-subtitle { margin-top: 20px; font-size: 15px; font-weight: 600; }
+.model-state { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 20px; font-weight: 600; }
+.model-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #6b7a72; }
+[data-state="good"] .model-dot, [data-state="good"] > .model-dot { background: var(--leaf); }
+[data-state="bad"] .model-dot { background: #ffb4a2; }
+.model-note { margin-top: 4px; font-size: 13.5px; line-height: 1.5; color: var(--ink-mute); overflow-wrap: anywhere; }
+.model-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0 12px; }
+.model-facts dt { font-size: 12.5px; color: var(--ink-mute); }
+.model-facts dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.model-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.model-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 14px; }
+.model-row-main { flex: 1; min-width: 0; }
+.model-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .admin-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: var(--header); padding-block: 10px; }
 .admin-user { display: flex; align-items: center; gap: 12px; }
 .admin-user .account-initials { width: 36px; height: 36px; font-size: 13px; }
@@ -287,6 +305,11 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .app-bar-tabs::-webkit-scrollbar { display: none; }
 .app-bar-tab { display: inline-flex; flex: none; align-items: center; padding: 0 14px; white-space: nowrap; color: var(--ink-soft); font-size: 15px; font-weight: 600; box-shadow: inset 0 -2px 0 transparent; transition: color 0.2s, box-shadow 0.2s; }
 .app-bar-tab:hover { color: var(--ink); }
+/* An admin has more tabs than a member, and all of them should show without scrolling. */
+@media (max-width: 1500px) {
+  .app-bar-inner:has(.app-bar-tabs[data-many]) { gap: 16px; }
+  .app-bar-tabs[data-many] .app-bar-tab { padding: 0 10px; }
+}
 .app-bar-tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--leaf); }
 .app-bar-me { position: relative; flex: none; margin-left: auto; }
 .app-bar-who { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 5px; border-radius: 999px; color: var(--ink); cursor: pointer; transition: background-color 0.2s; }
