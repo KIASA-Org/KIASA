@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { Confirm } from "../chat/chat-dialog";
+import { BROWSER_VERSION } from "./apply-setup";
 
 type Agent = {
   id: string; owner: string; owner_name: string; name: string; computer: string | null; version: string | null;
@@ -31,6 +32,15 @@ function connectionCode(url: string, key: string, secret: string) {
 }
 
 const timeNow = () => Date.now();
+
+/** Whether a version is older than another, as in 1.2.0 and 1.10.0. Unknown ones are not. */
+function isOlder(version: string | null, than: string) {
+  const parts = (text: string) => text.split(".").map(Number);
+  if (!version || !/^\d+\.\d+\.\d+$/.test(version)) return false;
+  const [a, b] = [parts(version), parts(than)];
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i];
+  return false;
+}
 
 /** Closing, the app says "paused" one last time, and nothing else says it yet. */
 const isOn = (agent: Agent, now: number) => !!agent.seen_at && agent.state !== "paused" && now - new Date(agent.seen_at).getTime() < ONLINE_MS;
@@ -108,6 +118,8 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
   const agentRunning = running && !starting;
   const waiting = starting || (opening && !missing);
   const others = admin ? latestByComputer(agents?.filter(agent => agent.owner !== me) ?? []) : [];
+  // Versions before 1.3.0 cannot update themselves, so this says what to do, once.
+  const outdated = on.find(agent => isOlder(agent.version, "1.3.0") && isOlder(agent.version, BROWSER_VERSION));
 
   /** Opens the app with a new code for this PC's browser, so a member never handles
    * one. It can only be pressed while none of theirs is running. */
@@ -164,6 +176,7 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
       </div>
     </li>)}</ul>}
     {problem && <p className="jobs-form-hint" role="alert">{problem}</p>}
+    {outdated && <p className="jobs-form-hint" role="status">This browser is version {outdated.version}. Download the newest one with the steps above, just this once: from then on it updates by itself.</p>}
     {missing && <p className="jobs-form-hint" role="alert">Nothing opened? Install the newest KIASA Browser with the steps above, then press <b>Start the KIASA Browser</b> again. If Chrome asks to open it, choose <b>Open</b>.</p>}
     <p className="jobs-form-hint">KIASA admins can see whether your browser is on and what it is doing, but never your pages.</p>
 
