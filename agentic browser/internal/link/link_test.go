@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"stealth-app/internal/brand"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,70 @@ func TestParse(t *testing.T) {
 	for _, bad := range []string{"", "KIASA-BOT1.abc", codePrefix + "!!!", codePrefix + base64.RawURLEncoding.EncodeToString([]byte(`{}`)), code("http://plain.example", "k", "s")} {
 		if _, err := Parse(bad); err == nil {
 			t.Errorf("Parse(%q) accepted a bad code", bad)
+		}
+	}
+}
+
+func TestParse_ALocalDatabaseOnlyInTheLocalTestBuild(t *testing.T) {
+	local := code("http://127.0.0.1:54321", "pub", "kapp_secret")
+	if _, err := Parse(local); err == nil {
+		t.Fatal("the real build must refuse a local database")
+	}
+	saved := brand.LocalTest
+	brand.LocalTest = "on"
+	defer func() { brand.LocalTest = saved }()
+	if _, err := Parse(local); err != nil {
+		t.Errorf("the local test build should accept it: %v", err)
+	}
+	if _, err := Parse(code("http://evil.example", "pub", "kapp_secret")); err == nil {
+		t.Error("even the local test build takes plain http only from this PC")
+	}
+}
+
+func TestReport_AlwaysSendsAList(t *testing.T) {
+	var got []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		json.NewDecoder(r.Body).Decode(&body)
+		got = append(got, string(body["asks"]))
+		w.Write([]byte("null"))
+	}))
+	defer server.Close()
+	code := Code{URL: server.URL, Key: "pub", Secret: "kapp_secret"}
+	var none []struct{ Label string }
+	for _, asks := range []any{nil, none, []struct{}{}} {
+		if err := Report(context.Background(), code, "job", "filled", "done", asks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, sent := range got {
+		if sent != "[]" {
+			t.Errorf("report %d sent %s, want an empty list", i, sent)
+		}
+	}
+	if err := Report(context.Background(), code, "job", "waiting", "", []struct {
+		Label string `json:"label"`
+	}{{"A question"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got[len(got)-1] != `[{"label":"A question"}]` {
+		t.Errorf("sent %s", got[len(got)-1])
+	}
+}
+
+func TestResumeName(t *testing.T) {
+	cases := map[string]string{
+		`attachment; filename="Ana Silva Resume.pdf"`:                  "Ana Silva Resume.pdf",
+		`attachment; filename="../../evil.pdf"`:                        "evil.pdf",
+		`attachment; filename="C:\\Windows\\evil.pdf"`:                 "evil.pdf",
+		`attachment; filename="run.exe"`:                               "Resume.pdf",
+		`attachment; filename=".pdf"`:                                  "Resume.pdf",
+		`attachment; filename="_"; filename*=UTF-8''Jos%C3%A9%20R.pdf`: "José R.pdf",
+		``: "Resume.pdf",
+	}
+	for header, want := range cases {
+		if got := resumeName(header); got != want {
+			t.Errorf("resumeName(%q) = %q, want %q", header, got, want)
 		}
 	}
 }

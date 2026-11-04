@@ -18,16 +18,6 @@ const (
 	// StartPage opens when the browser starts: it shows the IP address and location
 	// websites see, so a member can check their connection at a glance.
 	StartPage = "https://browserleaks.com/ip"
-	// ApplyPage is KIASA's Auto apply page, where the browser is started from.
-	ApplyPage = "https://www.kiasa.tech/apply"
-	// AppLinkScheme is the kind of link that opens the app, as the Start button on the
-	// Auto apply page does. Setup registers it.
-	AppLinkScheme = "kiasa-browser"
-	// DatabaseHost is where KIASA's database is. A link that opens the app may only
-	// connect it to this one.
-	DatabaseHost = "lghgwvqgigbmcnxbhdwi.supabase.co"
-	// MutexName keeps a second copy of the app from starting.
-	MutexName = `Local\KIASA-Browser-App`
 	// BrowserExeName is the renamed browser inside the browser folder.
 	BrowserExeName = "kiasa-browser.exe"
 	// UninstallKey is the installed app's entry under HKEY_CURRENT_USER.
@@ -40,6 +30,28 @@ const (
 // Version is set when the installer is built.
 var Version = "dev"
 
+// These are KIASA's own. Only the local test build (scripts/build-local-test.ps1) sets them
+// differently, when it is compiled: nothing that runs afterwards can change them.
+var (
+	// SiteURL is KIASA's website.
+	SiteURL = "https://www.kiasa.tech"
+	// AppLinkScheme is the kind of link that opens the app, as the Start button on the
+	// Auto apply page does. Setup registers it.
+	AppLinkScheme = "kiasa-browser"
+	// DatabaseHost is where KIASA's database is. A link that opens the app may only
+	// connect it to this one.
+	DatabaseHost = "lghgwvqgigbmcnxbhdwi.supabase.co"
+	// MutexName keeps a second copy of the app from starting.
+	MutexName = `Local\KIASA-Browser-App`
+	// DataFolder is the folder of the app's own data, under the user's local app data.
+	DataFolder = Name
+	// LocalTest is "on" only in the local test build.
+	LocalTest = ""
+)
+
+// IsLocalTest says this is the build for trying the app against a local copy of KIASA.
+func IsLocalTest() bool { return LocalTest == "on" }
+
 // InstallDir is where the installer puts the app, for this Windows user only.
 func InstallDir() string {
 	return filepath.Join(localAppData(), "Programs", Name)
@@ -48,7 +60,13 @@ func InstallDir() string {
 // DataDir holds what belongs to the person and survives an update: settings, the
 // browser profile and logs.
 func DataDir() string {
-	return filepath.Join(localAppData(), Name)
+	return filepath.Join(localAppData(), DataFolder)
+}
+
+// DriverHome is where the driver that controls Chrome is kept. It is a 100 MB download, so
+// the local test build shares the one the app already has.
+func DriverHome() string {
+	return filepath.Join(localAppData(), Name, "driver")
 }
 
 // SettingsPath is the settings file.
@@ -94,7 +112,7 @@ func DriverDir(installDir string) string {
 // OpenApplyPage opens KIASA's Auto apply page in the person's usual browser, where
 // they are signed in and can press Start.
 func OpenApplyPage() error {
-	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", ApplyPage).Start()
+	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", SiteURL+"/apply").Start()
 }
 
 func localAppData() string {
