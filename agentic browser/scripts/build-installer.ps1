@@ -25,7 +25,9 @@ try {
 
     Push-Location $root
     try {
-        & go build -trimpath -ldflags $ldflags -o $app .
+        # No console window: the app is opened from a button on KIASA, and it says what
+        # it needs to in message boxes, on the Auto apply page and in its log file.
+        & go build -trimpath -ldflags "$ldflags -H windowsgui" -o $app .
         if ($LASTEXITCODE -ne 0) {
             throw "Building KIASA.exe failed with exit code $LASTEXITCODE."
         }

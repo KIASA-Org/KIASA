@@ -16,6 +16,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"stealth-app/internal/brand"
 )
 
 const codePrefix = "KIASA-APP1."
@@ -58,6 +60,35 @@ func Parse(text string) (Code, error) {
 	return Code{URL: strings.TrimRight(in.U, "/"), Key: in.K, Secret: in.S}, nil
 }
 
+// IsAppLink says whether a program argument is a link the Auto apply page opened
+// the app with, as in kiasa-browser://start?code=...
+func IsAppLink(arg string) bool {
+	return strings.HasPrefix(strings.ToLower(arg), brand.AppLinkScheme+":")
+}
+
+// FromAppLink returns the code in such a link, or "" when it has none, as when the
+// browser is open already and only has to come forward. Any website can open a link
+// like this, so a code pointing anywhere but KIASA's own database is refused:
+// otherwise a stranger's page could make this browser report to them.
+func FromAppLink(arg, databaseHost string) (string, error) {
+	u, err := url.Parse(arg)
+	if err != nil || !strings.EqualFold(u.Scheme, brand.AppLinkScheme) {
+		return "", errors.New("this is not a KIASA Browser link")
+	}
+	text := u.Query().Get("code")
+	if text == "" {
+		return "", nil
+	}
+	code, err := Parse(text)
+	if err != nil {
+		return "", err
+	}
+	if to, err := url.Parse(code.URL); err != nil || !strings.EqualFold(to.Host, databaseHost) {
+		return "", errors.New("this code does not point to KIASA")
+	}
+	return strings.TrimSpace(text), nil
+}
+
 // Status is how the browser is, as it tells KIASA.
 type Status struct {
 	// State is idle, working, waiting, paused or error.
@@ -98,32 +129,34 @@ func CheckIn(ctx context.Context, code Code, status Status) error {
 	return fmt.Errorf("KIASA answered with status %d", res.StatusCode)
 }
 
-// Keep reports status to KIASA every few seconds until ctx ends, and once more
-// ("paused") as it ends. current says how the browser is right now. A code KIASA no
-// longer accepts stops the reporting and is passed to onRefused.
-func Keep(ctx context.Context, code Code, current func() Status, onRefused func(error)) {
+// beat is how often the browser checks in.
+var beat = 15 * time.Second
+
+// Keep reports status to KIASA every few seconds until ctx ends, and once more as it
+// ends: "paused", or the problem it ended on. code and current say which code to use
+// and how the browser is right now. When KIASA no longer accepts the code, onRefused
+// says whether there is a new one to go on with; if not, the reporting stops.
+func Keep(ctx context.Context, code func() Code, current func() Status, onRefused func() bool) {
 	send := func(c context.Context, s Status) bool {
-		err := CheckIn(c, code, s)
-		if errors.Is(err, ErrNotConnected) {
-			if onRefused != nil {
-				onRefused(err)
-			}
-			return false
+		if errors.Is(CheckIn(c, code(), s), ErrNotConnected) {
+			return onRefused != nil && onRefused()
 		}
 		return true
 	}
 	if !send(ctx, current()) {
 		return
 	}
-	tick := time.NewTicker(15 * time.Second)
+	tick := time.NewTicker(beat)
 	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			last := current()
-			last.State, last.Detail = "paused", "The KIASA Browser was closed."
+			if last.State != "error" {
+				last.State, last.Detail = "paused", "The KIASA Browser was closed."
+			}
 			c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			send(c, last)
+			CheckIn(c, code(), last)
 			cancel()
 			return
 		case <-tick.C:

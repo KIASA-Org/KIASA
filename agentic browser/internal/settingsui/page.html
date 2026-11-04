@@ -78,14 +78,7 @@
     <h1>KIASA settings</h1>
   </header>
 
-  <fieldset>
-    <legend>KIASA connection</legend>
-    <label class="field">
-      <span id="link-label">Paste the code from the Auto apply page of KIASA</span>
-      <input type="text" id="link" placeholder="KIASA-APP1." spellcheck="false">
-    </label>
-    <p class="hint" id="link-hint">This lets you and the KIASA admins see that this browser is working. Only its status is sent, never what is on a page.</p>
-  </fieldset>
+  <p class="hint">What you save here is used the next time the KIASA Browser starts.</p>
 
   <fieldset>
     <legend>How should KIASA connect to the internet?</legend>
@@ -144,7 +137,6 @@
     port: $("port").value.trim(),
     username: $("username").value.trim(),
     password: $("password").value,
-    link: $("link").value.trim(),
   });
   const post = async (path, body) => {
     const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -197,10 +189,6 @@
     $("port").value = state.port || "";
     $("username").value = state.username || "";
     if (state.hasPassword) $("password").placeholder = "Saved. Leave empty to keep it.";
-    if (state.linked) {
-      $("link-label").textContent = "Connected to KIASA. Paste a new code to replace it.";
-    }
-    if (state.notice) say(state.notice, "bad");
     showFields();
   })();
 </script>

@@ -43,14 +43,15 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "KIASA setup failed:", err)
-		winmsg.Error("KIASA Setup", "KIASA could not be installed.\n\n"+err.Error())
+		winmsg.Error("KIASA Setup", "KIASA could not be installed.\n\n"+err.Error()+"\n\nIf the KIASA Browser is open, close it and run this again.")
 		os.Exit(1)
 	}
-	// A fresh install opens KIASA at once, so the person goes straight on to
-	// connecting it. Updating, checking and uninstalling do not.
+	// The browser is opened from the Auto apply page, which connects it to KIASA, so
+	// that page is where the person goes next.
 	if !*verify && !*uninstall {
-		if err := exec.Command(brand.AppExe(dir)).Start(); err != nil {
-			winmsg.Info("KIASA Setup", "KIASA was installed. Open it from the KIASA shortcut on your Desktop.")
+		winmsg.Info("KIASA Setup", "KIASA is installed. Go back to the Auto apply page of KIASA and press Start the KIASA Browser.")
+		if err := brand.OpenApplyPage(); err != nil {
+			fmt.Fprintln(os.Stderr, "Could not open the Auto apply page:", err)
 		}
 	}
 }
@@ -107,6 +108,9 @@ func installApp(installDir string) error {
 	}
 	if err := registerApp(installDir); err != nil {
 		return fmt.Errorf("registering the uninstall entry: %w", err)
+	}
+	if err := registerLink(installDir); err != nil {
+		return fmt.Errorf("registering the link that opens KIASA: %w", err)
 	}
 
 	fmt.Printf("KIASA %s was installed to %s\n", brand.Version, installDir)
@@ -216,6 +220,12 @@ foreach ($path in @((Join-Path $startMenu 'KIASA.lnk'), (Join-Path $desktop 'KIA
   $shortcut.IconLocation = $icon
   $shortcut.Save()
 }
+$shortcut = $shell.CreateShortcut((Join-Path $startMenu 'KIASA Settings.lnk'))
+$shortcut.TargetPath = $target
+$shortcut.Arguments = '-settings'
+$shortcut.WorkingDirectory = $working
+$shortcut.IconLocation = $icon
+$shortcut.Save()
 `, psQuote(brand.AppExe(installDir)), psQuote(filepath.Join(installDir, "kiasa.ico")),
 		psQuote(installDir), psQuote(startMenu))
 	return runPowerShell(script)
@@ -245,6 +255,28 @@ func registerApp(installDir string) error {
 	return nil
 }
 
+// linkKey is where the link that opens the app is registered, for this Windows user.
+func linkKey() string {
+	return `HKCU\Software\Classes\` + brand.AppLinkScheme
+}
+
+// registerLink lets this Windows user's browsers open the app from a link, which is
+// what the Start button on the Auto apply page does.
+func registerLink(installDir string) error {
+	key := linkKey()
+	for _, args := range [][]string{
+		{"add", key, "/ve", "/t", "REG_SZ", "/d", "URL:KIASA Browser", "/f"},
+		{"add", key, "/v", "URL Protocol", "/t", "REG_SZ", "/d", "", "/f"},
+		{"add", key + `\DefaultIcon`, "/ve", "/t", "REG_SZ", "/d", filepath.Join(installDir, "kiasa.ico"), "/f"},
+		{"add", key + `\shell\open\command`, "/ve", "/t", "REG_SZ", "/d", fmt.Sprintf(`"%s" "%%1"`, brand.AppExe(installDir)), "/f"},
+	} {
+		if err := run("reg.exe", args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func uninstallApp(installDir string) error {
 	if runtime.GOOS != "windows" {
 		return errors.New("KIASA setup is for Windows")
@@ -259,6 +291,10 @@ Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Desktop')) 'K
 	}
 	if err := run("reg.exe", "delete", `HKCU\`+brand.UninstallKey, "/f"); err != nil {
 		return fmt.Errorf("removing the uninstall entry: %w", err)
+	}
+	// Older versions did not register it, so it may not be there.
+	if err := run("reg.exe", "delete", linkKey(), "/f"); err != nil {
+		fmt.Println("The link that opens KIASA was not removed; it may never have been there.")
 	}
 
 	pid := os.Getpid()

@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { Confirm } from "../chat/chat-dialog";
-import { FormDialog } from "../jobs/jobs-dialogs";
-import { Copy, Plus } from "../site/icons";
 
 type Agent = {
   id: string; owner: string; owner_name: string; name: string; computer: string | null; version: string | null;
@@ -12,18 +10,32 @@ type Agent = {
 };
 
 const COLUMNS = "id, owner, owner_name, name, computer, version, state, detail, seen_at, created_at";
-/** A browser checks in every few seconds; not heard from in a minute, it is offline. */
+/** A browser checks in every few seconds; not heard from in a minute, it is off. */
 const ONLINE_MS = 60_000;
+/** How long the app has to show up after Start before the page suggests installing it. */
+const ANSWER_MS = 20_000;
+/** The link that opens the app on this PC, which its Setup registers. */
+const APP_LINK = "kiasa-browser://start";
 const STATES: Record<Agent["state"], string> = {
-  new: "Not started yet", idle: "Ready", working: "Applying", waiting: "Needs you", paused: "Paused", error: "Problem",
+  new: "Not started yet", idle: "KIASA agent is running", working: "Applying", waiting: "Needs you", paused: "Paused", error: "Problem",
 };
 
-/** The code a browser is connected with: where KIASA's database is, its public
- * key (the one every page has), and the browser's own secret. */
+/** What opens the app with: where KIASA's database is, its public key (the one every
+ * page has), and the browser's own secret. The member never sees it. */
 function connectionCode(url: string, key: string, secret: string) {
   const packed = btoa(JSON.stringify({ u: url, k: key, s: secret })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `KIASA-APP1.${packed}`;
 }
+
+const timeNow = () => Date.now();
+
+/** Closing, the app says "paused" one last time, and nothing else says it yet. */
+const isOn = (agent: Agent, now: number) => !!agent.seen_at && agent.state !== "paused" && now - new Date(agent.seen_at).getTime() < ONLINE_MS;
+
+/** Which browser belongs to this PC is remembered here, so a member with two PCs has two. */
+const pcKey = (me: string) => `kiasa-browser-id:${me}`;
+const rememberedId = (me: string) => { try { return localStorage.getItem(pcKey(me)); } catch { return null; } };
+const remember = (me: string, id: string) => { try { localStorage.setItem(pcKey(me), id); } catch { /* It then makes a new one next time. */ } };
 
 function seenText(iso: string | null, now: number) {
   if (!iso) return "never";
@@ -38,15 +50,25 @@ function seenText(iso: string | null, now: number) {
 
 const put = (list: Agent[], row: Agent) => list.some(item => item.id === row.id) ? list.map(item => item.id === row.id ? row : item) : [...list, row];
 
-/** The KIASA Browsers connected to this account, live: yours, or, for an admin,
- * everyone's. Working status only; no page is ever shown. */
+/** One line for each computer: the same PC can have an older entry, from another Chrome profile. */
+function latestByComputer(list: Agent[]) {
+  const latest = new Map<string, Agent>();
+  for (const agent of list) {
+    const key = agent.computer ? `${agent.owner}|${agent.computer}` : agent.id;
+    const best = latest.get(key);
+    if (!best || (agent.seen_at ?? "") > (best.seen_at ?? "")) latest.set(key, agent);
+  }
+  return [...latest.values()];
+}
+
+/** Start the browser on this PC and see that it is on, live. Admins also see everyone's.
+ * Working status only; no page is ever shown. */
 export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string; key: string }; admin: boolean; me: string }) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [naming, setNaming] = useState(false);
-  const [code, setCode] = useState<{ name: string; code: string } | null>(null);
-  const [rekeying, setRekeying] = useState<Agent | null>(null);
+  const [pressedAt, setPressedAt] = useState<number | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Agent | null>(null);
   const reload = useRef<() => Promise<void>>(async () => {});
 
@@ -71,68 +93,92 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
     return () => { stopped = true; clearInterval(tick); void supabase.removeChannel(channel); };
   }, [supabase]);
 
-  const connect = async (name: string, existing: string | null) => {
-    const { data, error } = await supabase.rpc("browser_agent_connect", { agent_name: name, existing });
-    if (error || typeof data !== "string") return error?.code === "54000" ? "Ten browsers are connected already. Remove one first." : "That did not work. Please try again.";
-    setCode({ name, code: connectionCode(realtime.url, realtime.key, data) });
-    void reload.current();
-    return null;
-  };
-
   const mine = agents?.filter(agent => agent.owner === me) ?? [];
-  const others = admin ? agents?.filter(agent => agent.owner !== me) ?? [] : [];
-  const online = (agent: Agent) => !!agent.seen_at && now - new Date(agent.seen_at).getTime() < ONLINE_MS;
-  const row = (agent: Agent, showOwner: boolean, editable: boolean) => {
-    const live = online(agent);
-    const state = live ? agent.state : "offline";
-    return <li key={agent.id} className="apply-row" data-state={state}>
-      <span className="apply-dot" aria-hidden="true" />
-      <div className="apply-main">
-        <p className="apply-name">{agent.name}{showOwner && agent.owner_name && <span className="apply-owner"> · {agent.owner_name}</span>}</p>
-        <p className="apply-detail">
-          {live ? STATES[agent.state] : agent.state === "new" ? "Waiting for the browser to connect" : "Offline"}
-          {live && agent.detail ? ` · ${agent.detail}` : ""}
-        </p>
-        <p className="apply-meta">{[agent.computer, agent.version && `version ${agent.version}`, `seen ${seenText(agent.seen_at, now)}`].filter(Boolean).join(" · ")}</p>
-      </div>
-      <div className="apply-actions">
-        {editable && <button type="button" className="chat-pill" onClick={() => setRekeying(agent)}>New code</button>}
-        <button type="button" className="chat-pill" onClick={() => setRemoving(agent)}>Disconnect</button>
-      </div>
-    </li>;
+  const on = mine.filter(agent => isOn(agent, now));
+  // Heard from since Start was pressed: it opened, even if it has been closed again.
+  const answered = pressedAt !== null && mine.some(agent => !!agent.seen_at && new Date(agent.seen_at).getTime() >= pressedAt);
+  const opening = pressedAt !== null && !answered && on.length === 0;
+  const missing = opening && now - pressedAt > ANSWER_MS;
+  // While it starts, the app says which step it is on; once open, it says nothing more.
+  const starting = on.some(agent => agent.state === "idle" && !!agent.detail);
+  const running = on.some(agent => agent.state !== "error");
+  const agentRunning = running && !starting;
+  const waiting = starting || (opening && !missing);
+  const others = admin ? latestByComputer(agents?.filter(agent => agent.owner !== me) ?? []) : [];
+
+  /** Opens the app with a new code for this PC's browser, so a member never handles
+   * one. It can only be pressed while none of theirs is running. */
+  const start = async () => {
+    const clock = timeNow();
+    setProblem(null);
+    setNow(clock);
+    setPressedAt(clock);
+    let target = mine.find(agent => agent.id === rememberedId(me))?.id ?? null;
+    let { data, error } = await supabase.rpc("browser_agent_connect", { agent_name: "My browser", existing: target });
+    if (error?.code === "54000") {
+      // The most a member may have: one that is off is used again.
+      target = mine.find(agent => !isOn(agent, clock))?.id ?? null;
+      if (target) ({ data, error } = await supabase.rpc("browser_agent_connect", { agent_name: "My browser", existing: target }));
+    }
+    if (error || typeof data !== "string") {
+      setProblem("That did not work. Please try again.");
+      setPressedAt(null);
+      return;
+    }
+    const withCode = `${APP_LINK}?code=${encodeURIComponent(connectionCode(realtime.url, realtime.key, data))}`;
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- it opens the app, not a page
+    window.location.assign(withCode);
+    if (!target) {
+      const { data: newest } = await supabase.from("browser_agents").select("id").eq("owner", me).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      target = newest?.id ?? null;
+    }
+    if (target) remember(me, target);
+    void reload.current();
   };
 
   return <section className="jobs-card apply-browsers" aria-labelledby="apply-browsers-title">
     <header className="jobs-card-head">
       <div>
-        <h2 id="apply-browsers-title" className="jobs-card-title">Your browsers</h2>
-        <p className="jobs-card-sub">{agents === null ? "Loading…" : mine.length ? `${mine.length} connected` : "None connected yet"}</p>
+        <h2 id="apply-browsers-title" className="jobs-card-title">Your browser</h2>
+        <p className="jobs-card-sub" role="status">{agents === null ? "Loading…" : running ? "On" : on.length ? "Problem" : opening ? "Opening…" : "Off"}</p>
       </div>
-      <button type="button" className="chat-pill" onClick={() => setNaming(true)}><Plus /> Connect this PC</button>
+      {agentRunning
+        ? <button type="button" className="jobs-button" data-running="" disabled>KIASA agent is running</button>
+        : <button type="button" className="jobs-button" data-primary="" disabled={agents === null || waiting} onClick={() => void start()}>{waiting ? "Opening…" : "Start the KIASA Browser"}</button>}
     </header>
-    {agents && mine.length === 0 && <p className="jobs-form-hint">After you install the KIASA Browser, press <b>Connect this PC</b> to get a code, and paste it in the browser&apos;s settings. It then shows here, live.</p>}
-    {mine.length > 0 && <ul className="apply-list">{mine.map(agent => row(agent, false, true))}</ul>}
+    {on.length > 0 && <ul className="apply-list">{on.map(agent => <li key={agent.id} className="apply-row" data-state={agent.state}>
+      <span className="apply-dot" aria-hidden="true" />
+      <div className="apply-main">
+        <p className="apply-name">{agent.computer ?? agent.name}</p>
+        {/* Once open, the button above says it is running. */}
+        {(agent.detail || agent.state !== "idle") && <p className="apply-detail">{agent.detail || STATES[agent.state]}</p>}
+      </div>
+    </li>)}</ul>}
+    {problem && <p className="jobs-form-hint" role="alert">{problem}</p>}
+    {missing && <p className="jobs-form-hint" role="alert">Nothing opened? Install the newest KIASA Browser with the steps above, then press <b>Start the KIASA Browser</b> again. If Chrome asks to open it, choose <b>Open</b>.</p>}
+    <p className="jobs-form-hint">KIASA admins can see whether your browser is on and what it is doing, but never your pages.</p>
 
     {admin && <>
       <h2 className="jobs-card-title apply-all-title">Everyone&apos;s browsers</h2>
-      <p className="jobs-card-sub">{agents === null ? "Loading…" : others.length ? `${others.filter(online).length} online of ${others.length}` : "No one else has connected a browser yet"}</p>
-      {others.length > 0 && <ul className="apply-list">{others.map(agent => row(agent, true, false))}</ul>}
+      <p className="jobs-card-sub">{agents === null ? "Loading…" : others.length ? `${others.filter(agent => isOn(agent, now)).length} on, of ${others.length}` : "No one else has started a browser yet"}</p>
+      {others.length > 0 && <ul className="apply-list">{others.map(agent => {
+        const live = isOn(agent, now);
+        return <li key={agent.id} className="apply-row" data-state={live ? agent.state : "offline"}>
+          <span className="apply-dot" aria-hidden="true" />
+          <div className="apply-main">
+            <p className="apply-name">{agent.owner_name || agent.name}</p>
+            <p className="apply-detail">{live ? agent.detail || STATES[agent.state] : agent.seen_at ? "Off" : "Not started yet"}</p>
+            <p className="apply-meta">{[agent.computer, agent.version && `version ${agent.version}`, `seen ${seenText(agent.seen_at, now)}`].filter(Boolean).join(" · ")}</p>
+          </div>
+          <div className="apply-actions">
+            <button type="button" className="chat-pill" onClick={() => setRemoving(agent)}>Disconnect</button>
+          </div>
+        </li>;
+      })}</ul>}
     </>}
 
-    {naming && <FormDialog title="Connect this PC" action="Make its code" busyAction="Making…" onClose={() => setNaming(false)} onSubmit={async form => {
-      const name = String(form.get("name") ?? "").trim();
-      if (!name) return "Give it a name, such as Home laptop.";
-      return connect(name, null);
-    }}>
-      <label className="chat-field"><span>Name</span><input name="name" maxLength={60} placeholder="Home laptop" required /></label>
-      <p className="jobs-form-hint">Next you get a code to paste in the KIASA Browser on that PC.</p>
-    </FormDialog>}
-    {code && <CodeDialog name={code.name} code={code.code} onClose={() => setCode(null)} />}
-    {rekeying && <Confirm title={`A new code for ${rekeying.name}?`} confirm="Make a new code"
-      text="The code it has now stops working at once. Paste the new one in the KIASA Browser's settings on that PC."
-      onClose={() => setRekeying(null)} onConfirm={() => connect(rekeying.name, rekeying.id)} />}
-    {removing && <Confirm title={`Disconnect ${removing.name}?`} confirm="Disconnect"
-      text="Its code stops working and it leaves this list. You can connect the PC again with a new code."
+    {removing && <Confirm title={`Disconnect ${removing.owner_name || removing.name}'s browser?`} confirm="Disconnect"
+      text="If it is open, it closes on that PC, and it leaves this list. It comes back the next time they press Start."
       onClose={() => setRemoving(null)} onConfirm={async () => {
         const { error } = await supabase.from("browser_agents").delete().eq("id", removing.id);
         if (error) return "That did not work. Please try again.";
@@ -140,26 +186,4 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
         return null;
       }} />}
   </section>;
-}
-
-function CodeDialog({ name, code, onClose }: { name: string; code: string; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [copied, setCopied] = useState(false);
-  useEffect(() => { const box = dialog.current; if (box && !box.open) box.showModal(); }, []);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(code); setCopied(true); } catch { setCopied(false); }
-  };
-  return <dialog ref={dialog} className="chat-dialog jobs-dialog" data-wide="" aria-label={`The code for ${name}`} onClose={onClose}>
-    <p className="chat-dialog-title">The code for {name}</p>
-    <ol className="jobright-steps">
-      <li>On that PC, open the <b>KIASA Browser</b> settings.</li>
-      <li>Paste this code in <b>KIASA connection</b> and press <b>Save</b>.</li>
-    </ol>
-    <textarea className="jobright-code" readOnly value={code} rows={4} aria-label="Connection code" onFocus={event => event.currentTarget.select()} />
-    <p className="jobs-form-hint">It is shown only now. Whoever has it can report as this browser: send it to no one. Lost it? Make a new one.</p>
-    <div className="chat-dialog-actions">
-      <button type="button" className="chat-dialog-button" onClick={() => void copy()}><Copy /> {copied ? "Copied" : "Copy the code"}</button>
-      <button type="button" className="chat-dialog-button" onClick={onClose}>Done</button>
-    </div>
-  </dialog>;
 }
