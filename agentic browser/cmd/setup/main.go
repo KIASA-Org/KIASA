@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 	"unicode/utf16"
 
 	"stealth-app/internal/brand"
@@ -25,11 +27,19 @@ func main() {
 	uninstall := flag.Bool("uninstall", false, "uninstall KIASA")
 	verify := flag.Bool("verify", false, "check the embedded installation files")
 	installDir := flag.String("dir", "", "installation directory (defaults to the current user's Programs folder)")
+	updating := flag.Bool("update", false, "update an installed KIASA with no questions, then open it")
+	waitPID := flag.Int("wait-pid", 0, "with -update, the running KIASA to wait for")
+	noOpen := flag.Bool("no-open", false, "with -update, do not open it afterwards")
 	flag.Parse()
 
 	dir := *installDir
 	if dir == "" {
 		dir = brand.InstallDir()
+	}
+
+	if *updating {
+		runUpdate(dir, *waitPID, *noOpen)
+		return
 	}
 
 	var err error
@@ -54,6 +64,114 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Could not open the Auto apply page:", err)
 		}
 	}
+}
+
+// runUpdate replaces the installed program with no one being asked anything. Whatever happens,
+// the member is left with a browser that opens: a failed update opens the version they had.
+func runUpdate(installDir string, waitPID int, noOpen bool) {
+	logFile := filepath.Join(brand.LogDir(), "update.log")
+	note := func(format string, args ...any) {
+		if err := os.MkdirAll(brand.LogDir(), 0o700); err != nil {
+			return
+		}
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return
+		}
+		defer file.Close()
+		fmt.Fprintf(file, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
+	}
+	waitForExit(waitPID)
+	err := updateApp(installDir)
+	if err != nil {
+		note("Could not update to %s: %v", brand.Version, err)
+	} else {
+		note("Updated to %s.", brand.Version)
+	}
+	if noOpen {
+		if err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	var args []string
+	if err != nil {
+		// It tries again next time, not straight away.
+		args = append(args, "-no-update")
+	}
+	if startErr := exec.Command(brand.AppExe(installDir), args...).Start(); startErr != nil {
+		note("Could not open KIASA: %v", startErr)
+		os.Exit(1)
+	}
+}
+
+// waitForExit waits for the program being replaced to end. It has just been told to, so this is
+// a matter of moments, and Windows will not let its file be replaced before then.
+func waitForExit(pid int) {
+	if pid <= 0 {
+		return
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return
+		}
+		state, err := waitBriefly(process)
+		if err != nil || state {
+			return
+		}
+	}
+}
+
+// updateApp puts the new program in place, keeping the member's shortcuts as they arranged them.
+func updateApp(installDir string) error {
+	files, err := readPayload()
+	if err != nil {
+		return err
+	}
+	if len(files["KIASA.exe"]) == 0 || len(files["kiasa.ico"]) == 0 {
+		return errors.New("installation package is missing KIASA.exe or kiasa.ico")
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		return fmt.Errorf("creating installation folder: %w", err)
+	}
+	for name, data := range files {
+		mode := os.FileMode(0o644)
+		if name == "KIASA.exe" {
+			mode = 0o755
+		}
+		if err := writeFileRetrying(filepath.Join(installDir, name), data, mode); err != nil {
+			return fmt.Errorf("installing %s: %w", name, err)
+		}
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locating setup executable: %w", err)
+	}
+	if err := copyFile(executable, brand.UninstallExe(installDir)); err != nil {
+		return fmt.Errorf("installing the uninstaller: %w", err)
+	}
+	if err := registerApp(installDir); err != nil {
+		return fmt.Errorf("registering the uninstall entry: %w", err)
+	}
+	if err := registerLink(installDir); err != nil {
+		return fmt.Errorf("registering the link that opens KIASA: %w", err)
+	}
+	return nil
+}
+
+// writeFileRetrying allows for Windows taking a moment to let go of a file, or a virus scanner
+// looking at it.
+func writeFileRetrying(path string, data []byte, mode os.FileMode) error {
+	var err error
+	for try := 0; try < 20; try++ {
+		if err = writeFile(path, data, mode); err == nil {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return err
 }
 
 func verifyPayload() error {
@@ -315,6 +433,22 @@ try {
 	fmt.Println("KIASA was unregistered. Its application files will be removed after this window closes.")
 	fmt.Println("Settings and browser profiles were kept.")
 	return nil
+}
+
+// waitBriefly says whether a process has ended, waiting up to a second to find out.
+func waitBriefly(process *os.Process) (bool, error) {
+	const synchronize = 0x00100000
+	handle, err := syscall.OpenProcess(synchronize, false, uint32(process.Pid))
+	if err != nil {
+		// Windows cannot find it: it has gone.
+		return true, nil
+	}
+	defer syscall.CloseHandle(handle)
+	event, err := syscall.WaitForSingleObject(handle, 1000)
+	if err != nil {
+		return false, err
+	}
+	return event == syscall.WAIT_OBJECT_0, nil
 }
 
 func run(name string, args ...string) error {

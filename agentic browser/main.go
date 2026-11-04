@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"stealth-app/internal/settings"
 	"stealth-app/internal/settingsui"
 	"stealth-app/internal/single"
+	"stealth-app/internal/update"
 	"stealth-app/internal/winmsg"
 	"stealth-app/proxy"
 )
@@ -51,6 +53,7 @@ func main() {
 	fixedViewport := flag.Bool("fixed-viewport", false, "give a visible window a fixed 1920x1080 viewport instead of its real size")
 	openSettings := flag.Bool("settings", false, "open the settings window, to set a proxy, and nothing else")
 	stealthCheck := flag.Bool("stealth-check", false, "open the browser-fingerprint test page and save its report instead of KIASA's Auto apply page")
+	noUpdate := flag.Bool("no-update", false, "do not look for an update this time")
 	closeWhenDone := flag.Bool("close-when-done", false, "close a visible browser as soon as the report is saved; by default it stays open until you close it or press Ctrl+C")
 	flag.Parse()
 	closeLog := keepLog()
@@ -185,6 +188,17 @@ func main() {
 		}
 	}()
 
+	// Before anything else opens, so that nothing is interrupted by it. Anything that goes wrong
+	// only means carrying on with this version.
+	if !*noUpdate && !*stealthCheck {
+		updateFirst(conn, status)
+	}
+	// Only for checking an update end to end, without windows appearing on the tester's screen.
+	hiddenTest := brand.IsLocalTest() && os.Getenv("KIASA_TEST_HEADLESS") != ""
+	if hiddenTest {
+		*headless = true
+	}
+
 	if *channel == "auto" {
 		if _, err := findChrome(); err != nil {
 			failStart("Google Chrome is not installed on this PC.", "%v", err)
@@ -217,7 +231,7 @@ func main() {
 
 	// A visible browser is left open so it can be used. Headless has no window to
 	// wait for, so it always finishes on its own.
-	keepOpen := !*headless && !*closeWhenDone
+	keepOpen := hiddenTest || (!*headless && !*closeWhenDone)
 	waitForUser := func() {
 		log.Println("[*] The browser stays open. Close its window, or press Ctrl+C here, to finish.")
 		stop := make(chan struct{})
@@ -302,6 +316,45 @@ func main() {
 		waitForUser()
 		log.Println("[+] Done.")
 	}
+}
+
+// updateFirst installs a newer version if there is one, in which case this program ends here and
+// the installer opens the new one.
+func updateFirst(conn *connection, status *statusBoard) {
+	config := update.Config{
+		ManifestURL:    brand.UpdateAddress(),
+		PublicKey:      brand.UpdateKey,
+		Current:        brand.Version,
+		WorkDir:        brand.UpdateDir(),
+		AllowPlainHTTP: brand.IsLocalTest(),
+		Client:         &http.Client{},
+	}
+	if !config.Enabled() {
+		return
+	}
+	config.Tidy()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	ready, err := update.Find(ctx, config)
+	if err != nil {
+		log.Printf("[!] Carrying on without updating: %v\n", err)
+		return
+	}
+	if ready == nil {
+		return
+	}
+	log.Printf("[*] Updating to version %s.\n", ready.Manifest.Version)
+	status.set("idle", "Updating to version "+ready.Manifest.Version+".")
+	told, cancelTold := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelTold()
+	if err := link.CheckIn(told, conn.current(), status.current()); err != nil {
+		log.Printf("[!] Could not say so on the Auto apply page: %v\n", err)
+	}
+	if err := ready.Install(os.Getpid()); err != nil {
+		log.Printf("[!] Carrying on without updating: could not start the installer: %v\n", err)
+		return
+	}
+	os.Exit(0)
 }
 
 // showSettings opens the settings window and waits for it. What is saved there is
