@@ -54,6 +54,18 @@ func (e *Engine) Channel() string {
 	return e.channel
 }
 
+// BringToFront shows the browser's window, on its newest tab.
+func (e *Engine) BringToFront() error {
+	if e.context == nil {
+		return nil
+	}
+	pages := e.context.Pages()
+	if len(pages) == 0 {
+		return nil
+	}
+	return pages[len(pages)-1].BringToFront()
+}
+
 func (e *Engine) Start(opts LaunchOptions) (playwright.Page, error) {
 	profilePath := opts.ProfileDir
 	if profilePath == "" {

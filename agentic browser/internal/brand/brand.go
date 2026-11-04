@@ -3,6 +3,7 @@ package brand
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -14,10 +15,17 @@ const (
 	// AppID is how Windows recognises the app. The shortcuts and the browser's
 	// windows share it, so they appear as one app on the taskbar.
 	AppID = "KIASA.Browser"
-	// StartPage opens when the browser starts.
-	StartPage = "https://www.kiasa.tech/"
-	// ApplyPage is where the browser opens: KIASA's Auto apply page.
+	// StartPage opens when the browser starts: it shows the IP address and location
+	// websites see, so a member can check their connection at a glance.
+	StartPage = "https://browserleaks.com/ip"
+	// ApplyPage is KIASA's Auto apply page, where the browser is started from.
 	ApplyPage = "https://www.kiasa.tech/apply"
+	// AppLinkScheme is the kind of link that opens the app, as the Start button on the
+	// Auto apply page does. Setup registers it.
+	AppLinkScheme = "kiasa-browser"
+	// DatabaseHost is where KIASA's database is. A link that opens the app may only
+	// connect it to this one.
+	DatabaseHost = "lghgwvqgigbmcnxbhdwi.supabase.co"
 	// MutexName keeps a second copy of the app from starting.
 	MutexName = `Local\KIASA-Browser-App`
 	// BrowserExeName is the renamed browser inside the browser folder.
@@ -81,6 +89,12 @@ func BrowserExe(installDir string) string {
 // DriverDir is Playwright's driver, inside an install folder.
 func DriverDir(installDir string) string {
 	return filepath.Join(installDir, "driver")
+}
+
+// OpenApplyPage opens KIASA's Auto apply page in the person's usual browser, where
+// they are signed in and can press Start.
+func OpenApplyPage() error {
+	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", ApplyPage).Start()
 }
 
 func localAppData() string {

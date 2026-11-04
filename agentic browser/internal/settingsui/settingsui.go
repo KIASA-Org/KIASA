@@ -19,12 +19,8 @@ import (
 	"sync"
 	"time"
 
-	linkpkg "stealth-app/internal/link"
 	"stealth-app/internal/settings"
 )
-
-// checkIn asks KIASA whether a connection code is accepted; tests replace it.
-var checkIn = linkpkg.CheckIn
 
 //go:embed page.html
 var pageHTML []byte
@@ -46,8 +42,6 @@ type Options struct {
 	SettingsPath string
 	// Check tests a proxy for the Test connection button.
 	Check CheckProxy
-	// Notice is shown when the window opens, as the reason it was opened.
-	Notice string
 }
 
 // Show opens the settings window and waits for it to close. saved reports whether the
@@ -63,7 +57,6 @@ func Show(opts Options) (saved bool, err error) {
 		return false, err
 	}
 	server := newServer(opts.SettingsPath, listener.Addr().String(), token, opts.Check)
-	server.notice = opts.Notice
 	httpServer := &http.Server{Handler: server, ReadHeaderTimeout: 10 * time.Second}
 	go httpServer.Serve(listener)
 	defer func() {
@@ -129,8 +122,6 @@ type server struct {
 	addr  string
 	token string
 	check CheckProxy
-	// notice is the reason the window was opened, shown to the person.
-	notice string
 
 	mu    sync.Mutex
 	done  bool
@@ -210,8 +201,6 @@ type form struct {
 	Port     string `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	// Link is a connection code typed or pasted; empty keeps the saved one.
-	Link string `json:"link"`
 }
 
 func (s *server) state(w http.ResponseWriter) {
@@ -230,8 +219,6 @@ func (s *server) state(w http.ResponseWriter) {
 		"host":        p.Host,
 		"username":    p.Username,
 		"hasPassword": p.Password != "", // the password itself never goes back to the page
-		"notice":      s.notice,
-		"linked":      current.Link != "", // nor does the code
 	}
 	if p.Port != 0 {
 		reply["port"] = strconv.Itoa(p.Port)
@@ -301,35 +288,10 @@ func (s *server) save(w http.ResponseWriter, body []byte) {
 		writeError(w, err.Error())
 		return
 	}
-	var in form
-	json.Unmarshal(body, &in)
+	// The connection to KIASA is not set here, so whatever is saved stays as it is.
 	link := ""
 	if current, err := settings.Load(s.path); err == nil {
 		link = current.Link
-	}
-	switch {
-	case strings.TrimSpace(in.Link) != "":
-		code, err := linkpkg.Parse(in.Link)
-		if err != nil {
-			writeError(w, err.Error())
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		err = checkIn(ctx, code, linkpkg.Status{State: "idle", Detail: "Connecting."})
-		cancel()
-		switch {
-		case errors.Is(err, linkpkg.ErrNotConnected):
-			writeError(w, "KIASA does not accept this code. It may have been replaced: make a new one on the Auto apply page.")
-			return
-		case err != nil:
-			writeError(w, "Could not reach KIASA to check the code. Check your internet connection and try again.")
-			return
-		}
-		link = strings.TrimSpace(in.Link)
-	}
-	if link == "" {
-		writeError(w, "Paste the code from the Auto apply page of KIASA. The KIASA Browser cannot be used without it.")
-		return
 	}
 	if err := settings.Save(s.path, settings.Settings{Proxy: p, Link: link}); err != nil {
 		writeError(w, "The settings could not be saved: "+filepath.Base(s.path))

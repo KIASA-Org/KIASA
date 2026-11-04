@@ -1,8 +1,6 @@
 package settingsui
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,16 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	linkpkg "stealth-app/internal/link"
 	"stealth-app/internal/settings"
 )
-
-// testCode is a well-formed KIASA connection code; KIASA itself is not asked.
-var testCode = "KIASA-APP1." + base64.RawURLEncoding.EncodeToString([]byte(`{"u":"https://example.supabase.co","k":"pub","s":"kapp_test"}`))
-
-func init() {
-	checkIn = func(context.Context, linkpkg.Code, linkpkg.Status) error { return nil }
-}
 
 const testToken = "secret-token"
 
@@ -58,10 +48,6 @@ func newTester(t *testing.T, check CheckProxy) *tester {
 
 func (tt *tester) post(route, body string) map[string]any {
 	tt.t.Helper()
-	// Saving needs a connection code; the tests that are not about it send one.
-	if route == "save" && !strings.Contains(body, `"link"`) {
-		body = strings.Replace(body, "}", `,"link":"`+testCode+`"}`, 1)
-	}
 	req, _ := http.NewRequest(http.MethodPost, tt.web.URL+"/"+testToken+"/"+route, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
@@ -339,38 +325,29 @@ func TestWindowArgs_CannotReachTheInternet(t *testing.T) {
 	}
 }
 
-func TestSave_NeedsAConnectionCode(t *testing.T) {
+func TestSave_WorksWithNoConnectionToKIASAYet(t *testing.T) {
 	tt := newTester(t, nil)
-	// proxyForm is sent as is: no code, none saved yet.
-	got := tt.post("save", strings.Replace(proxyForm, "}", `,"link":""}`, 1))
-	if got["error"] == nil {
-		t.Fatalf("saved without a code: %v", got)
+	if got := tt.post("save", proxyForm); got["ok"] != true {
+		t.Fatalf("save: %v", got)
 	}
-	if _, err := settings.Load(tt.path); !errors.Is(err, settings.ErrNotSet) {
-		t.Errorf("settings were written without a code: %v", err)
-	}
-	if got := tt.post("save", `{"enabled":false,"link":"not a code"}`); got["error"] == nil {
-		t.Errorf("a bad code was accepted: %v", got)
-	}
-	if got := tt.post("save", `{"enabled":false,"link":"`+testCode+`"}`); got["ok"] != true {
-		t.Fatalf("a good code was refused: %v", got)
-	}
-	// Once connected, a blank code box keeps the saved code.
-	if got := tt.post("save", `{"enabled":false,"link":""}`); got["ok"] != true {
-		t.Fatalf("blank code box lost the saved code: %v", got)
-	}
-	if saved, _ := settings.Load(tt.path); saved.Link != testCode {
-		t.Errorf("saved code = %q", saved.Link)
+	if saved, _ := settings.Load(tt.path); saved.Link != "" || saved.Proxy.Host != "1.2.3.4" {
+		t.Errorf("saved %+v", saved)
 	}
 }
 
-func TestSave_RefusedCodeIsExplained(t *testing.T) {
+func TestSave_KeepsTheConnectionToKIASA(t *testing.T) {
 	tt := newTester(t, nil)
-	old := checkIn
-	checkIn = func(context.Context, linkpkg.Code, linkpkg.Status) error { return linkpkg.ErrNotConnected }
-	defer func() { checkIn = old }()
-	got := tt.post("save", `{"enabled":false,"link":"`+testCode+`"}`)
-	if msg, _ := got["error"].(string); !strings.Contains(msg, "does not accept") {
-		t.Errorf("got %v", got)
+	if err := settings.Save(tt.path, settings.Settings{Link: "KIASA-APP1.saved-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.post("save", proxyForm); got["ok"] != true {
+		t.Fatalf("save: %v", got)
+	}
+	if saved, _ := settings.Load(tt.path); saved.Link != "KIASA-APP1.saved-secret" {
+		t.Errorf("the connection was lost: %q", saved.Link)
+	}
+	raw, _ := json.Marshal(tt.state())
+	if strings.Contains(string(raw), "saved-secret") {
+		t.Errorf("state contains the code: %s", raw)
 	}
 }
