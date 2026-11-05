@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { useLiveCapture } from "./live-capture";
+import { ChevronDown } from "../site/icons";
 import { ScriptReader, tokenFrom, type ReadingState } from "./live-link";
 
 type Session = { user_id: string; started_at: string };
@@ -54,6 +55,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const reveal = useRef(0);
   const box = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  const [behind, setBehind] = useState(false);
   // Picking cards: click one, drag across several, or hold Ctrl to add more; the chosen
   // cards' text is copied at once. `picked` holds the still cards; `followAnchor` (if set)
   // follows the sentence being written — everything from it to the last keeps copying.
@@ -214,7 +216,13 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   }, []);
   const onScroll = () => {
     const el = box.current;
-    if (el) atBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 48;
+    if (!el) return;
+    atBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 48;
+    setBehind(!atBottom.current);
+  };
+  const toNewest = () => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
   };
 
   const choose = (id: string) => {
@@ -226,6 +234,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     setPicked(new Set());
     setFollowAnchor(null);
     atBottom.current = true;
+    setBehind(false);
     setOpening(true);
     setReading("opening");
     setOpen(id);
@@ -314,14 +323,17 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
             : copied ? <b>Copied {copied} {copied === 1 ? "card" : "cards"}</b>
             : <>{open ? <><b>{nameOf(open)}</b>: </> : null}{said}</>}</span>
         </p>
-        <div ref={box} className="live-cards" onScroll={onScroll}>
-          {sentences.length === 0
-            ? <p className="live-cards-empty">{open && stillOn ? "Waiting for the first words…" : "Their words appear here, a card at a time, as they are spoken."}</p>
-            : sentences.map((sentence, index) => <Card key={index} sentence={sentence} index={index}
-                live={index === last && stillOn}
-                picked={isPicked(index)}
-                following={liveFollowing && followAnchor != null && index >= followAnchor}
-                onDown={onDown} onEnter={onEnter} />)}
+        <div className="live-box">
+          <div ref={box} className="live-cards" onScroll={onScroll}>
+            {sentences.length === 0
+              ? <p className="live-cards-empty">{open && stillOn ? "Waiting for the first words…" : "Their words appear here, a card at a time, as they are spoken."}</p>
+              : sentences.map((sentence, index) => <Card key={index} sentence={sentence} index={index}
+                  live={index === last && stillOn}
+                  picked={isPicked(index)}
+                  following={liveFollowing && followAnchor != null && index >= followAnchor}
+                  onDown={onDown} onEnter={onEnter} />)}
+          </div>
+          {behind && <button type="button" className="jobs-button live-newest" data-primary="" onClick={toNewest}>Newest words <ChevronDown /></button>}
         </div>
       </div>
     </div>
