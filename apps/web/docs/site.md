@@ -933,6 +933,8 @@ tab, and on a very poor connection, on either side (`components/interview/live-l
   newest words, and the older ones arrive after them.
 - It has its own connection, apart from the one the rest of the site shares, and only one
   tab sends: a copy of the tab takes over if the first closes.
+- The member's box and the admin's cards stay on the newest words when the window changes
+  size. Scrolled back to read, they stay put, and a **Newest words** button brings them back.
 - The admin's page says when it is waiting for the connection, and each side says it is
   still there, so a silence on the call is not mistaken for a lost connection.
 

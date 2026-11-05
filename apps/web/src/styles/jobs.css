@@ -530,6 +530,10 @@
 @keyframes interview-progress-slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
 @media (prefers-reduced-motion: reduce) { .interview-progress-fill[data-waiting] { animation: none; width: 100%; opacity: 0.45; } }
 .interview-script { height: 58vh; min-height: 280px; padding: 20px 24px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--card-line); border-radius: 18px; background: var(--card); color: var(--ink); font-size: 21px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Scrolled back to read: the words go on arriving below, and this says so. */
+.live-box { position: relative; min-width: 0; }
+.live-newest { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); gap: 6px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.45); }
+.live-newest svg { width: 16px; height: 16px; }
 .interview-script:empty::before { content: attr(data-placeholder); color: var(--ink-mute); }
 .interview-note { max-width: 78ch; }
 @media (max-width: 640px) {
