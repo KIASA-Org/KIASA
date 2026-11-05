@@ -141,6 +141,13 @@ public sealed class Account
         }
     }
 
+    /// <summary>The address of the live connection.</summary>
+    public Uri RealtimeAddress()
+    {
+        var socket = Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? "wss://" + Url[8..] : "ws://" + Url[(Url.IndexOf("//", StringComparison.Ordinal) + 2)..];
+        return new Uri($"{socket}/realtime/v1/websocket?apikey={Uri.EscapeDataString(Key)}&vsn=1.0.0");
+    }
+
     /// <summary>Signs out here.</summary>
     public async Task SignOut()
     {

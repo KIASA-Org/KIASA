@@ -57,9 +57,23 @@
           <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Content area — features go here. -->
-        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="16">
-          <TextBlock x:Name="DeskContent" Foreground="{StaticResource InkMute}" FontSize="13.5" VerticalAlignment="Top"/>
+        <!-- Notification display area. -->
+        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="24">
+          <Grid>
+            <!-- Connection status, top-left. -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Left">
+              <Ellipse x:Name="ConnDot" Width="7" Height="7" Fill="{StaticResource Off}" VerticalAlignment="Center"/>
+              <TextBlock x:Name="ConnStatus" Text="Connecting…" FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="6,0,0,0"/>
+            </StackPanel>
+            <!-- Empty state. -->
+            <TextBlock x:Name="EmptyNote" Text="Waiting for a message." FontSize="14"
+                       Foreground="{StaticResource InkMute}" VerticalAlignment="Center"
+                       HorizontalAlignment="Center" TextAlignment="Center"/>
+            <!-- Incoming message text. -->
+            <TextBlock x:Name="NotifyText" TextWrapping="Wrap" FontSize="18" LineHeight="28"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"
+                       Foreground="{StaticResource Ink}" Visibility="Collapsed"/>
+          </Grid>
         </Border>
 
         <!-- Bottom bar: who is signed in, and sign-out. -->

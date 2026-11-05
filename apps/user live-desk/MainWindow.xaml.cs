@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using UserDesk.Net;
 
 namespace UserDesk;
@@ -10,6 +11,7 @@ namespace UserDesk;
 public partial class MainWindow : Window
 {
     private readonly Account _account = new();
+    private NotifyLink? _notifyLink;
     private (int X, int Y, int WindowX, int WindowY)? _moving;
 
     public MainWindow()
@@ -36,6 +38,7 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _notifyLink?.Dispose();
         Application.Current.Shutdown();
     }
 
@@ -62,7 +65,40 @@ public partial class MainWindow : Window
         SignInView.Visibility = Visibility.Collapsed;
         DeskView.Visibility = Visibility.Visible;
         WhoAmI.Text = _account.Name;
-        DeskContent.Text = "Connected.";
+        StartListening();
+    }
+
+    private void StartListening()
+    {
+        _notifyLink?.Dispose();
+        _notifyLink = new NotifyLink(_account);
+        _notifyLink.TextReceived += text => Dispatcher.BeginInvoke(() => ShowNotify(text));
+        _notifyLink.Connected += () => Dispatcher.BeginInvoke(() =>
+        {
+            ConnDot.Fill = (Brush)FindResource("Leaf");
+            ConnStatus.Text = "Connected";
+        });
+        _notifyLink.Disconnected += () => Dispatcher.BeginInvoke(() =>
+        {
+            ConnDot.Fill = (Brush)FindResource("Off");
+            ConnStatus.Text = "Reconnecting…";
+        });
+        _notifyLink.Open();
+    }
+
+    private void ShowNotify(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            NotifyText.Visibility = Visibility.Collapsed;
+            EmptyNote.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            NotifyText.Text = text;
+            NotifyText.Visibility = Visibility.Visible;
+            EmptyNote.Visibility = Visibility.Collapsed;
+        }
     }
 
     private async void SignIn_Click(object sender, RoutedEventArgs e) => await TrySignIn();
@@ -94,6 +130,8 @@ public partial class MainWindow : Window
 
     private async void SignOut_Click(object sender, RoutedEventArgs e)
     {
+        _notifyLink?.Dispose();
+        _notifyLink = null;
         await _account.SignOut();
         ShowSignIn(null);
     }
