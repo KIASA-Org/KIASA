@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ChatWatch } from "@/components/chat/chat-watch";
 import { ApplyBrowsers } from "@/components/apply/apply-browsers";
 import { ApplyDetails } from "@/components/apply/apply-details";
+import { ApplyGmail } from "@/components/apply/apply-gmail";
 import { ApplySetup } from "@/components/apply/apply-setup";
 import { ApplyWork } from "@/components/apply/apply-work";
 import { AppBar } from "@/components/site/app-bar";
@@ -31,6 +32,7 @@ export default async function ApplyPage() {
       </div>
       <main id="main-content" tabIndex={-1} className="jobs-main"><ApplySetup />
         <ApplyDetails realtime={publicSupabase} me={me.id} />
+        <ApplyGmail realtime={publicSupabase} me={me.id} />
         <ApplyBrowsers realtime={publicSupabase} admin={me.admin} me={me.id} />
         <ApplyWork realtime={publicSupabase} me={me.id} admin={me.admin} />
       </main>

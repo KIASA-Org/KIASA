@@ -20,6 +20,7 @@ import (
 	"stealth-app/browser"
 	"stealth-app/internal/agent"
 	"stealth-app/internal/brand"
+	"stealth-app/internal/gmail"
 	"stealth-app/internal/link"
 	"stealth-app/internal/settings"
 	"stealth-app/internal/settingsui"
@@ -305,10 +306,12 @@ func main() {
 		}
 		// The agent works in tabs of its own, for as long as the browser is open.
 		go agent.Run(linkCtx, agent.Config{
-			Code:    conn.current,
-			NewTab:  engine.NewTab,
-			Status:  status.set,
-			WorkDir: filepath.Join(brand.DataDir(), "work"),
+			Code:      conn.current,
+			NewTab:    engine.NewTab,
+			Status:    status.set,
+			WorkDir:   filepath.Join(brand.DataDir(), "work"),
+			Gmail:     gmailClient(engine),
+			GmailOpen: openInBrowserTab(engine),
 		})
 	}
 
@@ -355,6 +358,40 @@ func updateFirst(conn *connection, status *statusBoard) {
 		return
 	}
 	os.Exit(0)
+}
+
+// gmailSealer keeps the Gmail access sealed with Windows data protection, like the settings.
+type gmailSealer struct{}
+
+func (gmailSealer) Seal(b []byte) ([]byte, error)   { return settings.Seal(b) }
+func (gmailSealer) Unseal(b []byte) ([]byte, error) { return settings.Unseal(b) }
+
+// gmailClient reads a member's own Gmail for verification codes, through the browser's own tab. It
+// is nil when this build has no Google app.
+func gmailClient(engine *browser.Engine) *gmail.Client {
+	if brand.GmailClientID == "" {
+		return nil
+	}
+	return gmail.New(gmail.Config{
+		ClientID:     brand.GmailClientID,
+		ClientSecret: brand.GmailClientSecret,
+		Transport:    engine.GmailTransport(),
+		Store:        gmail.SealedFile{Path: brand.GmailTokenPath(), Sealer: gmailSealer{}},
+	})
+}
+
+// openInBrowserTab opens an address in a tab and brings it forward, for Google's Allow page.
+func openInBrowserTab(engine *browser.Engine) func(string) error {
+	return func(address string) error {
+		tab, err := engine.NewTab()
+		if err != nil {
+			return err
+		}
+		if _, err := tab.Goto(address, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateDomcontentloaded, Timeout: playwright.Float(60000)}); err != nil {
+			return err
+		}
+		return engine.BringToFront()
+	}
 }
 
 // showSettings opens the settings window and waits for it. What is saved there is

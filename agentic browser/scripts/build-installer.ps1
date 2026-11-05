@@ -20,6 +20,21 @@ $payload = Join-Path $temp "payload.zip"
 $icon = Join-Path $root "assets\kiasa.ico"
 $ldflags = "-s -w -X stealth-app/internal/brand.Version=$Version $ExtraFlags".Trim()
 
+# KIASA's Google app, for reading a member's own Gmail (read-only) to finish a form that emails a
+# code. Read from the owner's client file if it is on this PC; kept out of the public repository, so
+# a build made elsewhere simply has no Gmail and asks nobody to connect it.
+$clientFile = Join-Path $env:LOCALAPPDATA "KIASA\google\client_secret.json"
+if (Test-Path $clientFile) {
+    $client = (Get-Content $clientFile -Raw | ConvertFrom-Json).installed
+    if ($client.client_id -and $client.client_secret) {
+        $ldflags += " -X stealth-app/internal/brand.GmailClientID=$($client.client_id)"
+        $ldflags += " -X stealth-app/internal/brand.GmailClientSecret=$($client.client_secret)"
+        Write-Output "Gmail is set up in this build (client ...$($client.client_id.Substring($client.client_id.Length - 20)))."
+    }
+} else {
+    Write-Output "No Google client file found, so this build has no Gmail."
+}
+
 New-Item -ItemType Directory -Force -Path $dist, $temp | Out-Null
 
 try {

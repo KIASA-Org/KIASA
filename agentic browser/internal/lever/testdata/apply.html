@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Apply</title></head>
+<body>
+<h1>Apply to Acme — Senior Engineer</h1>
+<form method="POST" action="/test/abc123/apply" class="application-form">
+  <div class="application-field"><label for="name">Full name<span>*</span></label>
+    <input id="name" name="name" type="text" required></div>
+  <div class="application-field"><label for="email">Email<span>*</span></label>
+    <input id="email" name="email" type="email" required></div>
+  <div class="application-field"><label for="phone">Phone</label>
+    <input id="phone" name="phone" type="tel"></div>
+
+  <div class="application-field"><label for="resume" class="label">Resume/CV<span>*</span></label>
+    <input id="resume" name="resume" type="file" accept=".pdf" required></div>
+
+  <div class="application-question"><label for="cards[1a2b][field0]">Are you authorized to work in the US?<span>*</span></label>
+    <select id="cards[1a2b][field0]" name="cards[1a2b][field0]" required>
+      <option value="">Select...</option><option value="yes">Yes</option><option value="no">No</option>
+    </select></div>
+
+  <fieldset class="application-question" aria-required="true"><legend>Preferred location<span>*</span></legend>
+    <div><input id="loc_ny" type="radio" name="loc" value="ny" required><label for="loc_ny">New York</label></div>
+    <div><input id="loc_sf" type="radio" name="loc" value="sf" required><label for="loc_sf">San Francisco</label></div>
+    <div><input id="loc_re" type="radio" name="loc" value="remote" required><label for="loc_re">Remote</label></div>
+  </fieldset>
+
+  <fieldset class="application-question"><legend>Which interest you?</legend>
+    <div><input id="int_be" type="checkbox" name="int" value="be"><label for="int_be">Backend</label></div>
+    <div><input id="int_fe" type="checkbox" name="int" value="fe"><label for="int_fe">Frontend</label></div>
+    <div><input id="int_ml" type="checkbox" name="int" value="ml"><label for="int_ml">Machine learning</label></div>
+  </fieldset>
+
+  <div class="application-field"><label for="why">Why do you want to work here?</label>
+    <textarea id="why" name="why"></textarea></div>
+
+  <div class="application-field"><input id="consent" name="consent" type="checkbox" required><label for="consent">I agree to the privacy policy</label></div>
+
+  <button type="submit" data-qa="btn-submit">Submit application</button>
+</form>
+<script>
+  // Lever submits through its own code, not native validation; this handler is the gate.
+  const form = document.querySelector("form");
+  form.noValidate = true;
+  window.sent = false;
+  window.__needCode = false;
+  window.__expectCode = "246810";
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    if (window.__needCode) {
+      let wrap = document.getElementById("code-wrap");
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.id = "code-wrap";
+        wrap.innerHTML = '<p>A verification code was sent to you. Enter the security code to confirm you are a human.</p><label for="security_code">Security code</label><input id="security_code" name="security_code" type="text">';
+        form.insertBefore(wrap, form.lastElementChild);
+        return;
+      }
+      if (document.getElementById("security_code").value !== window.__expectCode) return;
+    }
+    window.sent = true;
+    document.body.innerHTML = "<h1>Thank you for applying to Acme</h1><p>We have received your application.</p>";
+  });
+</script>
+</body>
+</html>

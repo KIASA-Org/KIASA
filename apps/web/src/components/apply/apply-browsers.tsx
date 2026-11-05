@@ -118,8 +118,8 @@ export function ApplyBrowsers({ realtime, admin, me }: { realtime: { url: string
   const agentRunning = running && !starting;
   const waiting = starting || (opening && !missing);
   const others = admin ? latestByComputer(agents?.filter(agent => agent.owner !== me) ?? []) : [];
-  // Versions before 1.3.0 cannot update themselves, so this says what to do, once.
-  const outdated = on.find(agent => isOlder(agent.version, "1.3.0") && isOlder(agent.version, BROWSER_VERSION));
+  // Versions before 1.4.1 cannot update themselves, so this says what to do, once.
+  const outdated = on.find(agent => isOlder(agent.version, "1.4.1") && isOlder(agent.version, BROWSER_VERSION));
 
   /** Opens the app with a new code for this PC's browser, so a member never handles
    * one. It can only be pressed while none of theirs is running. */

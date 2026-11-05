@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Application</title></head>
+<body>
+<h1>Apply to Acme — Senior Engineer</h1>
+<form id="application-form" class="ashby-application-form">
+  <div class="field"><label id="name-label" for="name">Name<span>*</span></label>
+    <input id="name" aria-labelledby="name-label" aria-required="true" type="text"></div>
+
+  <div class="field"><label id="resume-label" for="resume" class="label">Resume<span>*</span></label>
+    <input id="resume" aria-labelledby="resume-label" type="file" accept=".pdf"></div>
+
+  <div class="field ashby-select" data-options="Yes|No">
+    <label id="auth-label">Are you authorized to work in the US?<span>*</span></label>
+    <input id="auth" role="combobox" aria-labelledby="auth-label" aria-required="true" aria-expanded="false" type="text" readonly></div>
+
+  <div class="field ashby-select" data-options="LinkedIn|Indeed|A friend">
+    <label id="hear-label">How did you hear about us?</label>
+    <input id="hear" role="combobox" aria-labelledby="hear-label" aria-expanded="false" type="text" readonly></div>
+
+  <div class="field"><label id="why-label" for="why">Why do you want to work here?</label>
+    <textarea id="why" aria-labelledby="why-label"></textarea></div>
+
+  <button type="submit">Submit Application</button>
+</form>
+<script>
+  // A small React-select-like dropdown: ArrowDown opens a list of options; clicking one shows
+  // it in a box of its own. The page's own code handles submission.
+  function wire(shell) {
+    const input = shell.querySelector("input[role=combobox]");
+    const options = (shell.dataset.options || "").split("|").filter(Boolean);
+    let list = null;
+    const close = () => { if (list) { list.remove(); list = null; input.setAttribute("aria-expanded", "false"); } };
+    const open = () => {
+      close();
+      list = document.createElement("div");
+      list.setAttribute("role", "listbox");
+      list.id = "listbox-" + input.id;
+      for (const text of options) {
+        const item = document.createElement("div");
+        item.setAttribute("role", "option");
+        item.textContent = text;
+        item.addEventListener("click", () => choose(text));
+        list.appendChild(item);
+      }
+      shell.appendChild(list);
+      input.setAttribute("aria-expanded", "true");
+    };
+    const choose = text => {
+      shell.querySelectorAll(".single-value").forEach(e => e.remove());
+      const v = document.createElement("div");
+      v.className = "single-value";
+      v.textContent = text;
+      shell.insertBefore(v, input);
+      close();
+    };
+    input.addEventListener("keydown", e => {
+      if (e.key === "ArrowDown") { e.preventDefault(); open(); }
+      if (e.key === "Escape") close();
+    });
+  }
+  document.querySelectorAll(".ashby-select").forEach(wire);
+
+  const form = document.getElementById("application-form");
+  form.noValidate = true;
+  window.sent = false;
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    window.sent = true;
+    document.body.innerHTML = "<h1>Thank you for applying to Acme</h1><p>Your application was sent.</p>";
+  });
+</script>
+</body>
+</html>
