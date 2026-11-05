@@ -32,6 +32,7 @@ type Signal = {
   /** An admin has stopped listening; the member has stopped sharing. */
   bye?: boolean; stopped?: boolean;
   description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit;
+  ice?: RTCIceServer[];
 };
 
 const relayed = (ice: RTCIceServer[]) => ice.some(server => [server.urls].flat().some(url => url.startsWith("turn")));
