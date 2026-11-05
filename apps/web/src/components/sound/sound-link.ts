@@ -32,6 +32,7 @@ type Signal = {
   /** An admin has stopped listening; the member has stopped sharing. */
   bye?: boolean; stopped?: boolean;
   description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit;
+  ice?: RTCIceServer[];
 };
 
 const relayed = (ice: RTCIceServer[]) => ice.some(server => [server.urls].flat().some(url => url.startsWith("turn")));
@@ -195,7 +196,10 @@ export class SoundListener {
     this.stopClock = startClock(ASK_MS, () => this.tick());
   }
 
-  private ask() { if (!this.live) void this.channel.send({ from: this.id, listen: true }); }
+  private ask() {
+    if (this.live) return;
+    void this.ice().then(ice => this.channel.send({ from: this.id, listen: true, ice }));
+  }
 
   private tick() {
     this.channel.keepUp();

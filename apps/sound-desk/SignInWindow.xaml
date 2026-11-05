@@ -1,0 +1,29 @@
+<Window x:Class="SoundDesk.SignInWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KIASA Sound Desk" Width="380" Height="360"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="{StaticResource Night}" Foreground="{StaticResource Ink}"
+        FontFamily="{StaticResource Sans}" FontSize="14" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display" Icon="assets/kiasa.ico">
+
+  <Grid>
+    <StackPanel Width="300" VerticalAlignment="Center" Margin="0,0,0,20">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,22">
+        <TextBlock Text="KIASA" FontWeight="Bold" FontSize="18" VerticalAlignment="Center"/>
+        <TextBlock Text="Sound Desk" Foreground="{StaticResource InkMute}" FontSize="17" Margin="7,0,0,0" VerticalAlignment="Center"/>
+      </StackPanel>
+
+      <TextBlock Text="Email" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,5"/>
+      <TextBox x:Name="EmailBox" Template="{StaticResource FieldTemplate}" Foreground="{StaticResource Ink}"
+               CaretBrush="{StaticResource Leaf}" FontSize="14" KeyDown="Field_KeyDown"/>
+
+      <TextBlock Text="Password" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,12,0,5"/>
+      <PasswordBox x:Name="PasswordInput" Template="{StaticResource FieldTemplate}" Foreground="{StaticResource Ink}"
+                    CaretBrush="{StaticResource Leaf}" FontSize="14" KeyDown="Field_KeyDown"/>
+
+      <Button x:Name="SignInButton" Style="{StaticResource Strong}" Content="Sign in" Margin="0,18,0,0" Click="SignIn_Click"/>
+      <TextBlock x:Name="SignInSaid" TextWrapping="Wrap" FontSize="13" Foreground="{StaticResource Warn}" Margin="0,12,0,0" Visibility="Collapsed"/>
+    </StackPanel>
+  </Grid>
+</Window>
