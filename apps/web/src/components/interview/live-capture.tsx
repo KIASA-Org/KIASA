@@ -67,7 +67,7 @@ type Capture = {
   /** How far the first-run speech model download has got, 0–1, while it is going. */
   progress: number | null;
   turnOn: () => void; turnOff: () => void; dismissSetup: () => void;
-  attachBox: (el: HTMLDivElement | null) => void;
+  attachBox: (el: HTMLDivElement | null, onBehind?: (behind: boolean) => void) => void;
   scriptText: () => string;
   /** Who this is, and a way to hear each change of the script being written in this tab. */
   me: string | null;
@@ -269,7 +269,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     }
   }, []);
 
-  const attachBox = useCallback((el: HTMLDivElement | null) => { words.attach(el); }, [words]);
+  const attachBox = useCallback((el: HTMLDivElement | null, onBehind?: (behind: boolean) => void) => { words.attach(el, onBehind); }, [words]);
 
   useEffect(() => () => {
     window.clearTimeout(retry.current);

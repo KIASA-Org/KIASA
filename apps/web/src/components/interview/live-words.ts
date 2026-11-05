@@ -6,8 +6,34 @@ export class Words {
   private shown = "";
   private timer = 0;
   private box: HTMLElement | null = null;
+  private following = true;
+  private resized: ResizeObserver | null = null;
+  private onBehind: (behind: boolean) => void = () => {};
+  /** Only the member scrolling away stops it following: not the words wrapping differently when
+   * the window changes size, which leaves the box somewhere in the middle of the script. */
+  private scrolled = () => {
+    const box = this.box;
+    if (!box) return;
+    const following = box.scrollTop + box.clientHeight >= box.scrollHeight - 48;
+    if (following !== this.following) this.onBehind(!following);
+    this.following = following;
+  };
   // Re-attaching (the member came back to the Interview page) shows all of it at once.
-  attach(box: HTMLElement | null) { this.box = box; if (box) { this.shown = ""; this.draw(this.target); } }
+  attach(box: HTMLElement | null, onBehind: (behind: boolean) => void = () => {}) {
+    this.box?.removeEventListener("scroll", this.scrolled);
+    this.resized?.disconnect();
+    this.resized = null;
+    this.box = box;
+    if (!box) return;
+    this.onBehind = onBehind;
+    this.following = true;
+    onBehind(false);
+    box.addEventListener("scroll", this.scrolled, { passive: true });
+    this.resized = new ResizeObserver(() => { if (this.following) box.scrollTop = box.scrollHeight; });
+    this.resized.observe(box);
+    this.shown = "";
+    this.draw(this.target);
+  }
   stop() { window.clearTimeout(this.timer); this.timer = 0; }
   set(text: string) {
     this.target = text;
@@ -18,9 +44,8 @@ export class Words {
     const box = this.box;
     this.shown = text;
     if (!box) return;
-    const follow = box.scrollTop + box.clientHeight >= box.scrollHeight - 48;
     box.textContent = text;
-    if (follow) box.scrollTop = box.scrollHeight;
+    if (this.following) box.scrollTop = box.scrollHeight;
   }
   private step() {
     this.timer = 0;

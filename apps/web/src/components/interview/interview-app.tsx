@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Download } from "../site/icons";
+import { useCallback, useRef, useState } from "react";
+import { ChevronDown, Download } from "../site/icons";
 import { DOWNLOAD_URL, OPEN_APP, useLiveCapture, type Source } from "./live-capture";
 
 const CAPTURES: { source: Source; name: string }[] = [
@@ -16,9 +16,18 @@ const CAPTURES: { source: Source; name: string }[] = [
 export function InterviewApp() {
   const { phase, detail, problem, missing, hasText, on, source, chooseSource, outdated, progress, turnOn, turnOff, dismissSetup, attachBox, scriptText } = useLiveCapture();
   const [copied, setCopied] = useState(false);
+  const [behind, setBehind] = useState(false);
+  const boxElement = useRef<HTMLDivElement | null>(null);
 
   // The box the words are drawn into: the provider keeps the words, this shows them.
-  const box = useCallback((el: HTMLDivElement | null) => attachBox(el), [attachBox]);
+  const box = useCallback((el: HTMLDivElement | null) => {
+    boxElement.current = el;
+    attachBox(el, setBehind);
+  }, [attachBox]);
+  const toNewest = () => {
+    const el = boxElement.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
 
   const copy = async () => {
     try {
@@ -82,7 +91,10 @@ export function InterviewApp() {
       <button type="button" className="jobs-link" onClick={dismissSetup}>Close</button>
     </div>}
 
-    <div ref={box} className="interview-script" data-placeholder="The words appear here, as they are spoken." />
+    <div className="live-box">
+      <div ref={box} className="interview-script" data-placeholder="The words appear here, as they are spoken." />
+      {behind && <button type="button" className="jobs-button live-newest" data-primary="" onClick={toNewest}>Newest words <ChevronDown /></button>}
+    </div>
 
     <p className="jobs-form-hint interview-note">{system
       ? "It uses Windows Live Captions (Windows 11, version 22H2 or newer), which writes down what this PC plays, and your microphone only if you turned that on in its settings. The first time, Windows asks you to accept and to download its language files."
