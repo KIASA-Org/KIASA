@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { MeetStart } from "@/lib/meetings/types";
+import { clearVoice, gathered, VOICE_BITRATE } from "./rtc";
 
 /** What each person in the meeting says about themselves, on the meeting's
  * channel: who they are, and whether their microphone, camera, shared screen
@@ -23,9 +24,25 @@ export type LinkDetails = {
 /** `user`: who sends it, so a browser answers only those it may connect to. */
 /** `candidate`: a way to reach the sender found after its offer or answer went out. */
 type Signal = { from: string; to: string; user: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+/** What is shared (its picture, and its sound if it has one) sent to one more person. */
+function sendScreen(link: Link, shared: MediaStream) {
+  link.screen = undefined;
+  link.screenAudio = undefined;
+  for (const track of shared.getTracks()) {
+    const sender = link.pc.addTrack(track, shared);
+    if (track.kind === "video") link.screen = sender;
+    else link.screenAudio = sender;
+  }
+}
 type Link = {
   pc: RTCPeerConnection; polite: boolean; makingOffer: boolean; ignoreOffer: boolean;
-  cam?: RTCRtpSender; screen?: RTCRtpSender; voice?: RTCRtpSender; queue: Promise<void>;
+  cam?: RTCRtpSender; screen?: RTCRtpSender; screenAudio?: RTCRtpSender; voice?: RTCRtpSender; queue: Promise<void>;
+  /** Makes and sends an offer. */
+  offer?: () => Promise<void>;
+  /** Which offer is the newest: an older one still gathering is not sent. */
+  offers: number;
+  /** An answer is being made; `owed`: an offer is to follow it. */
+  answering: boolean; owed: boolean;
   /** Seen in the meeting's list of who is here: from then on, gone from it means gone. */
   seen: boolean;
   /** This side's offer or answer has gone out: ways to reach it found later go on their own. */
@@ -35,21 +52,12 @@ type Link = {
 // A camera picture good enough for a face, light enough to send to five others at once.
 const CAMERA: MediaTrackConstraints = { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } };
 const VOICE: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const CAMERA_BITRATE = 700_000, SCREEN_BITRATE = 1_800_000, VOICE_BITRATE = 64_000;
+const CAMERA_BITRATE = 700_000, SCREEN_BITRATE = 1_800_000;
 
-/** My offer or answer, asking the other side for a clearer voice than the
- * usual: Opus at up to 64 kbit/s, with what is lost on the way made up. (In
- * an offer or answer, these say how one wants to receive.) */
-function clearVoice(description: RTCSessionDescriptionInit): RTCSessionDescriptionInit {
-  const sdp = description.sdp ?? "";
-  const opus = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
-  if (!opus) return description;
-  return {
-    ...description,
-    sdp: sdp.replace(new RegExp(`a=fmtp:${opus} ([^\\r\\n]*)`), (line, params: string) =>
-      /maxaveragebitrate/.test(params) ? line : `a=fmtp:${opus} ${params};maxaveragebitrate=${VOICE_BITRATE};useinbandfec=1`),
-  };
-}
+/** The live server closes the channel of anyone who says what they are doing a
+ * 6th time within 30 s (CLIENT_PRESENCE_MAX_CALLS), and the page then stays cut
+ * off from the meeting. So: never more than 4, with a little room to spare. */
+const SAY_MOST = 4, SAY_WINDOW = 31_000;
 
 /** Why the microphone could not be had, in words that say what to do. */
 function micTrouble(error: unknown): string {
@@ -60,32 +68,6 @@ function micTrouble(error: unknown): string {
   return "The microphone could not be started. Please click the microphone button again.";
 }
 
-/** Waits until a connection has found the ways to be reached that matter:
- * the address the internet sees (and, when a relay is set up, the relay's),
- * or all of them, at most a few seconds. They then travel inside its offer or
- * answer, in one message, rather than one by one after it, where a pair
- * offering at the same moment could lose them. */
-function gathered(pc: RTCPeerConnection, relay: boolean, most = 2500): Promise<void> {
-  if (pc.iceGatheringState === "complete") return Promise.resolve();
-  return new Promise(resolve => {
-    let settle = 0;
-    const finish = () => {
-      pc.removeEventListener("icegatheringstatechange", changed);
-      pc.removeEventListener("icecandidate", found);
-      window.clearTimeout(timer);
-      window.clearTimeout(settle);
-      resolve();
-    };
-    const changed = () => { if (pc.iceGatheringState === "complete") finish(); };
-    // Enough found: a moment more for the rest of the same kind, then go.
-    const found = ({ candidate }: RTCPeerConnectionIceEvent) => {
-      if (candidate?.type === (relay ? "relay" : "srflx") && !settle) settle = window.setTimeout(finish, 150);
-    };
-    const timer = window.setTimeout(finish, most);
-    pc.addEventListener("icegatheringstatechange", changed);
-    pc.addEventListener("icecandidate", found);
-  });
-}
 
 /** A meeting, as one browser takes part in it. Each person's browser connects
  * straight to each other's (WebRTC), finding them on the meeting's private
@@ -117,6 +99,8 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   const links = useRef(new Map<string, Link>());
   const localRef = useRef<MediaStream | null>(null);
   const screenRef = useRef<MediaStream | null>(null);
+  /** When I last said what I am doing (see SAY_MOST). */
+  const said = useRef<number[]>([]);
   const joinedAt = useRef(new Date().toISOString());
 
   // What I tell the others goes one message at a time, in order: the live
@@ -150,7 +134,7 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   /** A connection to someone else in the meeting, sending them what I send everyone. */
   const connect = (peer: string, state?: PeerState): Link => {
     const pc = new RTCPeerConnection({ iceServers: ice });
-    const link: Link = { pc, polite: peerId > peer, makingOffer: false, ignoreOffer: false, queue: Promise.resolve(), seen: false, described: false };
+    const link: Link = { pc, polite: peerId > peer, makingOffer: false, ignoreOffer: false, queue: Promise.resolve(), seen: false, described: false, answering: false, owed: false, offers: 0 };
     links.current.set(peer, link);
     const mine = localRef.current;
     for (const track of mine?.getTracks() ?? []) {
@@ -159,13 +143,14 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
       else link.voice = sender;
     }
     const shared = screenRef.current;
-    if (shared) link.screen = pc.addTrack(shared.getVideoTracks()[0], shared);
+    if (shared) sendScreen(link, shared);
     // A way to reach this side found after its offer or answer went out (a relay
     // far away can take seconds): sent on its own, so it is never lost.
     pc.onicecandidate = ({ candidate }) => {
       if (candidate && link.described) send(peer, { candidate: candidate.toJSON() });
     };
-    pc.onnegotiationneeded = async () => {
+    link.offer = async () => {
+      const round = ++link.offers;
       try {
         link.makingOffer = true;
         link.described = false;
@@ -175,11 +160,17 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
         return;
       } finally { link.makingOffer = false; }
       await gathered(pc, relayed);
-      // Set aside meanwhile, for an offer from the other side: nothing to send.
-      if (pc.signalingState === "have-local-offer") {
+      // Set aside meanwhile, for an offer from the other side (and perhaps a newer one of mine): nothing to send.
+      if (round === link.offers && pc.signalingState === "have-local-offer") {
         send(peer, { description: clearVoice(pc.localDescription!.toJSON()) });
         link.described = true;
       }
+    };
+    // While I am still answering, an offer of mine would take the answer's place
+    // before it goes out, and each side would wait for the other for ever: it waits.
+    pc.onnegotiationneeded = () => {
+      if (link.answering) link.owed = true;
+      else void link.offer?.();
     };
     pc.ontrack = ({ track, streams }) => {
       const stream = streams[0] ?? new MediaStream([track]);
@@ -221,13 +212,24 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
       const collision = signal.description.type === "offer" && (link.makingOffer || pc.signalingState !== "stable");
       link.ignoreOffer = !link.polite && collision;
       if (link.ignoreOffer) return;
-      await pc.setRemoteDescription(signal.description);
-      if (signal.description.type === "offer") {
-        link.described = false;
-        await pc.setLocalDescription();
-        await gathered(pc, relayed);
-        send(signal.from, { description: clearVoice(pc.localDescription!.toJSON()) });
-        link.described = true;
+      const answering = signal.description.type === "offer";
+      link.answering = answering;
+      try {
+        await pc.setRemoteDescription(signal.description);
+        if (answering) {
+          link.described = false;
+          await pc.setLocalDescription();
+          await gathered(pc, relayed);
+          send(signal.from, { description: clearVoice(pc.localDescription!.toJSON()) });
+          link.described = true;
+        }
+      } finally {
+        link.answering = false;
+        // Answered: now what I have to add that this exchange did not cover.
+        if (link.owed) {
+          link.owed = false;
+          void link.offer?.();
+        }
       }
     }
   };
@@ -291,7 +293,17 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   // What I say about myself, whenever it changes (only once in).
   useEffect(() => {
     if (!joined || connection !== "live") return;
-    void channel.current?.track({ user: me.id, name: me.name, mic, cam, screen: screen?.id ?? null, hand, recording, joined: joinedAt.current } satisfies PeerState);
+    const state = { user: me.id, name: me.name, mic, cam, screen: screen?.id ?? null, hand, recording, joined: joinedAt.current } satisfies PeerState;
+    const say = () => {
+      said.current = [...said.current.filter(at => Date.now() - at < SAY_WINDOW), Date.now()];
+      void channel.current?.track(state);
+    };
+    // Said at once, unless that is too many lately: then the newest news goes when
+    // it may (a change meanwhile comes here again, and replaces it).
+    const lately = said.current.filter(at => Date.now() - at < SAY_WINDOW);
+    if (lately.length < SAY_MOST) return say();
+    const timer = window.setTimeout(say, lately[0] + SAY_WINDOW - Date.now());
+    return () => window.clearTimeout(timer);
   }, [joined, connection, me.id, me.name, mic, cam, screen, hand, recording]);
 
   // Someone let in while I am here: connected to at once.
@@ -455,24 +467,32 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     if (!shared) return;
     shared.getTracks().forEach(track => track.stop());
     for (const link of links.current.values()) {
-      if (link.screen) { try { link.pc.removeTrack(link.screen); } catch {} }
+      for (const sender of [link.screen, link.screenAudio]) if (sender) { try { link.pc.removeTrack(sender); } catch {} }
       link.screen = undefined;
+      link.screenAudio = undefined;
     }
     screenRef.current = null;
     setScreen(null);
   };
 
+  /** The screen, with its sound when the person turns that on in the browser's picker. */
   const shareScreen = async () => {
     if (screenRef.current) return stopScreen();
     try {
       // The meeting's own tab is not offered: sharing it only shows the meeting to itself.
-      const shared = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false, selfBrowserSurface: "exclude" } as DisplayMediaStreamOptions);
-      const [track] = shared.getVideoTracks();
-      track.contentHint = "detail";
+      // Its own sound is left out of what is shared, so no one hears themselves back,
+      // and the sound is left as it is: cleaning meant for a voice spoils music.
+      const shared = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15, max: 30 } },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
+        systemAudio: "include", selfBrowserSurface: "exclude",
+      } as DisplayMediaStreamOptions);
+      const [video] = shared.getVideoTracks();
+      video.contentHint = "detail";
       // Stopped from the browser's own "Stop sharing" bar, too.
-      track.addEventListener("ended", stopScreen);
+      video.addEventListener("ended", stopScreen);
       screenRef.current = shared;
-      for (const link of links.current.values()) link.screen = link.pc.addTrack(track, shared);
+      for (const link of links.current.values()) sendScreen(link, shared);
       setScreen(shared);
     } catch { /* the person chose not to share */ }
   };

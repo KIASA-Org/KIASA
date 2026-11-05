@@ -37,7 +37,11 @@ const hydrated = (page, selector) => page.waitForFunction(selector => {
   const node = document.querySelector(selector);
   return !!node && Object.keys(node).some(key => key.startsWith("__react"));
 }, selector, { timeout: 20000 });
+const cutOff = [];
+// News of who is doing what goes out at most 4 times in 31 s, so after many changes it can take this long.
+const PACED = 45000;
 const watch = (page, label) => {
+  page.on("websocket", socket => socket.on("framereceived", frame => { if (String(frame.payload).includes("rate limit exceeded")) cutOff.push(`${label}: ${String(frame.payload).slice(0, 160)}`); }));
   page.on("pageerror", error => errors.push(`${label}: ${error.message}`));
   page.on("console", message => { if (message.type() === "error" && !/favicon|Failed to load resource/.test(message.text())) errors.push(`${label} console: ${message.text().slice(0, 160)}`); });
 };
@@ -333,6 +337,109 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await anaMeet.locator(".meet-screen").waitFor({ state: "detached", timeout: 15000 });
   });
 
+  // From here the browser's share is answered with a moving picture and a steady
+  // tone, so what arrives can be measured (the step above used the real call).
+  const shareTone = page => page.evaluate(() => {
+    window.__withSound = true;
+    window.__asked = [];
+    navigator.mediaDevices.getDisplayMedia = async options => {
+      window.__asked.push(JSON.parse(JSON.stringify(options)));
+      const canvas = Object.assign(document.createElement("canvas"), { width: 640, height: 360 });
+      const draw = canvas.getContext("2d");
+      setInterval(() => { draw.fillStyle = `hsl(${(Date.now() / 10) % 360} 70% 50%)`; draw.fillRect(0, 0, 640, 360); }, 50);
+      const shared = canvas.captureStream(15);
+      if (window.__withSound) {
+        const audio = new AudioContext();
+        const tone = audio.createOscillator();
+        const out = audio.createMediaStreamDestination();
+        tone.connect(out);
+        tone.start();
+        shared.addTrack(out.stream.getAudioTracks()[0]);
+      }
+      window.__shared = shared;
+      return shared;
+    };
+  });
+  // How loud the shared sound is where it plays out loud on this page; null if nothing plays it.
+  const sharedSound = page => page.evaluate(async () => {
+    const element = [...document.querySelectorAll("audio[data-voice]:not([data-peer])")].find(audio => !audio.muted && audio.srcObject?.getAudioTracks().length);
+    if (!element) return null;
+    const audio = new AudioContext();
+    const analyser = audio.createAnalyser();
+    analyser.fftSize = 2048;
+    audio.createMediaStreamSource(new MediaStream(element.srcObject.getAudioTracks())).connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    let peak = 0;
+    for (let look = 0; look < 30; look++) {
+      await new Promise(done => setTimeout(done, 100));
+      analyser.getByteTimeDomainData(data);
+      for (const value of data) peak = Math.max(peak, Math.abs(value - 128));
+    }
+    await audio.close();
+    return peak;
+  });
+  const hearsShare = async (page, label) => {
+    let peak = null;
+    for (let look = 0; look < 6 && !(peak > 5); look++) peak = await sharedSound(page);
+    if (!(peak > 5)) throw new Error(`${label} does not hear the shared sound (${peak})`);
+    return peak;
+  };
+  const speakingWhileQuiet = page => page.evaluate(() => [...document.querySelectorAll("audio[data-voice][data-peer]")].length);
+
+  await step("the admin shares the screen with its sound: Ana and Ben see it and hear it, and it plays once", async () => {
+    await shareTone(adminMeet);
+    const voicesBefore = await speakingWhileQuiet(anaMeet);
+    await adminMeet.getByRole("button", { name: "Share your screen" }).click();
+    await Promise.all([anaMeet, benMeet].map(page => page.waitForFunction(() => document.querySelector(".meet-screen video")?.videoWidth > 0, null, { timeout: 20000 })));
+    const [anaPeak, benPeak] = await Promise.all([hearsShare(anaMeet, "Ana"), hearsShare(benMeet, "Ben")]);
+    // The picture's own video stays silent; only the one audio element plays the sound.
+    if (!(await anaMeet.locator(".meet-screen video").evaluate(video => video.muted))) throw new Error("the shared picture plays sound as well");
+    if (await speakingWhileQuiet(anaMeet) !== voicesBefore) throw new Error("the shared sound was counted as someone's voice");
+    await adminMeet.locator(".meet-presenting-text", { hasText: "and hears its sound" }).waitFor({ timeout: 5000 });
+    const asked = await adminMeet.evaluate(() => window.__asked[0]);
+    if (asked.audio?.restrictOwnAudio !== true || asked.systemAudio !== "include") throw new Error(`asked the browser for ${JSON.stringify(asked)}`);
+    await adminMeet.getByRole("button", { name: "Stop sharing your screen" }).click();
+    await anaMeet.locator(".meet-screen").waitFor({ state: "detached", timeout: 15000 });
+    return `Ana's level ${anaPeak}, Ben's ${benPeak}`;
+  });
+
+  await step("someone arriving while a screen is shared connects, sees it and hears it, whichever side gives way (four arrivals); the browser's own Stop bar ends it for everyone", async () => {
+    await adminMeet.getByRole("button", { name: "Share your screen" }).click();
+    await anaMeet.waitForFunction(() => document.querySelector(".meet-screen video")?.videoWidth > 0, null, { timeout: PACED });
+    // Which side gives way when both offer at once is decided afresh on each arrival:
+    // one way round, the arrival used to wait for ever.
+    let peak = 0;
+    for (let arrival = 0; arrival < 4; arrival++) {
+      await benMeet.reload();
+      await join(benMeet);
+      await benMeet.waitForFunction(() => document.querySelector(".meet-screen video")?.videoWidth > 0, null, { timeout: 20000 });
+      peak = await hearsShare(benMeet, "Ben");
+    }
+    // As the browser's bar does: the picture ends, and the share with it.
+    await adminMeet.evaluate(() => { const [video] = window.__shared.getVideoTracks(); video.stop(); video.dispatchEvent(new Event("ended")); });
+    await Promise.all([anaMeet, benMeet].map(page => page.locator(".meet-screen").waitFor({ state: "detached", timeout: PACED })));
+    return `Ben's level ${peak}`;
+  });
+
+  await step("a screen shared without its sound still shows, and says so", async () => {
+    await adminMeet.evaluate(() => { window.__withSound = false; });
+    await adminMeet.getByRole("button", { name: "Share your screen" }).click();
+    await adminMeet.locator(".meet-presenting-text", { hasText: "without its sound" }).waitFor({ timeout: 5000 });
+    await anaMeet.waitForFunction(() => document.querySelector(".meet-screen video")?.videoWidth > 0, null, { timeout: PACED });
+    await adminMeet.getByRole("button", { name: "Stop sharing your screen" }).click();
+    await anaMeet.locator(".meet-screen").waitFor({ state: "detached", timeout: PACED });
+  });
+
+  await step("the admin clicks the microphone on and off nine times fast: still in the meeting, and the others end up with the last state", async () => {
+    const mic = () => adminMeet.getByRole("button", { name: /^Turn (on|off) microphone$/ }).last();
+    for (let click = 0; click < 9; click++) { await mic().click(); await adminMeet.waitForTimeout(100); }
+    const off = tile(anaMeet, "Chris Lim").getByRole("img", { name: "Microphone off" });
+    await off.waitFor({ timeout: PACED });
+    await mic().click();
+    await off.waitFor({ state: "detached", timeout: PACED });
+    if (await adminMeet.locator(".meet-bar-sub", { hasText: "reconnecting" }).count()) throw new Error("the admin was cut off from the meeting");
+  });
+
   await step("the admin records to a file of their choosing; everyone sees it is being recorded; the file is a video", async () => {
     // The save dialog cannot be clicked by a test: it is answered here, keeping what is written.
     await adminMeet.evaluate(() => {
@@ -343,7 +450,7 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
       });
     });
     await adminMeet.getByRole("button", { name: "Record to this computer" }).click();
-    await anaMeet.locator(".meet-recording", { hasText: "Chris Lim is recording" }).waitFor({ timeout: 10000 });
+    await anaMeet.locator(".meet-recording", { hasText: "Chris Lim is recording" }).waitFor({ timeout: PACED });
     await adminMeet.waitForTimeout(4000);
     await adminMeet.getByRole("button", { name: "Stop recording" }).click();
     await adminMeet.waitForFunction(() => window.__closed === true, null, { timeout: 15000 });
@@ -356,7 +463,7 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     // A WebM file starts with EBML's mark, 1A 45 DF A3.
     if (head.join(",") !== "26,69,223,163") throw new Error(`the file starts ${head}`);
     if (bytes < 50_000) throw new Error(`only ${bytes} bytes for four seconds`);
-    await anaMeet.locator(".meet-recording").waitFor({ state: "detached", timeout: 10000 });
+    await anaMeet.locator(".meet-recording").waitFor({ state: "detached", timeout: PACED });
     return `${Math.round(bytes / 1024)} KB in four seconds; ${name.slice(0, 60)}`;
   });
 
@@ -469,6 +576,10 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     await page.getByText("This meeting is not one you are in").waitFor({ timeout: 10000 });
     await page.close();
     return `insert refused (${made.error.code}); Ben's channel: ${status}`;
+  });
+
+  await step("the live server cut no one off for saying too much", async () => {
+    if (cutOff.length) throw new Error(cutOff.join(" | "));
   });
 
   console.log(results.join("\n"));

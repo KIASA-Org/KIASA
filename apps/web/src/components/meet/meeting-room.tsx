@@ -358,7 +358,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
             ? <div className="meet-presenting">
               <span className="meet-presenting-icon" aria-hidden="true"><Screen /></span>
               <p className="meet-presenting-title">You are sharing your screen</p>
-              <p className="meet-presenting-text">Everyone in the meeting sees it. It is not shown to you here, so it does not repeat itself.</p>
+              <p className="meet-presenting-text">Everyone in the meeting sees it{stage.stream.getAudioTracks().length ? " and hears its sound" : ", without its sound"}. It is not shown to you here, so it does not repeat itself.</p>
               <button type="button" className="account-button" onClick={call.stopScreen}>Stop sharing</button>
             </div>
             : <span className="meet-name">{`${stage.name}'s screen`}</span>}
@@ -415,6 +415,9 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
     <div hidden>
       {call.local && <Voice stream={call.local} own />}
       {others.map(remote => { const stream = cameraOf(remote); return stream && <Voice key={remote.peer} stream={stream} peer={remote.peer} />; })}
+      {/* And what is shared: the picture's own video stays muted, so this is the one place its sound plays. */}
+      {call.screen && <Voice stream={call.screen} own />}
+      {others.map(remote => { const stream = remote.screen ? streamOf(remote, remote.screen) : null; return stream && <Voice key={`${remote.peer}-shared`} stream={stream} />; })}
     </div>
 
     {me.host && waiting.length > 0 && <div className="meet-knocks" role="region" aria-label="Asking to join">

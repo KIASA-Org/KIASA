@@ -438,6 +438,33 @@ its address and keys from `npx supabase status -o env` given as
 clearing the local copy's chats and the visitors earlier runs made, so it can be
 run again and again. `npx supabase stop` when done.
 
+## Live sounds
+
+A member can share their computer's sound with KIASA's admins, any time, with no
+meeting: **Share sound** in the top bar of their private pages. Admins hear it from
+**Live sounds** (`/admin/sounds`), one person at a time, and it keeps playing as they
+move around KIASA. `src/components/sound/` holds it: `sound-share.tsx` (in the root
+layout, so both ends survive moving between pages), `sound-link.ts` (the connection)
+and `live-sounds.tsx` (the admin's list).
+
+- **Only admins can hear it.** The two browsers find each other on a private channel,
+  `sound:<member's id>`. The database lets only that member and an admin join it, and
+  an admin only while the member is sharing (`sound_allowed`, in
+  `supabase/migrations/20261105120000_sound_shares.sql`). Run that file once in
+  Supabase's SQL Editor before it can be used.
+- **The member always knows.** It starts only from their own click, and an amber
+  notice stays on every KIASA page while it is on. Do not remove the notice.
+- **Nothing is kept.** The sound goes straight between browsers (through the Cloudflare
+  relay when a network needs it) and is never stored. No picture is sent, though the
+  browser must still be given a screen or tab, because it will not share sound alone.
+- **What ends it:** Stop, the browser's own Stop sharing bar, a reload (only another
+  click can start it, and the member is told), closing the tab, or signing out. An admin
+  listening is told. A closed tab leaves the list within about 90 seconds.
+
+Test it with `npm run sound:local:e2e` (see "To test it end to end" above for the set-up,
+and run the migration on the local copy first). The test sends a steady tone in place of
+real sound, and measures it where the admin hears it.
+
 ## KIASA Jobs
 
 `/jobs` is the team's job desk (`src/app/jobs/`, `src/components/jobs/`,
@@ -697,6 +724,15 @@ for each (`meeting_people`, `supabase/migrations/20261029150000_meeting_people.s
   leaf, mute, camera off, screen sharing (shown large, the faces beside it),
   raised hands, the people in it and those not yet in; for whoever runs it,
   End for everyone; for admins, Record.
+- **A shared screen's sound**: it goes with the screen when "Also share audio"
+  is on in the browser's picker. The whole computer's sound needs Chrome or Edge
+  on Windows and "Entire screen"; a browser tab's sound needs Chrome or Edge; a
+  single window has none. To share sound with admins alone, outside any meeting,
+  see "Live sounds".
+- **Status news is paced**: the live server closes the channel of anyone who
+  changes their presence a 6th time in 30 seconds, so mute, camera, hand, share
+  and record go out at most 4 times in 31 seconds. After a burst of clicks, the
+  others can see the last change up to about 30 seconds late.
 - **Calls go straight between browsers** (WebRTC, one connection per pair):
   best for up to about six people on video. Browsers find each other on the
   meeting's private live channel (`meet:<id>`, members of its chat only); each

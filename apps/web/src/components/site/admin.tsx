@@ -13,6 +13,7 @@ import type { SimDesk } from "@/lib/sims/server";
 import { SimsDesk } from "./sims-desk";
 import { TeamsDesk } from "./teams-desk";
 import { LiveNow } from "../interview/live-now";
+import { LiveSounds } from "../sound/live-sounds";
 import { ModelDesk } from "./model-desk";
 
 /** `id` and `photo` once accounts are connected: their square is then their photo, which they can change there. */
@@ -63,6 +64,16 @@ export function LiveScriptsView({ names, admin, ranks }: { names: Record<string,
   return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
     <AdminFrame admin={admin} live area="live">
       <LiveNow names={names} realtime={publicSupabase} />
+    </AdminFrame>
+  </RanksProvider>;
+}
+
+/** The admin's live sounds (`/admin/sounds`): who is sharing their computer's sound now,
+ * and any one of them to listen to. Each member chose to, and is told on their own page. */
+export function LiveSoundsView({ names, admin, ranks }: { names: Record<string, string>; admin: Admin; ranks: Ranks }) {
+  return <RanksProvider initial={ranks} realtime={publicSupabase} me={admin.id}>
+    <AdminFrame admin={admin} live area="sounds">
+      <LiveSounds names={names} realtime={publicSupabase} />
     </AdminFrame>
   </RanksProvider>;
 }
