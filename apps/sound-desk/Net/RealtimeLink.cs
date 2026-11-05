@@ -78,6 +78,7 @@ public sealed class RealtimeLink
             var wasJoined = false;
             try
             {
+                Log.Write($"RealtimeLink: connecting to {_topic}");
                 var token = await _account.Token();
                 if (token == null) throw new InvalidOperationException("no sign-in");
                 using (var connecting = CancellationTokenSource.CreateLinkedTokenSource(cancel))
@@ -85,6 +86,7 @@ public sealed class RealtimeLink
                     connecting.CancelAfter(ConnectMs);
                     await socket.ConnectAsync(_account.RealtimeAddress(), connecting.Token);
                 }
+                Log.Write("RealtimeLink: websocket connected");
                 lock (_gate) { if (cancel.IsCancellationRequested) return; _socket = socket; }
                 tries = 0;
                 var joinRef = NextRef();
@@ -106,7 +108,7 @@ public sealed class RealtimeLink
                 try { wasJoined = await Read(socket, joinRef, cancel); }
                 finally { heartbeatStop.Cancel(); }
             }
-            catch (Exception) when (!cancel.IsCancellationRequested) { }
+            catch (Exception ex) when (!cancel.IsCancellationRequested) { Log.Write($"RealtimeLink: error: {ex.Message}"); }
             catch (OperationCanceledException) { return; }
             if (cancel.IsCancellationRequested) return;
             _isJoined = false;
@@ -157,6 +159,7 @@ public sealed class RealtimeLink
                     if (replyTo == _beatRef) _beatRef = null;
                     if (replyTo != joinRef) break;
                     var status = root.GetProperty("payload").GetProperty("status").GetString();
+                    Log.Write($"RealtimeLink: join reply status={status}");
                     if (status != "ok") return false;
                     joined = true;
                     _isJoined = true;

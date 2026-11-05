@@ -1,6 +1,7 @@
 using Concentus.Enums;
 using Concentus.Structs;
 using NAudio.Wave;
+using SoundDesk.Net;
 
 namespace SoundDesk.Audio;
 
@@ -25,19 +26,30 @@ public sealed class Loopback : IDisposable
     public void Start()
     {
         Stop();
+        Log.Write("Loopback: creating encoder");
         _encoder = new OpusEncoder(Rate, 1, OpusApplication.OPUS_APPLICATION_AUDIO);
         _encoder.Bitrate = 64000;
         _encoder.UseInbandFEC = true;
 
+        Log.Write("Loopback: creating WasapiLoopbackCapture");
         _capture = new WasapiLoopbackCapture();
+        var fmt = _capture.WaveFormat;
+        Log.Write($"Loopback: device format = {fmt.Encoding}, {fmt.SampleRate} Hz, {fmt.Channels} ch, {fmt.BitsPerSample} bit");
         _capture.DataAvailable += OnData;
-        _capture.RecordingStopped += (_, _) => { };
+        _capture.RecordingStopped += (_, args) => Log.Write($"Loopback: recording stopped, error={args.Exception?.Message ?? "none"}");
+        Log.Write("Loopback: calling StartRecording");
         _capture.StartRecording();
+        Log.Write("Loopback: recording started OK");
     }
+
+    private int _dataCount;
 
     private void OnData(object? sender, WaveInEventArgs e)
     {
         if (e.BytesRecorded == 0 || _capture == null) return;
+        _dataCount++;
+        if (_dataCount <= 3 || _dataCount % 500 == 0)
+            Log.Write($"Loopback: OnData #{_dataCount}, bytes={e.BytesRecorded}");
         var fmt = _capture.WaveFormat;
         var channels = fmt.Channels;
 

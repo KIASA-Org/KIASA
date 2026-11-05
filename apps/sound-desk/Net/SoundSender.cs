@@ -43,14 +43,16 @@ public sealed class SoundSender : IDisposable
 
     public void Start()
     {
+        Log.Write($"SoundSender: starting, channel=sound:{_account.Id}");
         _link = new RealtimeLink(_account, $"sound:{_account.Id}",
-            (name, payload) => { if (name == "sound") Heard(payload); },
+            (name, payload) => { Log.Write($"SoundSender: signal '{name}'"); if (name == "sound") Heard(payload); },
             () =>
             {
+                Log.Write("SoundSender: channel joined");
                 Connected?.Invoke();
                 _link?.Send("sound", new { from = _id, ask = true });
             },
-            () => Disconnected?.Invoke());
+            () => { Log.Write("SoundSender: channel lost"); Disconnected?.Invoke(); });
         _link.Open();
         _heartbeat = new System.Timers.Timer(HeartbeatMs) { AutoReset = true };
         _heartbeat.Elapsed += async (_, _) => await Upsert();
@@ -58,10 +60,15 @@ public sealed class SoundSender : IDisposable
         _ = Upsert();
     }
 
+    private int _feedCount;
+
     public void FeedFrame(byte[] opus)
     {
         PeerState[] active;
         lock (_gate) active = _peers.Values.Where(p => p.Pc?.connectionState == RTCPeerConnectionState.connected).ToArray();
+        _feedCount++;
+        if (_feedCount <= 3 || _feedCount % 500 == 0)
+            Log.Write($"FeedFrame #{_feedCount}, opus={opus.Length}B, active peers={active.Length}");
         foreach (var peer in active)
             try { peer.Pc!.SendAudio(960, opus); } catch { }
     }
@@ -70,10 +77,17 @@ public sealed class SoundSender : IDisposable
     {
         var from = signal.TryGetProperty("from", out var f) ? f.GetString() ?? "" : "";
         var to = signal.TryGetProperty("to", out var t) ? t.GetString() : null;
+        Log.Write($"SoundSender.Heard: from={from[..Math.Min(8, from.Length)]}, to={to?[..Math.Min(8, to.Length)] ?? "all"}, keys=[{string.Join(",", signal.EnumerateObject().Select(p => p.Name))}]");
         if (!string.IsNullOrEmpty(to) && to != _id) return;
 
         if (signal.TryGetProperty("listen", out _))
-            _ = Task.Run(() => OfferTo(from));
+        {
+            RTCIceServer[]? signalIce = null;
+            if (signal.TryGetProperty("ice", out var iceArr) && iceArr.ValueKind == JsonValueKind.Array)
+                signalIce = ParseIce(iceArr);
+            Log.Write($"SoundSender: listen from {from[..Math.Min(8, from.Length)]}, ice={signalIce?.Length ?? 0} from signal, offering");
+            _ = Task.Run(() => OfferTo(from, signalIce));
+        }
         else if (signal.TryGetProperty("bye", out _))
             Drop(from);
         else if (signal.TryGetProperty("description", out var desc))
@@ -105,18 +119,33 @@ public sealed class SoundSender : IDisposable
         }
     }
 
-    private async Task OfferTo(string listener)
+    private async Task OfferTo(string listener, RTCIceServer[]? signalIce = null)
     {
         try
         {
+            Log.Write($"OfferTo: start for {listener[..Math.Min(8, listener.Length)]}");
             PeerState? known;
             lock (_gate) _peers.TryGetValue(listener, out known);
             if (known != null && (known.Pc?.connectionState == RTCPeerConnectionState.connected ||
                 (DateTime.UtcNow - known.At).TotalMilliseconds < OfferPatienceMs))
+            {
+                Log.Write("OfferTo: skipped (existing peer still valid)");
                 return;
+            }
 
             Drop(listener);
-            var ice = await FreshIce();
+            RTCIceServer[] ice;
+            if (signalIce != null && signalIce.Length > 0)
+            {
+                ice = signalIce;
+                Log.Write($"OfferTo: using {ice.Length} ICE servers from admin signal");
+            }
+            else
+            {
+                Log.Write("OfferTo: fetching ICE from endpoint");
+                ice = await FreshIce();
+                Log.Write($"OfferTo: got {ice.Length} ICE servers from endpoint");
+            }
             var config = new RTCConfiguration { iceServers = ice.ToList() };
             var pc = new RTCPeerConnection(config);
             var format = new SDPAudioVideoMediaFormat(SDPMediaTypesEnum.audio, 111, "opus", 48000, 2,
@@ -151,10 +180,15 @@ public sealed class SoundSender : IDisposable
             lock (_gate) { if (!_peers.TryGetValue(listener, out var p) || p != peer) return; }
 
             var sdp = pc.localDescription?.sdp?.ToString() ?? offer.sdp;
+            Log.Write($"OfferTo: sending offer ({sdp.Length} chars)");
             _link?.Send("sound", new { from = _id, to = listener, description = new { type = "offer", sdp } });
             peer.Described = true;
+            Log.Write("OfferTo: offer sent");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log.Write($"OfferTo FAILED: {ex}");
+        }
     }
 
     private static async Task Gathered(RTCPeerConnection pc, bool relay)
@@ -256,6 +290,23 @@ public sealed class SoundSender : IDisposable
     }
 
     private static RTCIceServer[] DefaultIce() => Stun.Select(u => new RTCIceServer { urls = u }).ToArray();
+
+    private static RTCIceServer[] ParseIce(JsonElement arr)
+    {
+        var list = new List<RTCIceServer>();
+        foreach (var entry in arr.EnumerateArray())
+        {
+            var username = entry.TryGetProperty("username", out var u) ? u.GetString() : null;
+            var credential = entry.TryGetProperty("credential", out var cr) ? cr.GetString() : null;
+            if (!entry.TryGetProperty("urls", out var urls)) continue;
+            if (urls.ValueKind == JsonValueKind.Array)
+                foreach (var url in urls.EnumerateArray())
+                    list.Add(new RTCIceServer { urls = url.GetString() ?? "", username = username, credential = credential });
+            else if (urls.ValueKind == JsonValueKind.String)
+                list.Add(new RTCIceServer { urls = urls.GetString() ?? "", username = username, credential = credential });
+        }
+        return list.Count > 0 ? list.ToArray() : DefaultIce();
+    }
 
     public void Dispose()
     {

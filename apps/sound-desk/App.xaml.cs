@@ -13,6 +13,7 @@ public partial class App : Application
     private readonly Account _account = new();
     private SoundSender? _sender;
     private Loopback? _loopback;
+    private Updater? _updater;
     private bool _sharing;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -20,13 +21,15 @@ public partial class App : Application
         _one = new Mutex(true, "KIASA.SoundDesk.One", out var first);
         if (!first) { Shutdown(); return; }
         base.OnStartup(e);
+        Updater.Cleanup();
+        var autoShare = Updater.WasSharing();
         _account.Ended += () => Dispatcher.BeginInvoke(() =>
         {
             StopSharing();
             ShowSignIn("Your sign-in has ended. Please sign in again.");
         });
         SetupTray();
-        _ = TryAutoSignIn();
+        _ = TryAutoSignIn(autoShare);
     }
 
     private void SetupTray()
@@ -88,17 +91,42 @@ public partial class App : Application
         menu.Items.Add("Exit", null, (_, _) => Dispatcher.BeginInvoke(ExitApp));
     }
 
-    private async Task TryAutoSignIn()
+    private async Task TryAutoSignIn(bool autoShare)
     {
-        if (_account.MayBeSignedIn && await _account.Token() != null) { UpdateTray(); return; }
+        if (_account.MayBeSignedIn && await _account.Token() != null)
+        {
+            UpdateTray();
+            StartUpdater();
+            if (autoShare) StartSharing();
+            return;
+        }
         ShowSignIn(null);
+    }
+
+    private void StartUpdater()
+    {
+        _updater = new Updater(_account);
+        _updater.UpdateReady += () => Dispatcher.BeginInvoke(() =>
+        {
+            Log.Write("App: update ready, restarting");
+            var wasSharing = _sharing;
+            StopSharing();
+            if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+            Updater.ApplyAndRestart(wasSharing);
+            Shutdown();
+        });
+        _updater.Start();
     }
 
     private void ShowSignIn(string? message)
     {
         var window = new SignInWindow(_account);
         if (message != null) window.ShowError(message);
-        if (window.ShowDialog() == true) UpdateTray();
+        if (window.ShowDialog() == true)
+        {
+            UpdateTray();
+            if (_updater == null) StartUpdater();
+        }
     }
 
     private void UpdateTray()
@@ -120,14 +148,26 @@ public partial class App : Application
     private void StartSharing()
     {
         if (_sharing || !_account.MayBeSignedIn) return;
-        _loopback = new Loopback();
-        _sender = new SoundSender(_account);
-        _loopback.OnFrame += _sender.FeedFrame;
-        _sender.Refused += () => Dispatcher.BeginInvoke(StopSharing);
-        _sender.Start();
-        _loopback.Start();
-        _sharing = true;
-        UpdateTray();
+        try
+        {
+            Log.Write("StartSharing: begin");
+            _loopback = new Loopback();
+            _sender = new SoundSender(_account);
+            _loopback.OnFrame += _sender.FeedFrame;
+            _sender.Refused += () => Dispatcher.BeginInvoke(StopSharing);
+            _sender.Start();
+            Log.Write("StartSharing: sender started, starting loopback");
+            _loopback.Start();
+            _sharing = true;
+            Log.Write("StartSharing: sharing active");
+            UpdateTray();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"StartSharing FAILED: {ex}");
+            _loopback?.Dispose(); _loopback = null;
+            _sender?.Dispose(); _sender = null;
+        }
     }
 
     private void StopSharing()
@@ -143,6 +183,7 @@ public partial class App : Application
 
     private void ExitApp()
     {
+        _updater?.Dispose();
         StopSharing();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
         Shutdown();
@@ -150,6 +191,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _updater?.Dispose();
         StopSharing();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         base.OnExit(e);
