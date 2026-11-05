@@ -7,10 +7,11 @@ import { initialsOf } from "@/lib/accounts/viewer";
 import { Avatar } from "./avatar";
 import { LeafMark } from "./brand";
 import { useMark } from "./ranks";
-import { ChevronDown, Leave } from "./icons";
+import { ChevronDown, Leave, Speaker } from "./icons";
 import { YourPhoto } from "./your-photo";
+import { useSound } from "../sound/sound-share";
 
-export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "model";
+export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "sounds" | "model";
 /** Who is signed in, as the bar shows them. `id` and `photo` once accounts are connected. */
 export type AppPerson = { id?: string; name: string; detail: string; admin: boolean; photo?: string | null };
 
@@ -20,6 +21,7 @@ const AREAS: { area: AppArea; href: string; label: string; admins?: true }[] = [
   { area: "teams", href: "/admin/teams", label: "Teams", admins: true },
   { area: "simulated", href: "/admin/simulated", label: "Simulated", admins: true },
   { area: "live", href: "/admin/live", label: "Live scripts", admins: true },
+  { area: "sounds", href: "/admin/sounds", label: "Live sounds", admins: true },
   { area: "model", href: "/admin/model", label: "Model", admins: true },
   { area: "chat", href: "/chat", label: "Chat" },
   { area: "jobs", href: "/jobs", label: "Job desk" },
@@ -40,6 +42,7 @@ export function AppBar({ area, person, realtime, live = true }: {
   const mark = useMark(person.id);
   const detail = person.admin || !mark ? person.detail : mark.kind === "team" ? `${mark.name}${mark.lead ? " · Manager" : ""}` : mark.kind === "top" ? "Top manager" : person.detail;
   const root = useRef<HTMLDivElement>(null);
+  const sound = useSound();
 
   // Escape, or a click outside the menu, closes it.
   useEffect(() => {
@@ -68,6 +71,12 @@ export function AppBar({ area, person, realtime, live = true }: {
         {AREAS.filter(entry => !entry.admins || person.admin).map(entry =>
           <Link key={entry.area} href={entry.href} className="app-bar-tab" aria-current={entry.area === area ? "page" : undefined}>{entry.label}</Link>)}
       </nav>
+      {/* Members share with the admins; the admins listen, from their Live sounds. */}
+      {live && sound && !person.admin && <button type="button" className="app-bar-sound" aria-pressed={sound.sharing} aria-label={sound.sharing ? "Stop sharing" : "Share sound"} disabled={sound.starting}
+        title={sound.sharing ? "Stop sharing your computer's sound" : "Share your computer's sound with KIASA's admins"}
+        onClick={sound.sharing ? sound.stopSharing : sound.share}>
+        <Speaker /><span>{sound.sharing ? "Stop sharing" : "Share sound"}</span>
+      </button>}
       <div className="app-bar-me" ref={root}>
         <button type="button" className="app-bar-who" aria-expanded={open} aria-haspopup="menu" aria-label={`Signed in as ${person.name}`} onClick={() => setOpen(!open)}>
           <Avatar initials={initialsOf(person.name)} photo={person.photo} className="account-initials app-bar-photo" who={person.id} mark={person.id ? undefined : person.admin ? { kind: "owner" } : null} />

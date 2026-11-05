@@ -56,6 +56,7 @@ export const VideoOff = icon(<><path d="M8 7h7.5v7.5M15.5 17h-12V7h1" /><path d=
 export const Mic = icon(<><path d="M9 6.5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0v-5Z" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></>);
 export const MicOff = icon(<><path d="M15 10V6.5a3 3 0 0 0-5.6-1.5M9 9v2.5a3 3 0 0 0 4.6 2.5" /><path d="M5.5 11.5a6.5 6.5 0 0 0 10.4 5.2M18.5 11.5c0 .9-.2 1.8-.5 2.6M12 18v2.5M4 4l16 16" /></>);
 export const Screen = icon(<><path d="M3.5 5h17v11h-17z" /><path d="M9 19.5h6M12 16v3.5M12 13V8.5m-2.25 2.25L12 8.5l2.25 2.25" /></>);
+export const Speaker = icon(<><path d="M4.5 9.5h3.5L12.5 5.5v13L8 14.5H4.5z" /><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" /></>);
 export const Hand = icon(<path d="M8.5 11.5v-6a1.5 1.5 0 0 1 3 0v5m0-6.5a1.5 1.5 0 0 1 3 0v6.5m0-5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.6-2.2L4 14.6a1.5 1.5 0 0 1 2.3-1.9l2.2 2.3v-3.5" />);
 export const Record = icon(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" /></>);
 export const Calendar = icon(<><path d="M4.5 6h15v13.5h-15z" /><path d="M4.5 10h15M8.5 4v4M15.5 4v4" /></>);

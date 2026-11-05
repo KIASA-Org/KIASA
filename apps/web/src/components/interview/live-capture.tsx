@@ -84,7 +84,7 @@ export function useLiveCapture(): Capture {
 
 /** Only a signed-in member's browser carries a Supabase auth cookie; without one
  * (a signed-out visitor on the public site) the provider does nothing at all. */
-function hasAuthCookie() {
+export function hasAuthCookie() {
   try { return /\bsb-[^=]+-auth-token=/.test(document.cookie); } catch { return false; }
 }
 
