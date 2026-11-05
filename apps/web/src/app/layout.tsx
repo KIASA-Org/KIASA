@@ -3,6 +3,7 @@ import { Newsreader, Schibsted_Grotesk } from "next/font/google";
 import { bootstrapScript } from "@/components/intro/bootstrap";
 import { LiveCaptureProvider } from "@/components/interview/live-capture";
 import { RouteProgress } from "@/components/site/route-progress";
+import { SoundProvider } from "@/components/sound/sound-share";
 import { publicSupabase } from "@/lib/accounts/server";
 import { company } from "@/content/site";
 import "./globals.css";
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       {/* Keeps a member's live script running as they move around KIASA (root layout
           persists across navigation); does nothing for signed-out or public visitors. */}
       {publicSupabase.url && publicSupabase.key
-        ? <LiveCaptureProvider realtime={publicSupabase}>{children}</LiveCaptureProvider>
+        ? <LiveCaptureProvider realtime={publicSupabase}><SoundProvider realtime={publicSupabase}>{children}</SoundProvider></LiveCaptureProvider>
         : children}
     </body>
   </html>;

@@ -530,6 +530,10 @@
 @keyframes interview-progress-slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
 @media (prefers-reduced-motion: reduce) { .interview-progress-fill[data-waiting] { animation: none; width: 100%; opacity: 0.45; } }
 .interview-script { height: 58vh; min-height: 280px; padding: 20px 24px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--card-line); border-radius: 18px; background: var(--card); color: var(--ink); font-size: 21px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Scrolled back to read: the words go on arriving below, and this says so. */
+.live-box { position: relative; min-width: 0; }
+.live-newest { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); gap: 6px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.45); }
+.live-newest svg { width: 16px; height: 16px; }
 .interview-script:empty::before { content: attr(data-placeholder); color: var(--ink-mute); }
 .interview-note { max-width: 78ch; }
 @media (max-width: 640px) {
@@ -545,6 +549,15 @@
 .live-watch-off:hover { background: #2a2a2a; }
 @media (max-width: 640px) { .live-watch-more { display: none; } }
 @media (max-width: 400px) { .live-watch-bar { white-space: normal; } }
+
+/* A member's sound shared, or an admin listening: the same bar, under the live script's if both are on. */
+.sound-bar[data-below] { top: 26px; border-top: 1px solid rgb(242 211 107 / 0.5); border-radius: 11px; }
+.sound-bar[data-problem] { width: min(680px, 94vw); padding: 7px 8px 8px 14px; white-space: normal; }
+.sound-bar[data-listening] { border-color: rgb(184 236 147 / 0.5); background: #101a12; }
+.sound-bar[data-listening] b { color: var(--leaf); }
+.sound-bar[data-listening] .live-watch-dot { background: var(--leaf); box-shadow: 0 0 0 2px rgb(184 236 147 / 0.2); }
+.sound-list { max-width: 560px; }
+.sound-list-action { flex: none; padding: 3px 11px; border-radius: 999px; background: var(--night-control); color: var(--ink); font-size: 12.5px; font-weight: 650; }
 
 /* The admin's Live scripts: whose is on, beside the one being read. */
 .live-now { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); align-items: start; gap: 16px; }

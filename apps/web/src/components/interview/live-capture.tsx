@@ -67,7 +67,7 @@ type Capture = {
   /** How far the first-run speech model download has got, 0–1, while it is going. */
   progress: number | null;
   turnOn: () => void; turnOff: () => void; dismissSetup: () => void;
-  attachBox: (el: HTMLDivElement | null) => void;
+  attachBox: (el: HTMLDivElement | null, onBehind?: (behind: boolean) => void) => void;
   scriptText: () => string;
   /** Who this is, and a way to hear each change of the script being written in this tab. */
   me: string | null;
@@ -84,7 +84,7 @@ export function useLiveCapture(): Capture {
 
 /** Only a signed-in member's browser carries a Supabase auth cookie; without one
  * (a signed-out visitor on the public site) the provider does nothing at all. */
-function hasAuthCookie() {
+export function hasAuthCookie() {
   try { return /\bsb-[^=]+-auth-token=/.test(document.cookie); } catch { return false; }
 }
 
@@ -269,7 +269,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     }
   }, []);
 
-  const attachBox = useCallback((el: HTMLDivElement | null) => { words.attach(el); }, [words]);
+  const attachBox = useCallback((el: HTMLDivElement | null, onBehind?: (behind: boolean) => void) => { words.attach(el, onBehind); }, [words]);
 
   useEffect(() => () => {
     window.clearTimeout(retry.current);

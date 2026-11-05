@@ -33,7 +33,7 @@ async function cloudflareRelay(): Promise<Ice> {
 // Where browsers learn their own address on the internet; and a relay (TURN),
 // for networks that let no call through directly: Cloudflare's (above), or one
 // set by hand (MEETING_TURN_URLS, comma-separated, with its username and credential).
-async function iceServers(): Promise<Ice> {
+export async function iceServers(): Promise<Ice> {
   const servers: Ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
   const turn = (process.env.MEETING_TURN_URLS ?? "").split(",").map(url => url.trim()).filter(Boolean);
   if (turn.length) servers.push({ urls: turn, username: process.env.MEETING_TURN_USERNAME, credential: process.env.MEETING_TURN_CREDENTIAL });

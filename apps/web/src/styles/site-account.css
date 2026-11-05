@@ -308,10 +308,17 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 /* An admin has more tabs than a member, and all of them should show without scrolling. */
 @media (max-width: 1500px) {
   .app-bar-inner:has(.app-bar-tabs[data-many]) { gap: 16px; }
-  .app-bar-tabs[data-many] .app-bar-tab { padding: 0 10px; }
+  .app-bar-tabs[data-many] .app-bar-tab { padding: 0 7px; }
 }
 .app-bar-tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--leaf); }
 .app-bar-me { position: relative; flex: none; margin-left: auto; }
+/* A member's Share sound, beside who is signed in; amber while it is on, as its notice is. */
+.app-bar-sound { display: inline-flex; flex: none; align-items: center; gap: 7px; height: 36px; margin-left: auto; padding: 0 13px; border-radius: 999px; background: var(--night-control); color: var(--ink); font-size: 13.5px; font-weight: 650; white-space: nowrap; cursor: pointer; transition: background-color 0.15s; }
+.app-bar-sound:hover { background: #2a2a2a; }
+.app-bar-sound:disabled { opacity: 0.6; cursor: default; }
+.app-bar-sound[aria-pressed="true"] { background: #1c1a10; box-shadow: inset 0 0 0 1px rgb(242 211 107 / 0.5); color: #f2d36b; }
+.app-bar-sound svg { width: 18px; height: 18px; }
+.app-bar-sound + .app-bar-me { margin-left: -12px; }
 .app-bar-who { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 5px; border-radius: 999px; color: var(--ink); cursor: pointer; transition: background-color 0.2s; }
 .app-bar-who:hover, .app-bar-who[aria-expanded="true"] { background: rgb(236 255 243 / 0.07); }
 .app-bar .account-initials { width: 36px; height: 36px; border-radius: 50%; font-size: 13px; }
@@ -336,6 +343,9 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
   .app-bar-who-text, .app-bar-chevron { display: none; }
   .app-bar-who { padding: 4px; }
   .app-bar-tab { padding: 0 10px; font-size: 14px; }
+  .app-bar-sound { padding: 0 9px; }
+  .app-bar-sound span { display: none; }
+  .app-bar-sound + .app-bar-me { margin-left: 0; }
 }
 @media (max-width: 479px) {
   .app-bar-word { display: none; }
