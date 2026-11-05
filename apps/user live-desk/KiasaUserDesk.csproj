@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>UserDesk</RootNamespace>
+    <AssemblyName>KiasaUserDesk</AssemblyName>
+    <Product>KIASA Live Desk</Product>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>assets\kiasa.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultPageItems>true</EnableDefaultPageItems>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <TieredPGO>true</TieredPGO>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="assets\leaf.png" />
+    <Resource Include="assets\kiasa.ico" />
+  </ItemGroup>
+</Project>
