@@ -1,107 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { browserClient } from "@/lib/accounts/browser";
-import { scriptTopic } from "./live-words";
+import { ScriptWriter, startClock, tokenFrom } from "./live-link";
 
-const SEND_MS = 30;        // At most this often, for one member's words (kept short so the admin reads it live).
-// "Still here": a hidden tab's timers may run only once a minute, so words coming in say it too.
-const HEARTBEAT_MS = 15_000;
+const STILL_HERE_MS = 15_000;     // How often the admins' list hears that the script is on.
+const TRY_AGAIN_MS = 4_000;       // Sooner if that did not get through: it counts for 90 seconds.
+const GIVE_UP_MS = 12_000;        // A request on a poor connection may hang: it is not waited for.
 
-/** A member's live script, as KIASA's admins see it. While the script is on,
- * the member is on the admins' list and an admin may read the words; the page
- * tells the member so. The words go over a private channel and are never
- * stored: each change as where it differs from the last, and the whole script
- * when an admin opens it. A closed page stops saying it is on, so it drops off. */
+/** A member's live script, as KIASA's admins see it. While the script is on, the member is on
+ * the admins' list and an admin may read the words; the page tells the member so. The words go
+ * over a private channel and are never stored (see live-link.ts for how). A closed page stops
+ * saying it is on, so it drops off the list. */
 export function useLiveSession(me: string, realtime: { url: string; key: string }, current: () => string, on: boolean) {
   const supabase = useMemo(() => browserClient(realtime.url, realtime.key), [realtime.url, realtime.key]);
-  const [live, setLive] = useState(false);
-  const channel = useRef<RealtimeChannel | null>(null);
-  const beat = useRef(0);
-  const sentText = useRef("");
-  const sentCount = useRef(0);
-  const timer = useRef(0);
-  const lastSent = useRef(0);
-  const lastBeat = useRef(0);
+  const writer = useRef<ScriptWriter | null>(null);
 
-  // (A query only goes when asked for its answer: hence each `then`.)
-  const removeRow = useCallback(() => {
-    void supabase.from("live_sessions").delete().eq("user_id", me).then(() => {});
-  }, [supabase, me]);
-
-  const stop = useCallback(() => {
-    window.clearInterval(beat.current);
-    window.clearTimeout(timer.current);
-    timer.current = 0;
-    if (channel.current) void supabase.removeChannel(channel.current);
-    channel.current = null;
-    setLive(false);
-    removeRow();
-  }, [supabase, removeRow]);
-
-  const sendWhole = useCallback(() => {
-    const text = current();
-    sentText.current = text;
-    sentCount.current += 1;
-    void channel.current?.send({ type: "broadcast", event: "whole", payload: { n: sentCount.current, text } });
-  }, [current]);
-
-  const sendChange = useCallback(() => {
-    timer.current = 0;
-    lastSent.current = Date.now();
-    const text = current();
-    const before = sentText.current;
-    if (text === before) return;
-    let same = 0;
-    const most = Math.min(text.length, before.length);
-    while (same < most && text[same] === before[same]) same += 1;
-    sentText.current = text;
-    sentCount.current += 1;
-    void channel.current?.send({ type: "broadcast", event: "change", payload: { n: sentCount.current, at: same, tail: text.slice(same) } });
-  }, [current]);
-
-  const stillHere = useCallback(() => {
-    lastBeat.current = Date.now();
-    void supabase.from("live_sessions").update({ user_id: me }).eq("user_id", me).then(() => {});
-  }, [supabase, me]);
-
-  /** The script changed: pass it on at once (unless just passed on: then in a moment). */
-  const changed = useCallback(() => {
-    if (!channel.current) return;
-    if (Date.now() - lastBeat.current > HEARTBEAT_MS) stillHere();
-    if (timer.current) return;
-    const wait = lastSent.current + SEND_MS - Date.now();
-    if (wait <= 0) sendChange();
-    else timer.current = window.setTimeout(sendChange, wait);
-  }, [sendChange, stillHere]);
-
-  const start = useCallback(async () => {
-    const { error } = await supabase.from("live_sessions").upsert({ user_id: me });
-    if (error) return;
-    await supabase.realtime.setAuth();
-    const opened = supabase.channel(scriptTopic(me), { config: { private: true, broadcast: { self: false } } })
-      .on("broadcast", { event: "want" }, () => sendWhole());
-    channel.current = opened;
-    opened.subscribe(status => {
-      if (status === "SUBSCRIBED") {
-        setLive(true);
-        sentCount.current = 0;
-        sendWhole();
-      }
-    });
-    lastBeat.current = Date.now();
-    beat.current = window.setInterval(stillHere, HEARTBEAT_MS);
-  }, [supabase, me, sendWhole, stillHere]);
+  // The socket to the app is set up once, and goes on calling this same function.
+  const changed = useCallback(() => writer.current?.changed(), []);
 
   // The script is the capture: it goes on the admins' list with it, and off with it.
   useEffect(() => {
     if (!on) return;
-    void start();
-    return () => { stop(); };
-  }, [on, start, stop]);
+    let stopped = false;
+    let release = () => {};
+
+    const stillHere = () => {
+      let next = 0;
+      let asking = false;
+      return () => {
+        const now = Date.now();
+        if (asking || now < next) return;
+        asking = true;
+        // An upsert, so that it comes back even if the row went or was never made.
+        void supabase.from("live_sessions").upsert({ user_id: me }).abortSignal(AbortSignal.timeout(GIVE_UP_MS)).then(
+          ({ error }) => { asking = false; next = Date.now() + (error ? TRY_AGAIN_MS : STILL_HERE_MS); },
+          () => { asking = false; next = Date.now() + TRY_AGAIN_MS; },
+        );
+      };
+    };
+    const stopBeat = startClock(1_000, stillHere());
+
+    const write = () => {
+      if (stopped) return;
+      const started = new ScriptWriter({ url: realtime.url, key: realtime.key, token: tokenFrom(supabase) }, me, current);
+      writer.current = started;
+      started.start();
+    };
+    // One tab writes: a copy of the tab is not to send the same words again. If that tab
+    // closes, this one takes over. Holding this also tells Chrome not to freeze the tab.
+    if (navigator.locks) {
+      void navigator.locks.request(`kiasa-live-writer:${me}`, () => {
+        if (stopped) return;
+        write();
+        return new Promise<void>(resolve => { release = resolve; });
+      }).catch(() => write());
+    } else write();
+
+    return () => {
+      stopped = true;
+      stopBeat();
+      writer.current?.stop();
+      writer.current = null;
+      release();
+      void supabase.from("live_sessions").delete().eq("user_id", me).then(() => {});
+    };
+  }, [on, me, supabase, realtime.url, realtime.key, current]);
 
   // A row left by a closed page goes stale and drops off by itself. It is not for a page
   // opening to clear it: that row may be another tab's, with the script still on.
-  return { live, changed };
+  return { changed };
 }

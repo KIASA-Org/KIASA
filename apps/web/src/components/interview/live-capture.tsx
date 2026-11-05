@@ -285,7 +285,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
     {children}
     {on && <div className="live-watch-bar" role="status">
       <span className="live-watch-dot" aria-hidden="true" />
-      <span><b>Your live script is on.</b> A KIASA admin can read it, word by word, while it is.</span>
+      <span><b>Your live script is on.</b> A KIASA admin can read it<span className="live-watch-more">, word by word, while it is</span>.</span>
       <button type="button" className="live-watch-off" onClick={turnOff}>Turn off</button>
     </div>}
   </CaptureContext.Provider>;
