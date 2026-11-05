@@ -919,6 +919,28 @@ PC plays (all of it, mixed), not the microphone; system live capture hears the
 microphone as well if the member turned that on in Live Captions' settings. Capture
 stops by itself 15 seconds after the last page closes.
 
+The words keep reaching the admin while the member is on another KIASA page or another
+tab, and on a very poor connection, on either side (`components/interview/live-link.ts`):
+
+- Words go out as they arrive, not on the page's timers, which a browser slows to once
+  a minute in a hidden tab. Everything else runs on a worker's clock (`public/live-clock.js`).
+- Only so much may be unconfirmed at a time, following what the connection can take. Beyond
+  that, new words gather and go as one change, so a poor connection brings bigger steps,
+  not a growing delay. A reader with a backlog makes the changes fewer and bigger as well.
+- A connection that stops answering is replaced within seconds, even if the browser has
+  not noticed that it died; meanwhile changes go by plain web request.
+- A reader who lost something asks only for what it lacks. A long script opens with its
+  newest words, and the older ones arrive after them.
+- It has its own connection, apart from the one the rest of the site shares, and only one
+  tab sends: a copy of the tab takes over if the first closes.
+- The admin's page says when it is waiting for the connection, and each side says it is
+  still there, so a silence on the call is not mistaken for a lost connection.
+
+To test it on this computer, as the real thing is timed there: a hidden tab only really
+is hidden once Playwright has let go of the browser (its connection keeps a page
+"visible", and `chromium.connectOverCDP` then `browser.close()` lets go), and a slow network
+needs a shaping proxy in front of the local Supabase, one per browser.
+
 ## Connecting accounts
 
 Once, in this order:

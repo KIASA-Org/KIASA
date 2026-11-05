@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { browserClient } from "@/lib/accounts/browser";
 import { useLiveCapture } from "./live-capture";
-import { scriptTopic } from "./live-words";
+import { ScriptReader, tokenFrom, type ReadingState } from "./live-link";
 
 type Session = { user_id: string; started_at: string };
 
@@ -29,6 +28,15 @@ const chosenSet = (statics: Set<number>, anchor: number | null, len: number) => 
   return set;
 };
 
+/** One sentence. A long script has hundreds: only the one that changed is drawn again. */
+const Card = memo(function Card({ sentence, index, live, picked, following, onDown, onEnter }: {
+  sentence: string; index: number; live: boolean; picked: boolean; following: boolean;
+  onDown: (index: number, event: React.MouseEvent) => void; onEnter: (index: number) => void;
+}) {
+  return <p className="live-card" data-live={live || undefined} data-picked={picked || undefined} data-following={following || undefined}
+    onMouseDown={event => onDown(index, event)} onMouseEnter={() => onEnter(index)}>{sentence}</p>;
+});
+
 /** The admin's Live scripts: everyone whose live script is on now, and any one
  * of them, a card per sentence as it is spoken. Each of them is told on their
  * own page that an admin can read it. Nothing is kept: the words are only here. */
@@ -38,6 +46,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
+  const [reading, setReading] = useState<ReadingState>("opening");
   const [text, setText] = useState("");        // everything heard so far, as it arrives
   const [shown, setShown] = useState("");      // what is on screen, catching up word by word
   const targetRef = useRef("");
@@ -66,9 +75,13 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   // says nothing.
   useEffect(() => {
     let stopped = false;
+    let looking = false;
     const load = async () => {
-      const { data } = await supabase.from("live_sessions").select("user_id, started_at").order("started_at");
-      if (stopped) return;
+      if (looking) return;  // On a poor connection, looks must not pile up.
+      looking = true;
+      const { data, error } = await supabase.from("live_sessions").select("user_id, started_at").order("started_at").abortSignal(AbortSignal.timeout(12_000));
+      looking = false;
+      if (stopped || error) return;  // A look that failed says nothing about who is on.
       setSessions((data ?? []) as Session[]);
       setLoaded(true);
     };
@@ -85,7 +98,8 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     };
   }, [supabase]);
 
-  const stillOn = !!open && sessions.some(session => session.user_id === open);
+  // Words still coming say it is on, even if the member's connection could not tell the list.
+  const stillOn = !!open && (sessions.some(session => session.user_id === open) || (reading === "live" && !opening));
 
   // An admin's own script, written in this very tab, is read straight from the capture. It
   // cannot come over its channel: a tab has one connection, which already holds that channel
@@ -103,37 +117,23 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     return onScript(show);
   }, [mine, scriptText, onScript]);
 
-  // The script open now: the whole of it when it opens, then each change.
+  // The script open now: the newest words when it opens, the older ones after them, then
+  // each change. How it holds up on a poor connection is in live-link.ts.
   useEffect(() => {
     if (!open || mine) return;
-    let channel: RealtimeChannel | null = null;
-    let stopped = false;
-    let cur = "";
-    let count = -1;
-    const askWhole = () => void channel?.send({ type: "broadcast", event: "want", payload: {} });
-    void supabase.realtime.setAuth().then(() => {
-      if (stopped) return;
-      channel = supabase.channel(scriptTopic(open), { config: { private: true, broadcast: { self: false } } })
-        .on("broadcast", { event: "whole" }, ({ payload }) => {
-          cur = payload.text;
-          count = payload.n;
-          setText(cur);
-          setOpening(false);
-        })
-        .on("broadcast", { event: "change" }, ({ payload }) => {
-          // One missed: the rest would not line up, so ask for all of it.
-          if (count < 0 || payload.n !== count + 1) return askWhole();
-          count = payload.n;
-          cur = cur.slice(0, payload.at) + payload.tail;
-          setText(cur);
-        })
-        .subscribe(status => { if (status === "SUBSCRIBED") askWhole(); });
-    });
-    return () => {
-      stopped = true;
-      if (channel) void supabase.removeChannel(channel);
-    };
-  }, [supabase, open, mine]);
+    const reader = new ScriptReader({ url: realtime.url, key: realtime.key, token: tokenFrom(supabase) }, open, (next, older) => {
+      // Older sentences arriving above: the cards picked are still the same ones.
+      const added = older ? toSentences(older).length : 0;
+      if (added) {
+        setPicked(current => new Set([...current].map(index => index + added)));
+        setFollowAnchor(current => (current == null ? current : current + added));
+      }
+      setText(next);
+      setOpening(false);
+    }, setReading);
+    reader.begin();
+    return () => reader.end();
+  }, [supabase, realtime.url, realtime.key, open, mine]);
 
   // The words arrive in bursts (the speech model emits several at a time). Show them one
   // after another, fast, so the admin reads a live stream rather than blocks appearing.
@@ -227,6 +227,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     setFollowAnchor(null);
     atBottom.current = true;
     setOpening(true);
+    setReading("opening");
     setOpen(id);
   };
 
@@ -234,7 +235,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const liveFollowing = followAnchor != null && stillOn;
   const isPicked = (index: number) => picked.has(index) || (followAnchor != null && index >= followAnchor);
 
-  const onDown = (index: number, event: React.MouseEvent) => {
+  const onDown = useCallback((index: number, event: React.MouseEvent) => {
     const add = event.ctrlKey || event.metaKey;   // hold Ctrl (or ⌘) to add to the pick
     // Adding: fold the currently-followed range into still cards, then build on that.
     const base = add ? chosenSet(pickedRef.current, anchorRef.current, sentencesRef.current.length) : new Set<number>();
@@ -244,15 +245,15 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
     next.add(index);
     setPicked(next);
     setFollowAnchor(null);  // recomputed when the gesture ends
-  };
-  const onEnter = (index: number) => {
+  }, []);
+  const onEnter = useCallback((index: number) => {
     const d = drag.current;
     if (!d) return;
     if (index !== d.start) d.moved = true;
     const next = new Set(d.base);
     for (let i = Math.min(d.start, index); i <= Math.max(d.start, index); i++) next.add(i);
     setPicked(next);
-  };
+  }, []);
 
   // Finishing a pick copies the chosen cards at once (Ctrl-click an already-picked card
   // unpicks it). If the pick reaches the sentence being written, it follows it from there.
@@ -285,7 +286,9 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
   const nameOf = (id: string) => names[id] ?? "A KIASA member";
   const said = !open ? "Choose someone to read their script."
     : !stillOn ? `${nameOf(open)} has turned their live script off.`
-    : opening ? "Opening…" : "Live";
+    : opening ? "Opening…"
+    : reading === "waiting" ? "Waiting for the connection. The words will catch up by themselves."
+    : "Live";
 
   return <div className="interview wrap wrap-wide">
     <div>
@@ -303,7 +306,7 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
         </button>)}
       </div>
       <div className="live-now-reading">
-        <p className="bridge-status" data-state={liveFollowing && blocked ? "warn" : liveFollowing || copied || (open && stillOn && !opening) ? "ok" : "off"} role="status">
+        <p className="bridge-status" data-state={liveFollowing && blocked ? "warn" : reading === "waiting" && stillOn ? "warn" : liveFollowing || copied || (open && stillOn && !opening) ? "ok" : "off"} role="status">
           <span className="bridge-status-dot" aria-hidden="true" />
           <span>{liveFollowing ? (blocked
             ? <b>Copying live — your browser is blocking the automatic copy. Press Ctrl+C to grab it, or open this page in an Incognito window.</b>
@@ -314,11 +317,11 @@ export function LiveNow({ names, realtime }: { names: Record<string, string>; re
         <div ref={box} className="live-cards" onScroll={onScroll}>
           {sentences.length === 0
             ? <p className="live-cards-empty">{open && stillOn ? "Waiting for the first words…" : "Their words appear here, a card at a time, as they are spoken."}</p>
-            : sentences.map((sentence, index) => <p key={index} className="live-card"
-                data-live={index === last && stillOn || undefined}
-                data-picked={isPicked(index) || undefined}
-                data-following={liveFollowing && followAnchor != null && index >= followAnchor || undefined}
-                onMouseDown={event => onDown(index, event)} onMouseEnter={() => onEnter(index)}>{sentence}</p>)}
+            : sentences.map((sentence, index) => <Card key={index} sentence={sentence} index={index}
+                live={index === last && stillOn}
+                picked={isPicked(index)}
+                following={liveFollowing && followAnchor != null && index >= followAnchor}
+                onDown={onDown} onEnter={onEnter} />)}
         </div>
       </div>
     </div>
