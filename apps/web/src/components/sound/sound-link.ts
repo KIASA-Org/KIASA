@@ -195,7 +195,10 @@ export class SoundListener {
     this.stopClock = startClock(ASK_MS, () => this.tick());
   }
 
-  private ask() { if (!this.live) void this.channel.send({ from: this.id, listen: true }); }
+  private ask() {
+    if (this.live) return;
+    void this.ice().then(ice => this.channel.send({ from: this.id, listen: true, ice }));
+  }
 
   private tick() {
     this.channel.keepUp();
