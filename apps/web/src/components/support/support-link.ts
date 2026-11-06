@@ -19,6 +19,7 @@ export type Figures = {
   route: string; local: string; remote: string; protocol: string; rtt: number | null;
   videoKbps: number; audioKbps: number; fps: number | null; width: number | null; height: number | null;
   videoLoss: number; audioLoss: number; jitter: number | null; framesDecoded: number; freezes: number;
+  videoDelay: number | null;   // how far behind live the picture is playing (jitter buffer), ms
 };
 type Message = {
   kind: "join" | "offer" | "answer" | "candidate" | "state" | "leave" | "ended";
@@ -49,7 +50,7 @@ export class SupportReceiver {
   private everLive = false;
   private says: MemberSays | null = null;
   private mic: MediaStreamTrack | null = null;
-  private last = new Map<string, { bytes: number; at: number; lost: number; got: number; frames: number; freezes: number }>();
+  private last = new Map<string, { bytes: number; at: number; lost: number; got: number; frames: number; freezes: number; jbDelay: number; jbEmit: number }>();
   private poor = 0;
   private good = 0;
   private degraded = false;
@@ -167,7 +168,16 @@ export class SupportReceiver {
     this.pc = pc;
     this.described = false;
     this.last.clear();
-    pc.ontrack = ({ streams, track }) => this.on.stream(streams[0] ?? new MediaStream([track]));
+    pc.ontrack = ({ streams, track, receiver }) => {
+      // Keep the picture near live. Without this, Chrome's video jitter buffer grows to smooth the
+      // freezes that loss causes on a relay (nothing is retransmitted), so the screen drifts seconds
+      // behind the voice. Cap it: a lost frame becomes a brief skip to the live edge, not a growing
+      // lag. The voice keeps its own shallow buffer and stays live. (Chrome 114+; older ignores it.)
+      if (track.kind === "video" && "jitterBufferTarget" in receiver) {
+        try { (receiver as RTCRtpReceiver & { jitterBufferTarget: number | null }).jitterBufferTarget = 200; } catch { /* unsupported */ }
+      }
+      this.on.stream(streams[0] ?? new MediaStream([track]));
+    };
     pc.onicecandidate = ({ candidate }) => {
       if (candidate && this.described && this.pc === pc) void this.send({ kind: "candidate", to: message.from, epoch, candidate: candidate.toJSON() });
     };
@@ -246,7 +256,7 @@ export class SupportReceiver {
       local: String(local?.candidateType ?? "-"), remote: String(remote?.candidateType ?? "-"),
       protocol: String(local?.relayProtocol ?? local?.protocol ?? "-"),
       rtt: typeof pair?.currentRoundTripTime === "number" ? Math.round(pair.currentRoundTripTime * 1000) : null,
-      videoKbps: 0, audioKbps: 0, fps: null, width: null, height: null, videoLoss: 0, audioLoss: 0, jitter: null, framesDecoded: 0, freezes: 0,
+      videoKbps: 0, audioKbps: 0, fps: null, width: null, height: null, videoLoss: 0, audioLoss: 0, jitter: null, framesDecoded: 0, freezes: 0, videoDelay: null,
     };
     const now = Date.now();
     let newFreezes = 0;         // real decode freezes in this interval (not a still desktop)
@@ -256,14 +266,19 @@ export class SupportReceiver {
       const kind = stat.kind as string;
       const bytes = Number(stat.bytesReceived ?? 0), lost = Number(stat.packetsLost ?? 0), got = Number(stat.packetsReceived ?? 0);
       const frames = Number(stat.framesDecoded ?? 0), freezes = Number(stat.freezeCount ?? 0);
+      const jbDelay = Number(stat.jitterBufferDelay ?? 0), jbEmit = Number(stat.jitterBufferEmittedCount ?? 0);
       const before = this.last.get(kind);
-      this.last.set(kind, { bytes, at: now, lost, got, frames, freezes });
+      this.last.set(kind, { bytes, at: now, lost, got, frames, freezes, jbDelay, jbEmit });
       const kbps = before ? Math.round(((bytes - before.bytes) * 8) / Math.max(1, now - before.at)) : 0;
       const loss = before ? Math.max(0, lost - before.lost) / Math.max(1, (lost - before.lost) + (got - before.got)) : 0;
       if (kind === "video") {
         if (before) { newFreezes = Math.max(0, freezes - before.freezes); framesAdvanced = Math.max(0, frames - before.frames); }
+        // How far behind live the picture is playing now: the jitter buffer delay added per frame
+        // over this interval (seconds summed ÷ frames emitted), in ms.
+        const emitted = before ? jbEmit - before.jbEmit : 0;
+        const delay = before && emitted > 0 ? Math.round(((jbDelay - before.jbDelay) / emitted) * 1000) : null;
         const fpsStat = stat.framesPerSecond;
-        Object.assign(figures, { videoKbps: kbps, videoLoss: loss,
+        Object.assign(figures, { videoKbps: kbps, videoLoss: loss, videoDelay: delay,
           fps: typeof fpsStat === "number" ? Math.round(fpsStat) : null,
           width: Number(stat.frameWidth ?? 0) || null, height: Number(stat.frameHeight ?? 0) || null,
           framesDecoded: frames, freezes });
