@@ -45,7 +45,7 @@ async function holdDevice(id: string, secret: string) {
 
 /** "Chrome on Windows", from the browser's own description. */
 function nameOf(agent: string) {
-  const browser = /KIASA-Live-Desk\//.test(agent) ? "KIASA Live Desk" : /Edg\//.test(agent) ? "Edge" : /OPR\//.test(agent) ? "Opera" : /Firefox\//.test(agent) ? "Firefox"
+  const browser = /KIASA-Live-Desk\//.test(agent) ? "KIASA Live Desk" : /KIASA-Say\//.test(agent) ? "KIASA Say" : /KIASA-Meeting-Text\//.test(agent) ? "KIASA Meeting Text" : /Edg\//.test(agent) ? "Edge" : /OPR\//.test(agent) ? "Opera" : /Firefox\//.test(agent) ? "Firefox"
     : /Chrome\//.test(agent) ? "Chrome" : /Safari\//.test(agent) ? "Safari" : "A browser";
   const system = /Windows/.test(agent) ? "Windows" : /iPhone|iPad/.test(agent) ? "iPhone or iPad" : /Android/.test(agent) ? "Android"
     : /Mac OS X/.test(agent) ? "Mac" : /Linux/.test(agent) ? "Linux" : "a computer";

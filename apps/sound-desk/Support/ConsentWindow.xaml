@@ -1,0 +1,42 @@
+<Window x:Class="SoundDesk.Support.ConsentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KIASA — Share your screen" Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Topmost="True"
+        Background="{StaticResource Night}" Foreground="{StaticResource Ink}"
+        FontFamily="{StaticResource Sans}" FontSize="14" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display" Icon="/assets/kiasa.ico">
+  <StackPanel Margin="26,22,26,24">
+    <TextBlock x:Name="Heading" Text="Share your screen with a manager" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap"/>
+    <TextBlock x:Name="Intro" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource InkSoft}"
+               Text="Nothing is shared until you click Start sharing. Only the manager named below can see and hear it. It is not recorded."/>
+
+    <TextBlock Text="Manager" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,18,0,5"/>
+    <ComboBox x:Name="ManagerBox" AutomationProperties.AutomationId="ManagerBox" AutomationProperties.Name="Manager" Height="34" FontSize="14"/>
+    <Border x:Name="ManagerFixed" Visibility="Collapsed" Padding="12,9" CornerRadius="10" Background="{StaticResource NightRaised}">
+      <TextBlock x:Name="ManagerName" AutomationProperties.AutomationId="ManagerName" FontWeight="SemiBold" TextWrapping="Wrap"/>
+    </Border>
+
+    <TextBlock Text="What to show" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,16,0,5"/>
+    <ListBox x:Name="ScreenList" AutomationProperties.AutomationId="ScreenList" AutomationProperties.Name="What to show" Height="150"
+             Background="{StaticResource NightRaised}" Foreground="{StaticResource Ink}" BorderThickness="0"/>
+    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="{StaticResource InkMute}"
+               Text="A display shows everything on it, including notifications. A window shows only that window; if it is minimised or closed, the picture pauses."/>
+
+    <CheckBox x:Name="SystemBox" AutomationProperties.AutomationId="SystemBox" Margin="0,16,0,0" Foreground="{StaticResource Ink}">
+      <TextBlock TextWrapping="Wrap" Width="460"><Run FontWeight="SemiBold" Text="Computer sound"/><Run Text=" — everything your computer plays, from every app (not KIASA itself). Choosing one window does not limit the sound to that window."/></TextBlock>
+    </CheckBox>
+    <CheckBox x:Name="MicBox" AutomationProperties.AutomationId="MicBox" Margin="0,10,0,0" Foreground="{StaticResource Ink}">
+      <TextBlock TextWrapping="Wrap" Width="460"><Run FontWeight="SemiBold" Text="Microphone"/><Run Text=" — your voice, so you can talk with the manager."/></TextBlock>
+    </CheckBox>
+    <ComboBox x:Name="MicDevice" AutomationProperties.AutomationId="MicDevice" Margin="26,6,0,0" Height="30"/>
+    <TextBlock x:Name="SoundNote" Margin="0,10,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="{StaticResource InkMute}"
+               Text="You will hear the manager through this computer. Headphones stop them hearing an echo of themselves. You can mute each sound, pause the screen, or stop everything at any time from the bar at the top of your screen."/>
+
+    <TextBlock x:Name="Said" TextWrapping="Wrap" FontSize="13" Foreground="{StaticResource Warn}" Margin="0,12,0,0" Visibility="Collapsed"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+      <Button x:Name="NoButton" AutomationProperties.AutomationId="Decline" Content="Not now" Width="120" Height="40" Margin="0,0,10,0" Click="No_Click"/>
+      <Button x:Name="StartButton" AutomationProperties.AutomationId="StartSharing" Style="{StaticResource Strong}" Content="Start sharing" Width="170" Click="Start_Click"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

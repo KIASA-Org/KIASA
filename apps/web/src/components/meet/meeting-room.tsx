@@ -142,7 +142,8 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
   // In once joined, or, having asked, once let in; and only while let in (someone
   // taken out of the meeting while in it is back in the lobby, which says so).
   const joined = letIn && (joinedHere || asked);
-  const call = useMeeting({ supabase, start, joined, allowed });
+  // Leaving, or the meeting ending, lets the camera, microphone and screen go (KIASA-006).
+  const call = useMeeting({ supabase, start, joined, allowed, devices: !left, over: !!meeting.ended_at });
   // The panel beside the call: the people in it, or its chat.
   const [panel, setPanel] = useState<"people" | "chat" | null>(null);
   // Messages from others not yet seen (the chat closed), and the latest, shown for a moment.
@@ -280,7 +281,7 @@ export function MeetingRoom({ start, realtime }: { start: MeetStart; realtime: {
     <div className="meet-message">
       <h1>You left the meeting</h1>
       <div className="meet-message-actions">
-        <button type="button" className="admin-approve" onClick={() => { setLeft(false); setJoined(true); }}>Rejoin</button>
+        <button type="button" className="admin-approve" onClick={() => { setLeft(false); setJoined(false); }}>Rejoin</button>
         <Link className="account-button" href="/chat">Back to the chat</Link>
       </div>
     </div>

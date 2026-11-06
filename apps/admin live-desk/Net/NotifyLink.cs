@@ -21,8 +21,10 @@ public sealed class NotifyLink : IDisposable
         _link.Open();
     }
 
-    /// <summary>Sends the full current text to the open channel. No-op if not connected yet.</summary>
-    public void Send(string text) => _link?.Send("text", new { text });
+    /// <summary>Sends the full current text with the admin's selection (start, len) and a sequence
+    /// number, so the user mirrors the same highlight and caret and ignores out-of-order messages.
+    /// No-op if not connected yet.</summary>
+    public void Send(string text, int start, int len, long seq) => _link?.Send("text", new { text, start, len, seq });
 
     /// <summary>Closes the current channel without clearing the user's screen.</summary>
     public void Close()

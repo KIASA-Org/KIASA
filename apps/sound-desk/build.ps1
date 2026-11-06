@@ -10,3 +10,5 @@ if (Test-Path $runtimes) { Remove-Item -Recurse -Force $runtimes }
 Move-Item -Force (Join-Path $dist 'KiasaSoundDesk.exe') (Join-Path $dist 'KIASA Sound Desk.exe')
 $file = Get-Item (Join-Path $dist 'KIASA Sound Desk.exe')
 '{0}  {1:N1} MB' -f $file.FullName, ($file.Length / 1MB)
+# Signed when this computer is set up for it (see sign.ps1); otherwise it says it is unsigned.
+& (Join-Path $here 'sign.ps1') -File $file.FullName

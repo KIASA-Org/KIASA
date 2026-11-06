@@ -68,6 +68,7 @@
               <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
               <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
               <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -109,7 +110,13 @@
               </StackPanel>
             </ScrollViewer>
             <TextBlock Grid.Row="2" Text="Members" FontWeight="SemiBold" FontSize="13.5" Margin="6,8,0,6"/>
-            <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Focusable="False">
+            <Border Grid.Row="3" Background="{StaticResource NightRaised}" BorderBrush="#33ECFFF3" BorderThickness="1" CornerRadius="8" Height="30" Padding="9,0" Margin="2,0,2,6">
+              <Grid>
+                <TextBlock x:Name="SearchHint" Text="Search members" Foreground="{StaticResource InkMute}" FontSize="12.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <TextBox x:Name="MemberSearch" BorderThickness="0" Background="Transparent" Foreground="{StaticResource Ink}" CaretBrush="{StaticResource Leaf}" VerticalContentAlignment="Center" FontSize="12.5" PreviewMouseLeftButtonDown="Field_Down" TextChanged="MemberSearch_Changed"/>
+              </Grid>
+            </Border>
+            <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Focusable="False">
               <ItemsControl x:Name="Members" Focusable="False">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
@@ -117,10 +124,18 @@
                       <Button.Template>
                         <ControlTemplate TargetType="Button">
                           <Border x:Name="Row" CornerRadius="10" Padding="8,7" Background="Transparent">
-                            <TextBlock Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Ink}"/>
+                            <Grid>
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                              </Grid.ColumnDefinitions>
+                              <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#2EECFFF3" Margin="0,0,8,0" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                              <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13.5" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Ink}"/>
+                            </Grid>
                           </Border>
                           <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="#0FECFFF3"/></Trigger>
+                            <DataTrigger Binding="{Binding Online}" Value="True"><Setter TargetName="Dot" Property="Fill" Value="{StaticResource Leaf}"/></DataTrigger>
                             <DataTrigger Binding="{Binding Current}" Value="True"><Setter TargetName="Row" Property="Background" Value="#24B8EC93"/></DataTrigger>
                           </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -130,7 +145,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </ScrollViewer>
-            <StackPanel Grid.Row="4" Margin="0,6,0,0">
+            <StackPanel Grid.Row="5" Margin="0,6,0,0">
               <TextBlock x:Name="WhoAmI" FontSize="12" Foreground="{StaticResource InkMute}" Margin="6,0,0,2" TextTrimming="CharacterEllipsis"/>
               <Button Style="{StaticResource Quiet}" Click="SignOut_Click" HorizontalAlignment="Left" Padding="6,3">
                 <TextBlock Text="Sign out" FontSize="12"/>
@@ -163,7 +178,13 @@
             </Button>
           </Grid>
 
-          <Border Grid.Row="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="7,8,3,3">
+          <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition x:Name="NotifyGap" Width="0"/>
+              <ColumnDefinition x:Name="NotifyCol" Width="0"/>
+            </Grid.ColumnDefinitions>
+          <Border Grid.Column="0" Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="7,8,3,3">
             <Grid>
               <TextBlock x:Name="CardsEmpty" Margin="8" FontSize="13.5" Foreground="{StaticResource InkMute}" TextWrapping="Wrap" Text="Their words appear here, a card at a time, as they are spoken."/>
               <ItemsControl x:Name="Cards" Focusable="False"
@@ -206,26 +227,29 @@
             </Grid>
           </Border>
 
+          <!-- Notify panel: a text input beside the script, shown when a member is selected. -->
+          <Border x:Name="NotifyPanel" Grid.Column="2" Visibility="Collapsed"
+                  Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="14,10,10,10">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <TextBlock x:Name="NotifyTo" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
+              <TextBox x:Name="NotifyBox" Grid.Row="1" TextWrapping="Wrap" Background="Transparent" BorderThickness="0"
+                       Foreground="{StaticResource Ink}" FontSize="14"
+                       VerticalAlignment="Stretch" VerticalContentAlignment="Top"
+                       AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                       CaretBrush="{StaticResource Leaf}" FontFamily="{StaticResource Sans}"
+                       PreviewMouseLeftButtonDown="Field_Down"
+                       GotKeyboardFocus="NotifyBox_GotFocus" LostKeyboardFocus="NotifyBox_LostFocus"
+                       TextChanged="NotifyBox_Changed" SelectionChanged="NotifyBox_SelChanged"/>
+            </Grid>
+          </Border>
+          </Grid>
+
           <TextBlock x:Name="Hint" Grid.Row="2" Margin="3,7,0,0" FontSize="11.5" Foreground="{StaticResource InkMute}" TextWrapping="Wrap"
                      Text="Click in a box, then click a card: it goes in where your cursor is. Drag across several, or hold Ctrl to add. Pick the sentence being written and each one goes in as it finishes, or press Word by word to write each word as it comes. Ctrl+Alt+Space writes the bubble's words now."/>
-
-          <!-- Notify panel: overlays the right panel when sending a message to a member. -->
-          <Grid x:Name="NotifyPanel" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed">
-            <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="16,14,10,14">
-              <Grid>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="NotifyTo" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,10"/>
-                <TextBox x:Name="NotifyBox" Grid.Row="1" TextWrapping="Wrap" Background="Transparent" BorderThickness="0"
-                         Foreground="{StaticResource Ink}" FontSize="15"
-                         AcceptsReturn="False" VerticalScrollBarVisibility="Auto"
-                         CaretBrush="{StaticResource Leaf}" FontFamily="{StaticResource Sans}"
-                         TextChanged="NotifyBox_Changed"/>
-              </Grid>
-            </Border>
-          </Grid>
         </Grid>
       </Grid>
     </Grid>

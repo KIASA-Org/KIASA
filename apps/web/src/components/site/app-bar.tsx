@@ -11,7 +11,7 @@ import { ChevronDown, Leave, Speaker } from "./icons";
 import { YourPhoto } from "./your-photo";
 import { useSound } from "../sound/sound-share";
 
-export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "sounds" | "model";
+export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "sounds" | "model" | "support";
 /** Who is signed in, as the bar shows them. `id` and `photo` once accounts are connected. */
 export type AppPerson = { id?: string; name: string; detail: string; admin: boolean; photo?: string | null };
 

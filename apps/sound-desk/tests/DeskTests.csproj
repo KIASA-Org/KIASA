@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>DeskTests</RootNamespace>
+    <NoWarn>CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Net\Log.cs" Link="Shared\Log.cs" />
+    <Compile Include="..\Capture\Screens.cs" Link="Shared\Screens.cs" />
+    <Compile Include="..\Media\*.cs" Link="Shared\Media\%(Filename).cs" />
+    <Compile Include="..\Support\Protocol.cs" Link="Shared\Protocol.cs" Condition="Exists('..\Support\Protocol.cs')" />
+    <Compile Include="..\Audio\*.cs" Link="Shared\Audio\%(Filename).cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" ExcludeAssets="native" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="SIPSorcery" Version="10.0.17" />
+    <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
+  </ItemGroup>
+</Project>

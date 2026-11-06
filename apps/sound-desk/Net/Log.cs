@@ -5,7 +5,7 @@ namespace SoundDesk.Net;
 internal static class Log
 {
     private static readonly string Path = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIASA", "SoundDesk", "log.txt");
+        Environment.GetEnvironmentVariable("KIASA_SOUND_DESK_DATA") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KIASA", "SoundDesk"), "log.txt");
     private static readonly object Gate = new();
 
     internal static void Write(string line)
