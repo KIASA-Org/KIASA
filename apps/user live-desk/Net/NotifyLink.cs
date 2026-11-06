@@ -19,6 +19,10 @@ public sealed class NotifyLink : IDisposable
             (name, payload) =>
             {
                 if (name != "text" || !payload.TryGetProperty("text", out var t)) return;
+                // Only while tracing: how long the admin's keystroke took to reach here (same PC, so the
+                // clocks match). This is the admin-send → user-receive hop, before any drawing.
+                if (Trace.On && payload.TryGetProperty("t", out var tp) && tp.TryGetInt64(out var sentMs))
+                    Trace.Line($"text seq={(payload.TryGetProperty("seq", out var sq) ? sq.ToString() : "-")} delay={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - sentMs}ms len={t.GetString()?.Length ?? 0}");
                 // Keep only the newest: a message that arrives out of order or late is dropped,
                 // so a small edit is never hidden by an older, longer text landing after it.
                 if (payload.TryGetProperty("seq", out var s) && s.TryGetInt64(out var seq))

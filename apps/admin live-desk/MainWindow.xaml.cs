@@ -73,7 +73,7 @@ public sealed class MemberItem : INotifyPropertyChanged
 public partial class MainWindow : Window
 {
     private const int HotkeyId = 1;
-    private const long ListEveryMs = 3_000;
+    private const long ListEveryMs = 6_000;
     private const long FlashMs = 1_800;
     private const long OnlineExpiryMs = 18_000;
     private const long PruneEveryMs = 2_000;
@@ -524,6 +524,10 @@ public partial class MainWindow : Window
         finally
         {
             _listing = false;
+            // Measure the gap from when the poll FINISHED, not when it started: on a slow, lossy line a
+            // poll can take many seconds, and re-firing the instant it returns hammers the line and
+            // starves the realtime typing channel (measured 2026-11-06). A quiet gap lets words through.
+            _nextList = Environment.TickCount64 + ListEveryMs;
         }
     }
 
@@ -980,9 +984,9 @@ public partial class MainWindow : Window
     {
         if (!_signedIn) return;
         var now = Environment.TickCount64;
-        if (now >= _nextList)
+        if (now >= _nextList && !_listing)
         {
-            _nextList = now + ListEveryMs;
+            _nextList = now + ListEveryMs;   // a floor; the real next time is set when this poll finishes
             _ = LoadList();
         }
         if (now >= _nextPrune)
