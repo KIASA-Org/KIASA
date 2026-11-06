@@ -19,26 +19,43 @@ internal sealed class Updater : IDisposable
     private readonly Account _account;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(10) };
     private System.Timers.Timer? _timer;
+    private int _busy;   // one check at a time, so the 15 s heartbeat can poke it freely
 
     internal event Action? UpdateReady;
 
     internal static Version CurrentVersion =>
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
 
+    /// <summary>A short line for the tray menu, so the member can see the update state at a glance.</summary>
+    internal string Status { get; private set; } = "Up to date";
+
     internal Updater(Account account) => _account = account;
 
     internal void Start()
     {
-        _ = Task.Run(() => Check());
+        CheckNow();
+        // A slow fallback; the app also calls CheckNow() from its 15 s heartbeat, so a published
+        // update is normally seen within seconds, not hours.
         _timer = new System.Timers.Timer(TimeSpan.FromHours(4).TotalMilliseconds) { AutoReset = true };
-        _timer.Elapsed += async (_, _) => await Check();
+        _timer.Elapsed += (_, _) => CheckNow();
         _timer.Start();
+    }
+
+    /// <summary>Run one check now, unless one is already running. Cheap to call often: a check is a
+    /// tiny request that returns "up to date" until a newer build is published.</summary>
+    internal void CheckNow()
+    {
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return;
+        _ = Task.Run(async () => { try { await Check(); } finally { Interlocked.Exchange(ref _busy, 0); } });
     }
 
     private async Task Check()
     {
         try
         {
+            // A verified build is already downloaded and waiting to be applied (on the next idle
+            // moment): nothing more to fetch until the app restarts into it.
+            if (HasPendingUpdate()) return;
             Log.Write($"Updater: checking (current={CurrentVersion})");
             var token = await _account.Token();
             if (token == null) return;
@@ -59,6 +76,7 @@ internal sealed class Updater : IDisposable
 
             if (!Version.TryParse(versionStr, out var remote) || remote <= CurrentVersion)
             {
+                Status = "Up to date";
                 Log.Write($"Updater: up to date (remote={versionStr})");
                 return;
             }
@@ -78,6 +96,7 @@ internal sealed class Updater : IDisposable
                 return;
             }
 
+            Status = $"Downloading update {versionStr}…";
             Log.Write($"Updater: downloading v{versionStr}");
             Directory.CreateDirectory(UpdateFolder);
             var tempPath = UpdateExe + ".tmp";
@@ -111,6 +130,7 @@ internal sealed class Updater : IDisposable
             }
 
             File.Move(tempPath, UpdateExe, true);
+            Status = $"Update {versionStr} ready — installs when you're not sharing";
             Log.Write($"Updater: v{versionStr} ready");
             UpdateReady?.Invoke();
         }

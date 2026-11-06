@@ -25,41 +25,45 @@ static partial class RulesTests
         var s1 = r.NextSeq(); var s2 = r.NextSeq();
         check("state numbers rise", s2 > s1, "");
 
+        // Reports now carry the raw packet counts (expected, lost), not a pre-divided fraction: 20 lost
+        // of 100 is heavy congestion; 1 lost of 3 is floor noise. The controller must tell them apart.
         var rate = new RateControl();
         var start = rate.Plan;
         check("starts at 15 fps, full size", start.Fps == 15 && start.Scale == 1.0, $"{start.VideoBps / 1000} kbit/s");
         RatePlan p = start;
-        for (var i = 0; i < 20; i++) p = rate.Report(0.2, 150, 1);
+        for (var i = 0; i < 20; i++) p = rate.Report(100, 20, 150, 1);
         check("heavy loss lowers the rate and frame rate", p.VideoBps < 300_000 && p.Fps <= 5, $"{p.VideoBps / 1000} kbit/s, {p.Fps} fps, audio {p.AudioBps / 1000}k");
         check("heavy loss is called degraded", p.Degraded, p.Why);
         check("the rate never falls below the usable floor", p.VideoBps >= RateControl.Least, $"{p.VideoBps / 1000} kbit/s, floor {RateControl.Least / 1000}k");
-        for (var i = 0; i < 20; i++) p = rate.Report(0.2, 150, 1);
+        for (var i = 0; i < 20; i++) p = rate.Report(100, 20, 150, 1);
         check("a long, very poor line makes the picture smaller, then the voice cheaper", p.Scale < 1.0 && p.AudioBps == 24_000, $"scale {p.Scale}, audio {p.AudioBps / 1000}k");
         var low = p.VideoBps;
-        p = rate.Report(0.0, 80, 1);
+        p = rate.Report(100, 0, 80, 1);
         check("one good second does not raise it (hysteresis)", p.VideoBps == low, $"{p.VideoBps / 1000}");
-        for (var i = 0; i < 60; i++) p = rate.Report(0.0, 80, 1);
+        for (var i = 0; i < 60; i++) p = rate.Report(100, 0, 80, 1);
         check("a steady good line brings the picture back to health", p.VideoBps >= 800_000, $"{low / 1000} → {p.VideoBps / 1000} kbit/s after 60 s");
 
-        // The fault seen in the field (screenshots 2026-11-06): a relay that drops the odd burst left
-        // the picture pinned at its floor for good, because any loss reset the recovery window. A clean
-        // line with a blip every 7 s — more often than the old 8 s window — must still climb back.
+        // The fault seen in the field (screenshots 2026-11-06): on a relay the picture fell to its floor,
+        // where it was only a few packets a second; from then on a single lost packet read as a third of
+        // them and the rate never climbed back, though the line was in fact clean (RustDesk stayed crisp
+        // on the same link). A clean line seen through a trickle of packets must still climb back.
         var blip = new RateControl();
-        for (var i = 0; i < 40; i++) blip.Report(0.25, 150, 1);
+        for (var i = 0; i < 40; i++) blip.Report(100, 25, 150, 1);   // real congestion → fall to the floor
         var pinned = blip.Plan.VideoBps;
-        for (var i = 0; i < 160; i++) blip.Report(i % 7 == 0 ? 0.30 : 0.0, 120, 1);
-        check("an occasional lost burst does not pin the picture at the floor", blip.Plan.VideoBps > 3 * pinned, $"{pinned / 1000} → {blip.Plan.VideoBps / 1000} kbit/s");
+        check("sustained heavy loss reaches the floor", pinned == RateControl.Least, $"{pinned / 1000}k");
+        for (var i = 0; i < 200; i++) blip.Report(3, i % 6 == 0 ? 1 : 0, 150, 1);   // 3 packets/s, a stray loss now and then
+        check("a stray lost packet among a few does not pin the picture at the floor", blip.Plan.VideoBps > 3 * pinned, $"{pinned / 1000} → {blip.Plan.VideoBps / 1000} kbit/s");
 
         var rate2 = new RateControl();
         rate2.Remb(200_000);
-        p = rate2.Report(0.0, 50, 1);
+        p = rate2.Report(100, 0, 50, 1);
         check("the browser's line estimate alone does not cut the rate (it is only recorded)", p.VideoBps >= RateControl.Start && rate2.LastRemb == 200_000, $"{p.VideoBps / 1000} kbit/s");
         var random = new RateControl();
-        for (var i = 0; i < 30; i++) random.Report(0.03, 160, 1);
+        for (var i = 0; i < 30; i++) random.Report(100, 3, 160, 1);
         check("3% random loss on a long, steady line does not take the picture down", random.Plan.VideoBps >= RateControl.Start, $"{random.Plan.VideoBps / 1000} kbit/s");
         var rate3 = new RateControl();
         var flips = 0; var was = false;
-        for (var i = 0; i < 60; i++) { var q = rate3.Report(i % 2 == 0 ? 0.12 : 0.0, 100, 1); if (q.Degraded != was) { flips++; was = q.Degraded; } }
+        for (var i = 0; i < 60; i++) { var q = rate3.Report(100, i % 2 == 0 ? 12 : 0, 100, 1); if (q.Degraded != was) { flips++; was = q.Degraded; } }
         check("alternating loss does not swing the quality label every second", flips <= 2 && rate3.Plan.VideoBps > RateControl.Least, $"{flips} degraded flips, ends {rate3.Plan.VideoBps / 1000} kbit/s");
     }
 }

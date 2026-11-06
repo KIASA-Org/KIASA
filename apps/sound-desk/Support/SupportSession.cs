@@ -420,11 +420,16 @@ public sealed class SupportSession : IDisposable
         var seconds = (now - _lastReport).TotalSeconds;
         if (seconds < 0.8) return;
         _lastReport = now;
-        // Loss from the cumulative counts (fraction-lost is per report and noisy).
+        // Loss from the cumulative counts (fraction-lost is per report and noisy). The controller is
+        // given the raw counts, not just the fraction: at the floor a report covers only a few packets,
+        // where one stray loss is a third of them, and dividing first hid that from it (see RateControl).
         var lost = (uint)Math.Max(0, rr.PacketsLost);
         var expected = rr.ExtendedHighestSequenceNumber - _lastHighest;
         var lostNow = lost - _lastLostTotal;
-        var loss = _lastHighest == 0 || expected == 0 ? rr.FractionLost / 256.0 : Math.Clamp(lostNow / (double)expected, 0, 1);
+        var first = _lastHighest == 0;
+        var expectedN = first ? 0 : (int)Math.Min((uint)int.MaxValue, expected);
+        var lostN = first || lostNow > (uint)int.MaxValue ? 0 : (int)lostNow;
+        var loss = first || expected == 0 ? rr.FractionLost / 256.0 : Math.Clamp(lostNow / (double)expected, 0, 1);
         _lastLostTotal = lost; _lastHighest = rr.ExtendedHighestSequenceNumber;
         // Nothing is resent, so a lost packet spoils the picture until a key frame. The browser's own
         // requests for one cannot be read (SIPSorcery keeps only its REMB). But a full key frame is a
@@ -440,11 +445,11 @@ public sealed class SupportSession : IDisposable
             if (r is >= 0 and < 10_000) rtt = r;
         }
         var before = _rate.Plan;
-        var plan = _rate.Report(loss, rtt, seconds);
+        var plan = _rate.Report(expectedN, lostN, rtt, seconds);
         _mixer!.Bitrate = plan.AudioBps;
         if (plan.Degraded != before.Degraded || plan.VideoBps != before.VideoBps)
         {
-            Log.Write($"Support: adapt {before.VideoBps / 1000}→{plan.VideoBps / 1000} kbit/s, {plan.Fps} fps, scale {plan.Scale:F2}, audio {plan.AudioBps / 1000}k (loss {loss:P0}, rtt {rtt?.ToString() ?? "?"} ms, {plan.Why})");
+            Log.Write($"Support: adapt {before.VideoBps / 1000}→{plan.VideoBps / 1000} kbit/s, {plan.Fps} fps, scale {plan.Scale:F2}, audio {plan.AudioBps / 1000}k (report {lostN}/{expectedN} lost {loss:P0}, smoothed {_rate.SmoothedLoss:P0}, rtt {rtt?.ToString() ?? "?"} ms, {plan.Why})");
             if (plan.Degraded != before.Degraded) _ = _api.Note(Id, plan.Degraded ? "degraded" : "recovered", new { kbps = plan.VideoBps / 1000, fps = plan.Fps, loss = Math.Round(loss, 3), rtt });
             if (_peerLive) SetState(plan.Degraded ? SupportState.Degraded : SupportState.Live, plan.Degraded ? $"Poor connection ({plan.Why}): picture slowed, voice kept" : $"Sharing with {ManagerName}");
             SendState();
@@ -578,10 +583,11 @@ public sealed class SupportSession : IDisposable
         if (!_running) return;
         var plan = _rate.Plan;
         var mode = EchoGuarded ? "computer sound lowered while you speak (echo guard)" : null;
+        var ver = SoundDesk.Net.Updater.CurrentVersion;
         _link?.Send("support", new
         {
             kind = "state", from = _id, seat = _rules.Seat, seq = _rules.NextSeq(),
-            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = _encW, height = _encH },
+            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = _encW, height = _encH, version = $"{ver.Major}.{ver.Minor}.{ver.Build}" },
         });
     }
 

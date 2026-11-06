@@ -14,7 +14,7 @@ import { gathered } from "@/components/meet/rtc";
  * closes everything here, whatever the channel says. */
 
 export type SupportState = "connecting" | "live" | "degraded" | "reconnecting" | "paused" | "ended";
-export type MemberSays = { screen: "live" | "paused" | "lost" | "off"; system: boolean; mic: boolean; mode?: string; detail?: string; fps?: number; kbps?: number; width?: number; height?: number };
+export type MemberSays = { screen: "live" | "paused" | "lost" | "off"; system: boolean; mic: boolean; mode?: string; detail?: string; fps?: number; kbps?: number; width?: number; height?: number; version?: string };
 export type Figures = {
   route: string; local: string; remote: string; protocol: string; rtt: number | null;
   videoKbps: number; audioKbps: number; fps: number | null; width: number | null; height: number | null;

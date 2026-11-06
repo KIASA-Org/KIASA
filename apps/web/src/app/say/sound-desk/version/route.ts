@@ -1,11 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { accountsLive, publicSupabase } from "@/lib/accounts/server";
 
-const SOUND_DESK_VERSION = "1.1.1";
-const SOUND_DESK_URL = "https://github.com/KIASA-Org/KIASA/releases/download/sound-desk-1.1.1/KiasaSoundDesk.exe";
+const SOUND_DESK_VERSION = "1.1.2";
+const SOUND_DESK_URL = "https://github.com/KIASA-Org/KIASA/releases/download/sound-desk-1.1.2/KiasaSoundDesk.exe";
 // SHA-256 of the exe above. The app refuses to apply an update that does not match this,
 // so a newer version is served only to builds that can verify exactly what they downloaded.
-const SOUND_DESK_SHA256 = "d15bab4820dafce8879b24aeb9f6737e7d1b3a81246f0e404b08a9edcc7c36c8";
+const SOUND_DESK_SHA256 = "f14b13d670f292684e33109ed99871e3086f6b4d6b68752a12fc2cd5c0b10fab";
 
 export async function GET(request: Request) {
   if (!accountsLive) return Response.json({ version: "0.0.0" });
