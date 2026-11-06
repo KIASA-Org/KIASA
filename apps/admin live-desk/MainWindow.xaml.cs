@@ -124,6 +124,8 @@ public partial class MainWindow : Window
     private long _wroteAt;
     private bool _wasOn;
     private (int X, int Y, int WindowX, int WindowY)? _moving;
+    private BrowserDock? _dock;
+    private bool _membersHidden;
 
     private sealed record Gesture(int Start, bool Add, HashSet<int> Base) { public bool Moved { get; set; } }
 
@@ -145,6 +147,10 @@ public partial class MainWindow : Window
         _account.Ended += () => Dispatcher.BeginInvoke(() => ShowSignIn("Your sign-in has ended. Please sign in again."));
         _beat.Tick += (_, _) => Beat();
         _notifyTimer.Tick += (_, _) => NotifyTick();
+        _dock = new BrowserDock(this, BrowserHost);
+        LocationChanged += (_, _) => _dock?.Reposition();
+        SizeChanged += (_, _) => _dock?.Reposition();
+        StateChanged += (_, _) => _dock?.OnDeskState(WindowState);
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -192,6 +198,7 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         if (_hasHotkey) Native.UnregisterHotKey(_handle, HotkeyId);
+        _dock?.Close();
         _run?.Dispose();
         _local?.Stop();
         _presence?.Close();
@@ -207,8 +214,11 @@ public partial class MainWindow : Window
         if (message == Native.WM_MOUSEACTIVATE && _signedIn)
         {
             // A click never activates the window on its own, so the keyboard stays in the document.
-            // Clicking the message box brings the window forward explicitly (NotifyBox_Down).
+            // Clicking the message box brings the window forward explicitly (NotifyBox_Down). The
+            // exception is while the browser is embedded: the window must take focus then, or the
+            // browser inside it can take no keyboard (the admin agreed to this trade while browsing).
             handled = true;
+            if (_dock?.Docked == true) return Native.MA_ACTIVATE;
             return Native.MA_NOACTIVATE;
         }
         if (message == Native.WM_HOTKEY && wParam == HotkeyId)
@@ -305,6 +315,7 @@ public partial class MainWindow : Window
         Native.SetWindowLong(_handle, Native.GWL_EXSTYLE, Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) & ~Native.WS_EX_NOACTIVATE);
         DeskView.Visibility = Visibility.Collapsed;
         SignInView.Visibility = Visibility.Visible;
+        MembersToggle.Visibility = BrowserToggle.Visibility = Visibility.Collapsed;
         SignInSaid.Text = said ?? "";
         SignInSaid.Visibility = said == null ? Visibility.Collapsed : Visibility.Visible;
         _caret.Watching = false;
@@ -322,11 +333,113 @@ public partial class MainWindow : Window
         PasswordInput.Clear();
         SignInView.Visibility = Visibility.Collapsed;
         DeskView.Visibility = Visibility.Visible;
+        MembersToggle.Visibility = BrowserToggle.Visibility = Visibility.Visible;
+        ProxyBox.Text = BrowserProxy.Load(_account.Folder);
         WhoAmI.Text = _account.Name;
         _nextList = 0;
         if (Timing.On) Timing.Line("entered desk");
         _ = LoadMembers();
         StartPresence();
+    }
+
+    // ── Layout: hide the member list, dock the browser ────────────────────────────────────────────
+
+    /// <summary>Hides or shows the member list down the left, giving the script and the browser the room.</summary>
+    private void Members_Click(object sender, RoutedEventArgs e)
+    {
+        _membersHidden = !_membersHidden;
+        MemberCol.Width = new GridLength(_membersHidden ? 0 : 176);
+        MemberListGap.Width = new GridLength(_membersHidden ? 0 : 12);
+        MembersPanel.Visibility = _membersHidden ? Visibility.Collapsed : Visibility.Visible;
+        MembersToggleText.Foreground = (Brush)FindResource(_membersHidden ? "Leaf" : "InkSoft");
+    }
+
+    /// <summary>Shows or hides the embedded browser panel. Showing it opens the stealth browser through
+    /// the proxy in the bar and slots it into the panel; hiding it closes the browser.</summary>
+    private async void Browser_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dock == null) return;
+        if (BrowserArea.Visibility == Visibility.Visible)
+        {
+            _dock.CloseBrowser();
+            HideBrowser();
+            BrowserToggleText.Foreground = (Brush)FindResource("InkSoft");
+            return;
+        }
+        ShowBrowser();
+        await OpenBrowser();
+    }
+
+    /// <summary>Opens (or reopens) the browser through whatever proxy is in the bar, saving that proxy.
+    /// A proxy only takes effect at launch, so a change closes the running browser and opens a new one.</summary>
+    private async Task OpenBrowser()
+    {
+        if (_dock == null) return;
+        // Read whatever shape was pasted (SOCKS5 - host:port:user:pass, host:port:user:pass, a URL…) into
+        // a proper proxy URL, and show that cleaned-up form so the admin sees what will be used.
+        var proxy = ProxyText.Normalize(ProxyBox.Text);
+        if (proxy != ProxyBox.Text) ProxyBox.Text = proxy;
+        BrowserProxy.Save(_account.Folder, proxy);
+        _dock.CloseBrowser();
+        BrowserHostHint.Text = "Opening the KIASA browser…";
+        BrowserToggle.IsEnabled = ProxyApply.IsEnabled = false;
+        BrowserToggleText.Text = "Opening…";
+        ProxyApplyText.Text = "Opening…";
+        var error = await _dock.Dock(proxy.Length == 0 ? null : proxy);
+        BrowserToggle.IsEnabled = ProxyApply.IsEnabled = true;
+        BrowserToggleText.Text = "Browser";
+        ProxyApplyText.Text = "Reopen";
+        if (error != null)
+        {
+            Status.Text = error;
+            BrowserHostHint.Text = error;
+            BrowserToggleText.Foreground = (Brush)FindResource("InkSoft");
+            return;
+        }
+        BrowserToggleText.Foreground = (Brush)FindResource("Leaf");
+    }
+
+    private async void ProxyApply_Click(object sender, RoutedEventArgs e)
+    {
+        if (BrowserArea.Visibility != Visibility.Visible) ShowBrowser();
+        await OpenBrowser();
+    }
+
+    private void ProxyBox_Changed(object sender, TextChangedEventArgs e)
+        => ProxyHint.Visibility = ProxyBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private async void ProxyBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Return or Key.Enter)) return;
+        e.Handled = true;
+        if (BrowserArea.Visibility != Visibility.Visible) ShowBrowser();
+        await OpenBrowser();
+    }
+
+    private void ShowBrowser()
+    {
+        BrowserGap.Width = new GridLength(10);
+        BrowserCol.Width = new GridLength(1.2, GridUnitType.Star);
+        BrowserArea.Visibility = Visibility.Visible;
+        if (Width < 1180) Width = 1180;
+        var area = SystemParameters.WorkArea;
+        if (Left + Width > area.Right) Left = Math.Max(area.Left, area.Right - Width);
+    }
+
+    private void HideBrowser()
+    {
+        BrowserArea.Visibility = Visibility.Collapsed;
+        BrowserGap.Width = new GridLength(0);
+        BrowserCol.Width = new GridLength(0);
+    }
+
+    private void BrowserHost_SizeChanged(object sender, SizeChangedEventArgs e) => _dock?.Reposition();
+
+    /// <summary>Opens the browser's own Settings window (its other options beyond the proxy).</summary>
+    private void BrowserSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var error = _dock?.OpenSettings();
+        if (error != null) Status.Text = error;
     }
 
     /// <summary>Listens on the shared desk channel so each member can be marked online when they have
@@ -435,9 +548,10 @@ public partial class MainWindow : Window
         {
             if (NotifyBox.Text.Length > 0) PushNotify();
         }));
-        NotifyGap.Width = new GridLength(12);
+        NotifyGap.Width = new GridLength(8);
         NotifyCol.Width = new GridLength(0.85, GridUnitType.Star);
         NotifyPanel.Visibility = Visibility.Visible;
+        PanelSplit.Visibility = Visibility.Visible;
         NotifyTo.Text = $"→ {name}";
         NotifyBox.Text = "";
         // No focus is forced here: the admin keeps writing to their document until they click the
@@ -454,6 +568,7 @@ public partial class MainWindow : Window
         foreach (var m in _members) m.Current = false;
         _notify.Close();
         NotifyPanel.Visibility = Visibility.Collapsed;
+        PanelSplit.Visibility = Visibility.Collapsed;
         NotifyGap.Width = new GridLength(0);
         NotifyCol.Width = new GridLength(0);
         if (_signedIn) Keyboard.ClearFocus();
@@ -983,6 +1098,7 @@ public partial class MainWindow : Window
     private void BeatNow()
     {
         if (!_signedIn) return;
+        if (_dock?.Docked == true) _dock.Reposition();   // keep the embedded browser filling its panel, snapping it back if dragged
         var now = Environment.TickCount64;
         if (now >= _nextList && !_listing)
         {
