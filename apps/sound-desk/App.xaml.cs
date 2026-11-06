@@ -212,9 +212,11 @@ public partial class App : Application
 
     private void StartUpdater()
     {
-        // The updater stays off: it would run any downloaded program, unsigned (KIASA-010).
-        // Updates are installed by hand until releases are signed and checked.
-        if (Environment.GetEnvironmentVariable("KIASA_SOUND_DESK_UPDATER") != "unsafe-dev-only") return;
+        // Auto-update is on. It is safe because the updater applies a build only when the signed-in
+        // server names its SHA-256 and the download matches (see Updater.Check): it cannot run an
+        // arbitrary downloaded program (KIASA-010). Set KIASA_SOUND_DESK_UPDATER=off to disable,
+        // e.g. for a managed install that is updated by hand.
+        if (Environment.GetEnvironmentVariable("KIASA_SOUND_DESK_UPDATER") == "off") return;
         _updater = new Updater(_account);
         _updater.UpdateReady += () => Dispatcher.BeginInvoke(() =>
         {

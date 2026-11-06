@@ -55,6 +55,7 @@ internal sealed class Updater : IDisposable
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
             var versionStr = body.TryGetProperty("version", out var v) ? v.GetString() ?? "" : "";
             var url = body.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
+            var sha256 = body.TryGetProperty("sha256", out var s) ? s.GetString() ?? "" : "";
 
             if (!Version.TryParse(versionStr, out var remote) || remote <= CurrentVersion)
             {
@@ -65,6 +66,15 @@ internal sealed class Updater : IDisposable
             if (string.IsNullOrEmpty(url))
             {
                 Log.Write("Updater: newer version available but no download URL");
+                return;
+            }
+
+            // A build is applied only when the server names its SHA-256 and the download matches it.
+            // Without that check the updater would run any program the URL served; with it, it runs
+            // only the exact build the signed-in server vouches for (KIASA-010).
+            if (string.IsNullOrWhiteSpace(sha256))
+            {
+                Log.Write("Updater: newer version offered without a checksum; refusing (KIASA-010)");
                 return;
             }
 
@@ -87,6 +97,17 @@ internal sealed class Updater : IDisposable
                     File.Delete(tempPath);
                     return;
                 }
+            }
+
+            string actual;
+            using (var hash = System.Security.Cryptography.SHA256.Create())
+            await using (var fs = File.OpenRead(tempPath))
+                actual = Convert.ToHexString(await hash.ComputeHashAsync(fs)).ToLowerInvariant();
+            if (!string.Equals(actual, sha256.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Write($"Updater: checksum mismatch (expected {sha256}, got {actual}); discarding");
+                File.Delete(tempPath);
+                return;
             }
 
             File.Move(tempPath, UpdateExe, true);

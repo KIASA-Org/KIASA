@@ -9,7 +9,7 @@
     <RootNamespace>SoundDesk</RootNamespace>
     <AssemblyName>KiasaSoundDesk</AssemblyName>
     <Product>KIASA Sound Desk</Product>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <ApplicationIcon>assets\kiasa.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
