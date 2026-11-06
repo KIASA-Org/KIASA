@@ -17,7 +17,7 @@ export type SupportState = "connecting" | "live" | "degraded" | "reconnecting" |
 export type MemberSays = { screen: "live" | "paused" | "lost" | "off"; system: boolean; mic: boolean; mode?: string; detail?: string; fps?: number; kbps?: number; width?: number; height?: number };
 export type Figures = {
   route: string; local: string; remote: string; protocol: string; rtt: number | null;
-  videoKbps: number; audioKbps: number; fps: number; width: number; height: number;
+  videoKbps: number; audioKbps: number; fps: number | null; width: number | null; height: number | null;
   videoLoss: number; audioLoss: number; jitter: number | null; framesDecoded: number; freezes: number;
 };
 type Message = {
@@ -49,7 +49,7 @@ export class SupportReceiver {
   private everLive = false;
   private says: MemberSays | null = null;
   private mic: MediaStreamTrack | null = null;
-  private last = new Map<string, { bytes: number; at: number; lost: number; got: number }>();
+  private last = new Map<string, { bytes: number; at: number; lost: number; got: number; frames: number; freezes: number }>();
   private poor = 0;
   private good = 0;
   private degraded = false;
@@ -246,28 +246,37 @@ export class SupportReceiver {
       local: String(local?.candidateType ?? "-"), remote: String(remote?.candidateType ?? "-"),
       protocol: String(local?.relayProtocol ?? local?.protocol ?? "-"),
       rtt: typeof pair?.currentRoundTripTime === "number" ? Math.round(pair.currentRoundTripTime * 1000) : null,
-      videoKbps: 0, audioKbps: 0, fps: 0, width: 0, height: 0, videoLoss: 0, audioLoss: 0, jitter: null, framesDecoded: 0, freezes: 0,
+      videoKbps: 0, audioKbps: 0, fps: null, width: null, height: null, videoLoss: 0, audioLoss: 0, jitter: null, framesDecoded: 0, freezes: 0,
     };
     const now = Date.now();
+    let newFreezes = 0;         // real decode freezes in this interval (not a still desktop)
+    let framesAdvanced = 0;     // frames actually decoded in this interval
     for (const stat of all.values()) {
       if (stat.type !== "inbound-rtp") continue;
       const kind = stat.kind as string;
       const bytes = Number(stat.bytesReceived ?? 0), lost = Number(stat.packetsLost ?? 0), got = Number(stat.packetsReceived ?? 0);
+      const frames = Number(stat.framesDecoded ?? 0), freezes = Number(stat.freezeCount ?? 0);
       const before = this.last.get(kind);
-      this.last.set(kind, { bytes, at: now, lost, got });
+      this.last.set(kind, { bytes, at: now, lost, got, frames, freezes });
       const kbps = before ? Math.round(((bytes - before.bytes) * 8) / Math.max(1, now - before.at)) : 0;
       const loss = before ? Math.max(0, lost - before.lost) / Math.max(1, (lost - before.lost) + (got - before.got)) : 0;
       if (kind === "video") {
-        Object.assign(figures, { videoKbps: kbps, videoLoss: loss, fps: Math.round(Number(stat.framesPerSecond ?? 0)), width: Number(stat.frameWidth ?? 0),
-          height: Number(stat.frameHeight ?? 0), framesDecoded: Number(stat.framesDecoded ?? 0), freezes: Number(stat.freezeCount ?? 0) });
+        if (before) { newFreezes = Math.max(0, freezes - before.freezes); framesAdvanced = Math.max(0, frames - before.frames); }
+        const fpsStat = stat.framesPerSecond;
+        Object.assign(figures, { videoKbps: kbps, videoLoss: loss,
+          fps: typeof fpsStat === "number" ? Math.round(fpsStat) : null,
+          width: Number(stat.frameWidth ?? 0) || null, height: Number(stat.frameHeight ?? 0) || null,
+          framesDecoded: frames, freezes });
       } else {
         Object.assign(figures, { audioKbps: kbps, audioLoss: loss, jitter: typeof stat.jitter === "number" ? Math.round(stat.jitter * 1000) : null });
       }
     }
     this.on.figures(figures);
-    // Poor: much lost, or the picture nearly still while the member is sharing it.
-    const screenOn = this.says?.screen === "live";
-    const poor = pc.connectionState === "connected" && (figures.audioLoss > 0.08 || figures.videoLoss > 0.1 || (screenOn && figures.fps < 2 && figures.framesDecoded > 0));
+    // Poor means the LINE is struggling, not that the desktop is still. A static screen legitimately
+    // decodes few frames, so low fps is never on its own a fault. Judge by real loss, and by genuine
+    // decode freezes that happen while the picture is actually moving (frames advanced but it stalled).
+    const poor = pc.connectionState === "connected"
+      && (figures.audioLoss > 0.08 || figures.videoLoss > 0.1 || (newFreezes > 0 && framesAdvanced > 0));
     if (poor) { this.poor += 1; this.good = 0; } else { this.good += 1; this.poor = 0; }
     if (!this.degraded && this.poor >= 2) this.degraded = true;
     if (this.degraded && this.good >= 5) this.degraded = false;

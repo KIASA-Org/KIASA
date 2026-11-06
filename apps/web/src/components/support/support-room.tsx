@@ -119,9 +119,9 @@ export function SupportRoom({ session, member, realtime }: { session: string; me
     {details && figures && <dl className="support-details" data-support-details="">
       <dt>Route</dt><dd data-route={figures.route}>{figures.route} ({figures.local} → {figures.remote}, {figures.protocol})</dd>
       <dt>Round trip</dt><dd>{figures.rtt ?? "-"} ms</dd>
-      <dt>Picture</dt><dd>{figures.width}×{figures.height}, {figures.fps} fps, {figures.videoKbps} kbit/s, {Math.round(figures.videoLoss * 100)}% lost, {figures.freezes} freezes</dd>
-      <dt>Sound</dt><dd>{figures.audioKbps} kbit/s, {Math.round(figures.audioLoss * 100)}% lost, jitter {figures.jitter ?? "-"} ms</dd>
-      {says?.kbps ? <><dt>Sender</dt><dd>{says.width}×{says.height} at {says.fps} fps, aiming at {says.kbps} kbit/s</dd></> : null}
+      <dt>Picture</dt><dd>{figures.width ?? "—"}×{figures.height ?? "—"}, {figures.fps ?? "—"} fps, {figures.videoKbps} kbit/s, {Math.round(figures.videoLoss * 100)}% lost, {figures.freezes} freezes</dd>
+      <dt>Sound</dt><dd>{figures.audioKbps} kbit/s, {Math.round(figures.audioLoss * 100)}% lost, jitter {figures.jitter ?? "—"} ms</dd>
+      {says?.kbps ? <><dt>Sender</dt><dd>{says.width ? `${says.width}×${says.height} ` : ""}at {says.fps} fps, aiming at {says.kbps} kbit/s</dd></> : null}
     </dl>}
   </div>;
 }
