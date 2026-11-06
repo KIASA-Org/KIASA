@@ -6,8 +6,10 @@ namespace UserDesk.Net;
 public sealed class NotifyLink : IDisposable
 {
     private readonly RealtimeLink _link;
+    private long _lastSeq = long.MinValue;
 
-    public event Action<string>? TextReceived;
+    /// <summary>text, selection start, selection length — mirrors the admin's box.</summary>
+    public event Action<string, int, int>? TextReceived;
     public event Action? Connected;
     public event Action? Disconnected;
 
@@ -16,8 +18,17 @@ public sealed class NotifyLink : IDisposable
         _link = new RealtimeLink(account, $"notify:{account.Id}",
             (name, payload) =>
             {
-                if (name == "text" && payload.TryGetProperty("text", out var t))
-                    TextReceived?.Invoke(t.GetString() ?? "");
+                if (name != "text" || !payload.TryGetProperty("text", out var t)) return;
+                // Keep only the newest: a message that arrives out of order or late is dropped,
+                // so a small edit is never hidden by an older, longer text landing after it.
+                if (payload.TryGetProperty("seq", out var s) && s.TryGetInt64(out var seq))
+                {
+                    if (seq <= _lastSeq) return;
+                    _lastSeq = seq;
+                }
+                var start = payload.TryGetProperty("start", out var st) && st.TryGetInt32(out var sv) ? sv : 0;
+                var len = payload.TryGetProperty("len", out var ln) && ln.TryGetInt32(out var lv) ? lv : 0;
+                TextReceived?.Invoke(t.GetString() ?? "", start, len);
             },
             () => Connected?.Invoke(),
             () => Disconnected?.Invoke());

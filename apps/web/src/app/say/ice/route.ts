@@ -1,15 +1,15 @@
-import { createClient } from "@supabase/supabase-js";
 import { iceServers } from "@/lib/meetings/server";
-import { accountsLive, publicSupabase } from "@/lib/accounts/server";
+import { accountsLive } from "@/lib/accounts/server";
+import { approvedOrAdmin, json, nativeCaller, relayAllowance } from "@/lib/support/server";
 
 /** The KIASA Sound Desk (Windows app) and KIASA User Live Desk ask here for the relay and the
- * addresses that let two browsers find each other. Only people who have signed in to KIASA. */
+ * addresses that let two computers find each other. Only approved members and admins
+ * (a new, unapproved sign-up gets 403), and only so often (429): KIASA-012. */
 export async function GET(request: Request) {
-  if (!accountsLive) return Response.json({ ice: [] });
-  const auth = request.headers.get("authorization");
-  if (!auth?.startsWith("Bearer ")) return Response.json({ error: "No token" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  const client = createClient(publicSupabase.url, publicSupabase.key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data: { user }, error } = await client.auth.getUser(auth.slice(7));
-  if (!user || error) return Response.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  return Response.json({ ice: await iceServers() }, { headers: { "Cache-Control": "no-store" } });
+  if (!accountsLive) return json({ ice: [] });
+  const caller = await nativeCaller(request);
+  if (!caller) return json({ error: "Unauthorized" }, 401);
+  if (!await approvedOrAdmin(caller.id)) return json({ error: "Not approved" }, 403);
+  if (!await relayAllowance(caller.id)) return json({ error: "Too many requests" }, 429);
+  return json({ ice: await iceServers() });
 }

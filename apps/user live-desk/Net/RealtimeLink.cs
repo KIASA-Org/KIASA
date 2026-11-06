@@ -37,6 +37,12 @@ public sealed class RealtimeLink
 
     public bool Joined => _isJoined;
 
+    public void Send(string name, object payload)
+    {
+        if (!_isJoined) return;
+        _ = Write(_socket, new { topic = _topic, @event = "broadcast", payload = new { type = "broadcast", @event = name, payload }, @ref = NextRef(), join_ref = _joinRef });
+    }
+
     public void Open()
     {
         Close();
@@ -73,6 +79,7 @@ public sealed class RealtimeLink
     private async Task Run(CancellationToken cancel)
     {
         var tries = 0;
+        var refusals = 0;
         while (!cancel.IsCancellationRequested)
         {
             using var socket = new ClientWebSocket();
@@ -116,13 +123,20 @@ public sealed class RealtimeLink
             if (cancel.IsCancellationRequested) return;
             _isJoined = false;
             _lost();
-            try { await Task.Delay(tries < Backoff.Length ? Backoff[tries] : 5_000, cancel); }
+            // Refused by the server (not allowed on this channel) is not a network fault: asking again
+            // every few seconds only opens connection after connection, in the way of the ones that work.
+            var refused = _refused;
+            _refused = false;
+            refusals = refused ? refusals + 1 : wasJoined ? 0 : refusals;
+            var wait = refused ? Math.Min(120_000, 30_000 * refusals) : tries < Backoff.Length ? Backoff[tries] : 5_000;
+            try { await Task.Delay(wait, cancel); }
             catch (OperationCanceledException) { return; }
             tries += 1;
         }
     }
 
     private string? _beatRef;
+    private volatile bool _refused;
 
     private async Task Beat(ClientWebSocket socket, CancellationToken stop)
     {
@@ -162,7 +176,7 @@ public sealed class RealtimeLink
                     if (replyTo == _beatRef) _beatRef = null;
                     if (replyTo != joinRef) break;
                     var status = root.GetProperty("payload").GetProperty("status").GetString();
-                    if (status != "ok") return false;
+                    if (status != "ok") { _refused = true; return false; }
                     joined = true;
                     _isJoined = true;
                     _joined();

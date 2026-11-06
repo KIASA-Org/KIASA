@@ -11,13 +11,13 @@ type Ice = MeetStart["ice"];
  * meeting opens (for four hours, and only to those invited), so a call gets through on any network. Nothing, if it is not
  * set or does not answer within three seconds: calls then go straight between
  * browsers, as before. */
-async function cloudflareRelay(): Promise<Ice> {
+async function cloudflareRelay(ttl = 14_400): Promise<Ice> {
   const key = process.env.CLOUDFLARE_TURN_KEY_ID, token = process.env.CLOUDFLARE_TURN_API_TOKEN;
   if (!key || !token) return [];
   try {
     const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(key)}/credentials/generate-ice-servers`, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ ttl: 14_400 }), cache: "no-store", signal: AbortSignal.timeout(3000),
+      body: JSON.stringify({ ttl }), cache: "no-store", signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) { console.error("Cloudflare relay:", response.status); return []; }
     const { iceServers } = await response.json() as { iceServers?: Ice | Ice[number] };
@@ -33,11 +33,11 @@ async function cloudflareRelay(): Promise<Ice> {
 // Where browsers learn their own address on the internet; and a relay (TURN),
 // for networks that let no call through directly: Cloudflare's (above), or one
 // set by hand (MEETING_TURN_URLS, comma-separated, with its username and credential).
-export async function iceServers(): Promise<Ice> {
+export async function iceServers(ttl?: number): Promise<Ice> {
   const servers: Ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
   const turn = (process.env.MEETING_TURN_URLS ?? "").split(",").map(url => url.trim()).filter(Boolean);
   if (turn.length) servers.push({ urls: turn, username: process.env.MEETING_TURN_USERNAME, credential: process.env.MEETING_TURN_CREDENTIAL });
-  return [...servers, ...await cloudflareRelay()];
+  return [...servers, ...await cloudflareRelay(ttl)];
 }
 
 /** A meeting, as the person signed in may see it (the database's rules: one

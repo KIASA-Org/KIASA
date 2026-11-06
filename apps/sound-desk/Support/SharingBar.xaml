@@ -1,0 +1,29 @@
+<Window x:Class="SoundDesk.Support.SharingBar"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KIASA — You are sharing" SizeToContent="WidthAndHeight" WindowStyle="None" ResizeMode="NoResize"
+        Topmost="True" ShowInTaskbar="True" AllowsTransparency="True" Background="Transparent"
+        FontFamily="{StaticResource Sans}" FontSize="13.5" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display" Icon="/assets/kiasa.ico">
+  <Border x:Name="Frame" CornerRadius="14" Padding="14,9" Background="#F20A1410" BorderThickness="2" BorderBrush="#E5484D" MouseLeftButtonDown="Drag">
+    <StackPanel>
+      <StackPanel Orientation="Horizontal">
+        <Ellipse x:Name="Dot" Width="12" Height="12" Fill="#E5484D" VerticalAlignment="Center"/>
+        <TextBlock x:Name="Who" AutomationProperties.AutomationId="SharingWho" Margin="9,0,0,0" FontWeight="SemiBold" Foreground="{StaticResource Ink}" VerticalAlignment="Center"/>
+        <TextBlock x:Name="StateText" AutomationProperties.AutomationId="SharingState" Margin="12,0,0,0" Foreground="{StaticResource InkSoft}" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+        <Button x:Name="ScreenButton" AutomationProperties.AutomationId="PauseScreen" Padding="10,5" Click="Screen_Click"
+                      ToolTip="Pausing the screen stops the picture only. Sound stays as it is."/>
+        <Button x:Name="SystemButton" AutomationProperties.AutomationId="SystemSound" Padding="10,5" Margin="6,0,0,0" Click="System_Click"
+                      ToolTip="All sound your computer plays (not KIASA itself)."/>
+        <Button x:Name="MicButton" AutomationProperties.AutomationId="Microphone" Padding="10,5" Margin="6,0,0,0" Click="Mic_Click"/>
+        <Button x:Name="StopButton" AutomationProperties.AutomationId="StopAll" Content="Stop all" Padding="14,5" Margin="10,0,0,0" FontWeight="SemiBold"
+                Background="#E5484D" Foreground="White" BorderThickness="0" Click="Stop_Click"
+                ToolTip="Stops the screen and every sound at once, and ends the session."/>
+      </StackPanel>
+      <TextBlock x:Name="ProblemText" AutomationProperties.AutomationId="SharingProblem" Margin="0,7,0,0" MaxWidth="560" TextWrapping="Wrap"
+                 Foreground="{StaticResource Warn}" Visibility="Collapsed"/>
+    </StackPanel>
+  </Border>
+</Window>

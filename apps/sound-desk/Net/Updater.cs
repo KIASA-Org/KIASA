@@ -108,7 +108,6 @@ internal sealed class Updater : IDisposable
         if (currentExe == null) return;
 
         Log.Write("Updater: applying");
-        if (wasSharing) try { File.WriteAllText(SharingFlag, ""); } catch { }
 
         var pid = Environment.ProcessId;
         var cmd = Path.Combine(DataFolder, "update.cmd");
@@ -134,18 +133,17 @@ internal sealed class Updater : IDisposable
         Log.Write("Updater: script launched");
     }
 
-    internal static bool WasSharing()
+    /// <summary>An old "was sharing" flag (from 1.0.0) is deleted and never honoured (KIASA-009).</summary>
+    internal static void ForgetSharingFlag()
     {
-        if (!File.Exists(SharingFlag)) return false;
-        try { File.Delete(SharingFlag); } catch { }
-        return true;
+        try { if (File.Exists(SharingFlag)) File.Delete(SharingFlag); } catch { }
     }
 
     internal static void Cleanup()
     {
         var exe = Environment.ProcessPath;
         if (exe != null)
-            foreach (var old in Directory.GetFiles(Path.GetDirectoryName(exe)!, "*.old"))
+            foreach (var old in Directory.GetFiles(Path.GetDirectoryName(exe)!, "KIASA Sound Desk.exe.old"))
                 try { File.Delete(old); } catch { }
         try { if (Directory.Exists(UpdateFolder)) Directory.Delete(UpdateFolder, true); } catch { }
         try { var cmd = Path.Combine(DataFolder, "update.cmd"); if (File.Exists(cmd)) File.Delete(cmd); } catch { }

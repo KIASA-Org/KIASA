@@ -16,6 +16,7 @@ import "@/styles/site-pages.css";
 import "@/styles/site-blocks.css";
 import "@/styles/site-account.css";
 import "@/styles/chat.css";
+import "@/styles/support.css";
 import "@/styles/jobs.css";
 import "@/styles/meet.css";
 import "@/styles/site-loading.css";

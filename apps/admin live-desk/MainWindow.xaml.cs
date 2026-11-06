@@ -49,14 +49,20 @@ public sealed class Person : INotifyPropertyChanged
 public sealed class MemberItem : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
-    private bool _current;
+    private bool _current, _online;
     public required string Id { get; init; }
     public required string Name { get; init; }
     public bool Current
     {
         get => _current;
-        set { if (_current != value) { _current = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Current))); } }
+        set { if (_current != value) { _current = value; Raise(nameof(Current)); } }
     }
+    public bool Online
+    {
+        get => _online;
+        set { if (_online != value) { _online = value; Raise(nameof(Online)); } }
+    }
+    private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 /// <summary>The admin's Live scripts as a small Windows app: the same list and cards as the site,
@@ -69,6 +75,8 @@ public partial class MainWindow : Window
     private const int HotkeyId = 1;
     private const long ListEveryMs = 3_000;
     private const long FlashMs = 1_800;
+    private const long OnlineExpiryMs = 18_000;
+    private const long PruneEveryMs = 2_000;
 
     private readonly Account _account = new();
     private readonly CaretTracker _caret = new();
@@ -93,10 +101,17 @@ public partial class MainWindow : Window
     private bool _listed;
     private long _nextList;
     private bool _listing;
+    private readonly List<MemberItem> _allMembers = [];
     private readonly ObservableCollection<MemberItem> _members = [];
     private readonly NotifyLink _notify;
     private string? _notifyTarget;
-    private bool _notifyMode;
+    private long _notifySeq;
+    private readonly DispatcherTimer _notifyTimer = new(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(50) };
+    private long _lastNotifyAt;
+    private bool _notifyDirty;
+    private RealtimeLink? _presence;
+    private readonly Dictionary<string, (string Name, long Seen)> _online = [];
+    private long _nextPrune;
     private string _text = "";
     private int _start;
     private List<Sentence> _sentences = [];
@@ -129,6 +144,7 @@ public partial class MainWindow : Window
         };
         _account.Ended += () => Dispatcher.BeginInvoke(() => ShowSignIn("Your sign-in has ended. Please sign in again."));
         _beat.Tick += (_, _) => Beat();
+        _notifyTimer.Tick += (_, _) => NotifyTick();
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -158,17 +174,27 @@ public partial class MainWindow : Window
             if (args.VerticalChange != 0 && args.ExtentHeightChange == 0) _atBottom = _scroll.VerticalOffset + _scroll.ViewportHeight >= _scroll.ExtentHeight - 48;
         };
         _beat.Start();
+        if (Timing.On) { Timing.Line($"loaded mayBeSignedIn={_account.MayBeSignedIn}"); WatchForStalls(); }
 #if DESK_TEST
         TestPipe.Start(this);
 #endif
-        if (_account.MayBeSignedIn && await _account.Token() != null) EnterDesk();
-        else ShowSignIn(null);
+        // On a poor line the first request can fail though the sign-in is still good: it is tried a few
+        // times before the person is asked to sign in again.
+        for (var attempt = 0; attempt < 4 && _account.MayBeSignedIn; attempt++)
+        {
+            if (await _account.Token() != null) { EnterDesk(); return; }
+            if (Timing.On) Timing.Line($"token attempt {attempt + 1} failed");
+            await Task.Delay(1_500);
+        }
+        ShowSignIn(_account.MayBeSignedIn ? "KIASA could not be reached just now. Check your connection, then sign in again." : null);
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
         if (_hasHotkey) Native.UnregisterHotKey(_handle, HotkeyId);
         _run?.Dispose();
+        _local?.Stop();
+        _presence?.Close();
         _notify.Dispose();
         _typer.Dispose();
         _caret.Dispose();
@@ -178,8 +204,10 @@ public partial class MainWindow : Window
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message == Native.WM_MOUSEACTIVATE && _signedIn && !_notifyMode)
+        if (message == Native.WM_MOUSEACTIVATE && _signedIn)
         {
+            // A click never activates the window on its own, so the keyboard stays in the document.
+            // Clicking the message box brings the window forward explicitly (NotifyBox_Down).
             handled = true;
             return Native.MA_NOACTIVATE;
         }
@@ -191,12 +219,88 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
+    /// <summary>Clicking a typing field (the message box, the member search) is what brings the window
+    /// forward and takes the keyboard. Every other click leaves focus in the document being written to.
+    /// The field the click lands on then takes focus by itself.</summary>
+    private void Field_Down(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsActive) Activate();
+    }
+
+    // While the message box has the keyboard, the live script (cards, sentence-follow, word by word)
+    // goes straight into it — inserted directly, not through the document writer's clipboard path,
+    // so it keeps up in real time.
+    private bool _boxFocused;
+    private bool IntoBox => _notifyTarget != null && _boxFocused;
+
+    private void NotifyBox_GotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _boxFocused = true;
+        _typer.Words = null;   // the box drives word by word itself
+        _words.Freeze();
+    }
+
+    private void NotifyBox_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _boxFocused = false;
+        _typer.Words = _words; // back to the document writer
+        _words.Freeze();
+    }
+
+    /// <summary>Puts a piece of script where it should go: straight into the message box when it is
+    /// focused, otherwise into the document under the cursor through the typer.</summary>
+    private void Out(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        if (IntoBox) InsertInBox(text.Trim() + " ");
+        else _typer.Write(text);
+    }
+
+    private void InsertInBox(string text)
+    {
+        var at = Math.Clamp(NotifyBox.CaretIndex, 0, NotifyBox.Text.Length);
+        NotifyBox.Text = NotifyBox.Text.Insert(at, text);
+        NotifyBox.CaretIndex = at + text.Length;
+    }
+
+    /// <summary>Signals new word-by-word work: the box pulls it itself; the document goes through the typer.</summary>
+    private void Nudge()
+    {
+        if (IntoBox) PumpBoxWords();
+        else _typer.Nudge();
+    }
+
+    /// <summary>Word by word into the message box: applies each change the writer plans, directly.</summary>
+    private void PumpBoxWords()
+    {
+        if (!IntoBox || !_words.On) return;
+        var now = Environment.TickCount64;
+        for (var guard = 0; guard < 400 && _words.HasWork(now); guard++)
+        {
+            var edit = _words.Next(" ", now);
+            if (edit == null) break;
+            var at = Math.Clamp(NotifyBox.CaretIndex, 0, NotifyBox.Text.Length);
+            var del = Math.Min(edit.Delete, at);
+            var text = NotifyBox.Text;
+            if (del > 0) { text = text.Remove(at - del, del); at -= del; }
+            text = text.Insert(at, edit.Insert);
+            NotifyBox.Text = text;
+            NotifyBox.CaretIndex = at + edit.Insert.Length;
+            _words.Applied(edit);
+        }
+    }
+
     // ── Signing in ──────────────────────────────────────────────────────────────────────────────
 
     private void ShowSignIn(string? said)
     {
         _signedIn = false;
         CloseNotify();
+        _presence?.Close();
+        _presence = null;
+        _online.Clear();
+        _allMembers.Clear();
+        _members.Clear();
         Close_Reading();
         Native.SetWindowLong(_handle, Native.GWL_EXSTYLE, Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) & ~Native.WS_EX_NOACTIVATE);
         DeskView.Visibility = Visibility.Collapsed;
@@ -212,15 +316,30 @@ public partial class MainWindow : Window
     private void EnterDesk()
     {
         _signedIn = true;
-        // From here on, clicking this window leaves the keyboard where it is.
-        Native.SetWindowLong(_handle, Native.GWL_EXSTYLE, Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) | Native.WS_EX_NOACTIVATE);
+        // Clicking a card leaves the keyboard in the document; only clicking the message box takes
+        // it (decided in WindowMessage), so the two can be used together.
         Keyboard.ClearFocus();
         PasswordInput.Clear();
         SignInView.Visibility = Visibility.Collapsed;
         DeskView.Visibility = Visibility.Visible;
         WhoAmI.Text = _account.Name;
         _nextList = 0;
+        if (Timing.On) Timing.Line("entered desk");
         _ = LoadMembers();
+        StartPresence();
+    }
+
+    /// <summary>Listens on the shared desk channel so each member can be marked online when they have
+    /// their user desk open.</summary>
+    private void StartPresence()
+    {
+        _online.Clear();
+        _presence?.Close();
+        _presence = new RealtimeLink(_account, "desk",
+            (name, payload) => { if (name == "here") { var p = payload; Dispatcher.BeginInvoke(() => Heard(p)); } },
+            () => { },
+            () => { });
+        _presence.Open();
     }
 
     private void Field_KeyDown(object sender, KeyEventArgs e)
@@ -252,18 +371,53 @@ public partial class MainWindow : Window
 
     // ── Notify ──────────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>All approved members, shown in the list and searched.</summary>
     private async Task LoadMembers()
     {
         var rows = await _account.Read("profiles?select=id,name&status=eq.approved&order=name");
         if (rows is not { ValueKind: JsonValueKind.Array } list || !_signedIn) return;
-        _members.Clear();
+        _allMembers.Clear();
         foreach (var row in list.EnumerateArray())
         {
-            var id = row.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
-            var name = row.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "Member" : "Member";
-            if (id.Length == 0) continue;
-            _members.Add(new MemberItem { Id = id, Name = name });
+            var id = row.TryGetProperty("id", out var ip) ? ip.GetString() ?? "" : "";
+            var name = row.TryGetProperty("name", out var np) ? np.GetString() ?? "A KIASA member" : "A KIASA member";
+            if (id.Length == 0 || id == _account.Id) continue;
+            _allMembers.Add(new MemberItem { Id = id, Name = name, Online = _online.ContainsKey(id) });
         }
+        ApplyMemberFilter();
+    }
+
+    private void MemberSearch_Changed(object sender, TextChangedEventArgs e)
+    {
+        SearchHint.Visibility = MemberSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ApplyMemberFilter();
+    }
+
+    /// <summary>Shows the members whose name matches the search box, in name order.</summary>
+    private void ApplyMemberFilter()
+    {
+        var q = MemberSearch.Text.Trim();
+        _members.Clear();
+        foreach (var m in _allMembers)
+            if (q.Length == 0 || m.Name.Contains(q, StringComparison.OrdinalIgnoreCase)) _members.Add(m);
+    }
+
+    private void Heard(JsonElement payload)
+    {
+        if (!_signedIn) return;
+        var id = payload.TryGetProperty("id", out var i) ? i.GetString() : null;
+        if (id == null || id == _account.Id) return;
+        _online[id] = ("", Environment.TickCount64);
+        UpdateOnline();
+    }
+
+    /// <summary>Marks each member online or not, by who has been heard from in the last few seconds.</summary>
+    private void UpdateOnline()
+    {
+        var now = Environment.TickCount64;
+        foreach (var id in _online.Where(kv => now - kv.Value.Seen >= OnlineExpiryMs).Select(kv => kv.Key).ToList())
+            _online.Remove(id);
+        foreach (var m in _allMembers) m.Online = _online.ContainsKey(m.Id);
     }
 
     private void Member_Click(object sender, RoutedEventArgs e)
@@ -279,39 +433,61 @@ public partial class MainWindow : Window
         foreach (var m in _members) m.Current = m.Id == userId;
         _notify.Open(userId, () => Dispatcher.BeginInvoke(() =>
         {
-            if (NotifyBox.Text.Length > 0) _notify.Send(NotifyBox.Text);
+            if (NotifyBox.Text.Length > 0) PushNotify();
         }));
+        NotifyGap.Width = new GridLength(12);
+        NotifyCol.Width = new GridLength(0.85, GridUnitType.Star);
         NotifyPanel.Visibility = Visibility.Visible;
         NotifyTo.Text = $"→ {name}";
         NotifyBox.Text = "";
-        // Allow activation so the text box can receive keyboard input.
-        _notifyMode = true;
-        Native.SetWindowLong(_handle, Native.GWL_EXSTYLE,
-            Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) & ~Native.WS_EX_NOACTIVATE);
-        Activate();
-        NotifyBox.Focus();
+        // No focus is forced here: the admin keeps writing to their document until they click the
+        // message box, and clicking it there is what takes the keyboard (see WindowMessage).
     }
 
     private void CloseNotify(bool clear = true)
     {
         if (_notifyTarget == null) return;
-        if (clear && NotifyBox.Text.Length > 0) _notify.Send("");
+        _notifyTimer.Stop();
+        _notifyDirty = false;
+        if (clear && NotifyBox.Text.Length > 0) SendNotify("", 0, 0);
         _notifyTarget = null;
         foreach (var m in _members) m.Current = false;
         _notify.Close();
         NotifyPanel.Visibility = Visibility.Collapsed;
-        _notifyMode = false;
-        if (_signedIn)
-        {
-            Native.SetWindowLong(_handle, Native.GWL_EXSTYLE,
-                Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) | Native.WS_EX_NOACTIVATE);
-            Keyboard.ClearFocus();
-        }
+        NotifyGap.Width = new GridLength(0);
+        NotifyCol.Width = new GridLength(0);
+        if (_signedIn) Keyboard.ClearFocus();
     }
 
-    private void NotifyBox_Changed(object sender, TextChangedEventArgs e)
+    private void NotifyBox_Changed(object sender, TextChangedEventArgs e) => PushNotify();
+    private void NotifyBox_SelChanged(object sender, RoutedEventArgs e) => PushNotify();
+
+    /// <summary>Typing and selecting fire many times a second; this keeps the stream to a steady
+    /// cadence (the newest state, at most every 50 ms) so the channel never backs up. The first
+    /// change goes at once, and a trailing one is sent on the timer.</summary>
+    private void PushNotify()
     {
-        _notify.Send(NotifyBox.Text);
+        if (Environment.TickCount64 - _lastNotifyAt >= 50) SendNotifyNow();
+        else { _notifyDirty = true; if (!_notifyTimer.IsEnabled) _notifyTimer.Start(); }
+    }
+
+    private void NotifyTick()
+    {
+        if (_notifyDirty) SendNotifyNow();
+        else _notifyTimer.Stop();
+    }
+
+    private void SendNotifyNow() => SendNotify(NotifyBox.Text, NotifyBox.SelectionStart, NotifyBox.SelectionLength);
+
+    /// <summary>Sends the text and the admin's selection with a strictly rising sequence number
+    /// (roughly wall-clock, so it keeps rising even across an app restart), so the user always
+    /// mirrors the newest state and drops any message that arrives late or out of order.</summary>
+    private void SendNotify(string text, int start, int len)
+    {
+        _lastNotifyAt = Environment.TickCount64;
+        _notifyDirty = false;
+        _notifySeq = Math.Max(_notifySeq + 1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        _notify.Send(text, start, len, _notifySeq);
     }
 
     // ── Who is live ─────────────────────────────────────────────────────────────────────────────
@@ -341,6 +517,8 @@ public partial class MainWindow : Window
                 _people.Add(new Person { Id = row.Id, Name = NameOf(row.Id), Since = "since " + row.Started.ToLocalTime().ToString("h:mm tt"), Current = row.Id == _open });
             }
             LiveCount.Text = $"Live now ({_people.Count})";
+            // Only while tracing: the first live script opens by itself, so times can be taken unattended.
+            if (Timing.On && _open == null && _people.Count > 0) OpenScript(_people[0].Id);
             NoOne.Visibility = _people.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         finally
@@ -354,7 +532,9 @@ public partial class MainWindow : Window
 
     private void Person_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is Person person) OpenScript(person.Id);
+        if ((sender as FrameworkElement)?.DataContext is not Person person) return;
+        OpenScript(person.Id);
+        EnterNotify(person.Id, person.Name);
     }
 
     private void OpenScript(string id)
@@ -367,13 +547,87 @@ public partial class MainWindow : Window
         foreach (var person in _people) person.Current = person.Id == id;
         var run = ++_runId;
         _run = new ScriptRun(_account, id,
-            (text, start, older) => Dispatcher.BeginInvoke(() => { if (run == _runId) GotText(text, start, older); }),
+            (text, start, older) =>
+            {
+                var at = Environment.TickCount64;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (run != _runId) return;
+                    if (Timing.On) Timing.Line($"net text len={start + text.Length} local={_localLive}");
+                    // The same words are already here, sooner, from this computer.
+                    if (_localLive) return;
+                    if (_wasLocal)
+                    {
+                        // Back to the words from the server, which may start later in the script:
+                        // the cards picked by their place in the list no longer mean the same ones.
+                        _wasLocal = false;
+                        if (start > 0) _picked = [];
+                    }
+                    var waited = Environment.TickCount64 - at;
+                    var began = Environment.TickCount64;
+                    GotText(text, start, older);
+                    if (Timing.On) Timing.Line($"ui gotText waited={waited} took={Environment.TickCount64 - began} len={text.Length} sentences={_sentences.Count}");
+                });
+            },
             state => Dispatcher.BeginInvoke(() => { if (run == _runId) _reading = state; }));
         Refresh();
     }
 
+    // ── The admin's own script, read on this computer ───────────────────────────────────────────
+    //
+    // An admin reading their own script (captured on this same computer) gets the words straight
+    // from KIASA Live Script, instead of waiting for them to go to the server and come back. The
+    // connection to the server stays open all the while: it says whether the admin's page is still
+    // there, and it takes over if the capture app cannot be reached.
+
+    private LocalScript? _local;
+    private bool _localLive;      // words are coming from this computer now
+    private bool _wasLocal;       // they were, since the server's words were last shown
+    private long _waitingSince;
+
+    /// <summary>Whether to read from this computer, looked at on every beat. Never unless the admin's
+    /// own page says its script is on: the capture app goes on capturing while anything is connected
+    /// to it, and it must not go on with no page open to say so.</summary>
+    private void KeepLocal(long now)
+    {
+        if (_reading == ReadingState.Waiting) { if (_waitingSince == 0) _waitingSince = now; }
+        else _waitingSince = 0;
+        var mine = _open != null && _open == _account.Id;
+        var pageSaysOn = !_listed || _people.Any(person => person.Id == _account.Id);
+        var pageSilent = _waitingSince != 0 && now - _waitingSince > 25_000;
+        var wanted = mine && pageSaysOn && !pageSilent;
+        if (wanted && _local == null)
+        {
+            var run = _runId;
+            _local = new LocalScript(
+                text => Dispatcher.BeginInvoke(() => { if (run == _runId && _local != null) GotLocal(text); }),
+                live => Dispatcher.BeginInvoke(() => { if (run == _runId && !live) _localLive = false; }));
+            _local.Start();
+        }
+        else if (!wanted && _local != null) StopLocal();
+    }
+
+    private void StopLocal()
+    {
+        _local?.Stop();
+        _local = null;
+        _localLive = false;
+    }
+
+    private void GotLocal(string text)
+    {
+        _localLive = true;
+        _wasLocal = true;
+        // What the server had sent may start later in the script: the sentences before that are new here.
+        var older = _start > 0 && text.Length >= _start ? text[.._start] : null;
+        GotText(text, 0, older);
+    }
+
     private void Close_Reading()
     {
+        StopLocal();
+        _wasLocal = false;
+        _waitingSince = 0;
         _runId++;
         _run?.Dispose();
         _run = null;
@@ -417,11 +671,15 @@ public partial class MainWindow : Window
         var now = Environment.TickCount64;
         _follow.Update(text, start, now);
         _words.Update(text, start, now);
-        _typer.Nudge();
+        Nudge();
         Pump();
-        Refresh();
-        if (_atBottom) _scroll?.ScrollToEnd();
+        // The words (and any writing) are kept up to date at once, but drawing the whole card list and
+        // scrolling is heavy on a long script, so it is left to the beat (10 times a second). That way
+        // fast speech never makes the drawing pile up and the app stays smooth.
+        _cardsDirty = true;
     }
+
+    private bool _cardsDirty;
 
     private void DrawCards()
     {
@@ -550,7 +808,7 @@ public partial class MainWindow : Window
         var written = 0;
         foreach (var index in set.Except(drag.Base).Where(i => i <= last && !(anchor != null && i == last)).OrderBy(i => i))
         {
-            _typer.Write(_sentences[index].Text);
+            Out(_sentences[index].Text);
             written++;
         }
         if (anchor is { } tail)
@@ -582,7 +840,7 @@ public partial class MainWindow : Window
         if (!_wordMode) return;
         _words.Update(_text, _start, now);
         _words.Begin(from, carryingOn);
-        _typer.Nudge();
+        Nudge();
     }
 
     private string WordSetting => Path.Combine(_account.Folder, "word-by-word");
@@ -628,7 +886,7 @@ public partial class MainWindow : Window
             _words.Finish();
             _handingBack = true;
         }
-        _typer.Nudge();
+        Nudge();
         Refresh();
     }
 
@@ -644,10 +902,10 @@ public partial class MainWindow : Window
         if (_words.On)
         {
             _words.WriteHeldNow();
-            _typer.Nudge();
+            Nudge();
             return;
         }
-        _typer.Write(_follow.TakeAll());
+        Out(_follow.TakeAll());
         Refresh();
     }
 
@@ -670,8 +928,8 @@ public partial class MainWindow : Window
     private void Pump()
     {
         HandBack();
-        if (_words.On) return;   // Word by word: the typer asks for each change itself.
-        foreach (var sentence in _follow.TakeSettled(Environment.TickCount64)) _typer.Write(sentence);
+        if (_words.On) { if (IntoBox) PumpBoxWords(); return; }   // Word by word: pulled for each change.
+        foreach (var sentence in _follow.TakeSettled(Environment.TickCount64)) Out(sentence);
     }
 
     /// <summary>Word by word was turned off, and what was still going in has gone: whole sentences
@@ -687,6 +945,39 @@ public partial class MainWindow : Window
 
     private void Beat()
     {
+        if (!Timing.On) { BeatNow(); return; }
+        var began = Environment.TickCount64;
+        BeatNow();
+        var took = Environment.TickCount64 - began;
+        if (took > 30) Timing.Line($"BEAT took={took} sentences={_sentences.Count} cards={_cards.Count} members={_allMembers.Count}");
+    }
+
+    /// <summary>Only while tracing: says when the window's own thread, or the shared worker threads,
+    /// could not get to a job for a while.</summary>
+    private void WatchForStalls()
+    {
+        new Thread(() =>
+        {
+            while (true)
+            {
+                Thread.Sleep(100);
+                var asked = Environment.TickCount64;
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
+                {
+                    var late = Environment.TickCount64 - asked;
+                    if (late > 150) Timing.Line($"UI STALL {late}");
+                });
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    var late = Environment.TickCount64 - asked;
+                    if (late > 150) Timing.Line($"POOL STALL {late} threads={ThreadPool.ThreadCount} pending={ThreadPool.PendingWorkItemCount}");
+                });
+            }
+        }) { IsBackground = true, Name = "stall watch" }.Start();
+    }
+
+    private void BeatNow()
+    {
         if (!_signedIn) return;
         var now = Environment.TickCount64;
         if (now >= _nextList)
@@ -694,20 +985,28 @@ public partial class MainWindow : Window
             _nextList = now + ListEveryMs;
             _ = LoadList();
         }
+        if (now >= _nextPrune)
+        {
+            _nextPrune = now + PruneEveryMs;
+            UpdateOnline();
+        }
+        KeepLocal(now);
         var on = StillOn;
         // Turned off while following: what was still being said goes in, and it ends there.
         if (_wasOn && !on && _follow.On)
         {
             if (_words.On) _words.Finish();
-            else _typer.Write(_follow.TakeAll());
+            else Out(_follow.TakeAll());
             _follow.Stop();
             _followFrom = null;
             _handingBack = false;
-            _typer.Nudge();
+            Nudge();
         }
         _wasOn = on;
         Pump();
         Refresh();
+        if (_cardsDirty && _atBottom) _scroll?.ScrollToEnd();
+        _cardsDirty = false;
     }
 
     private void Refresh()
@@ -754,6 +1053,11 @@ public partial class MainWindow : Window
         }
         else if (_open == null) said = "Choose someone to read their script.";
         else if (!on) said = $"{name} has turned their live script off.";
+        else if (_localLive)
+        {
+            state = "ok";
+            said = $"{name}: Live, read on this computer";
+        }
         else if (_opening) said = $"{name}: Opening…";
         else if (_reading == ReadingState.Waiting)
         {
@@ -775,7 +1079,9 @@ public partial class MainWindow : Window
 
     private void DrawIcon(Target target, int waiting, Hold hold, bool needed)
     {
-        if (!needed || !_signedIn) { _icon.Leave(); return; }
+        // While the admin is working in this window (a message, the search), the document-writing
+        // guide must step aside.
+        if (!needed || !_signedIn || IsActive) { _icon.Leave(); return; }
         string words;
         var warn = false;
         var writing = waiting > 0 || _words.On;

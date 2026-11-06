@@ -76,8 +76,11 @@ function micTrouble(error: unknown): string {
  * it only listens, so the waiting screen shows who is already in. Each
  * connection follows the "perfect negotiation" pattern, so two browsers
  * offering at once settle it without anyone losing their place. `allowed`:
- * whom this browser connects to (admins, and the people an admin let in). */
-export function useMeeting({ supabase, start, joined, allowed }: { supabase: SupabaseClient; start: MeetStart; joined: boolean; allowed: string[] }) {
+ * whom this browser connects to (admins, and the people an admin let in).
+ * `devices`: whether this page may hold the camera and microphone at all (the
+ * waiting screen or the call); false once the person left or the meeting is over,
+ * which lets every device go at once (KIASA-006). */
+export function useMeeting({ supabase, start, joined: wantsIn, allowed, devices: wantsDevices = true, over = false }: { supabase: SupabaseClient; start: MeetStart; joined: boolean; allowed: string[]; devices?: boolean; over?: boolean }) {
   const { meeting, me, ice } = start;
   const relayed = ice.some(server => [server.urls].flat().some(url => url.startsWith("turn")));
   // This tab, in the meeting: the same person may be in it from two tabs.
@@ -86,6 +89,9 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
   const [present, setPresent] = useState<(PeerState & { peer: string })[]>([]);
   const [remotes, setRemotes] = useState<Record<string, Remote>>({});
   const [ended, setEnded] = useState(false);
+  // Never in a meeting that is over, nor holding a device for it.
+  const joined = wantsIn && !ended && !over;
+  const devices = wantsDevices && !ended && !over;
   // Mine: the camera and microphone, the shared screen, and what I say about them.
   const [local, setLocal] = useState<MediaStream | null>(null);
   const [screen, setScreen] = useState<MediaStream | null>(null);
@@ -323,9 +329,22 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     };
   }, [joined]);
 
-  // The camera and microphone, asked for once on the waiting screen.
+  /** Every device this page holds, let go: camera, microphone and any shared screen.
+   * A screen is never sent again without being chosen again. */
+  const release = () => {
+    localRef.current?.getTracks().forEach(track => track.stop());
+    localRef.current = null;
+    stopScreen();
+    setLocal(null);
+  };
+
+  // The camera and microphone, asked for on the waiting screen (again after a Leave,
+  // only when the person comes back), and let go when they leave or the meeting ends.
   useEffect(() => {
+    if (!devices) return;
     let stopped = false;
+    setMic(true);
+    setCam(true);
     (async () => {
       let stream: MediaStream | null = null;
       try {
@@ -351,10 +370,11 @@ export function useMeeting({ supabase, start, joined, allowed }: { supabase: Sup
     })();
     return () => {
       stopped = true;
-      localRef.current?.getTracks().forEach(track => track.stop());
-      screenRef.current?.getTracks().forEach(track => track.stop());
+      release();
     };
-  }, []);
+    // `release` works on refs only; the devices are asked for and let go only as `devices` changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices]);
 
   /** A connection's details, from the browser's own figures. */
   const details = async (peer: string): Promise<LinkDetails | null> => {

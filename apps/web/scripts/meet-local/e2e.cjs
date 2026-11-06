@@ -47,6 +47,12 @@ const watch = (page, label) => {
 };
 async function signIn(browser, email, label) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+  // Every camera and microphone track a page is given, so a test can see that none is left running.
+  await context.addInitScript(() => {
+    const ask = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    window.__tracks = [];
+    navigator.mediaDevices.getUserMedia = async constraints => { const stream = await ask(constraints); window.__tracks.push(...stream.getTracks()); return stream; };
+  });
   const page = await context.newPage();
   watch(page, label);
   await page.goto(BASE + "/sign-in");
@@ -467,12 +473,17 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     return `${Math.round(bytes / 1024)} KB in four seconds; ${name.slice(0, 60)}`;
   });
 
-  await step("Ben leaves: the others see two people; he rejoins without asking again", async () => {
+  await step("Ben leaves: his camera and microphone are let go; he rejoins through the waiting screen without asking again", async () => {
     await benMeet.getByRole("button", { name: "Leave the meeting" }).click();
     await benMeet.getByRole("heading", { name: "You left the meeting" }).waitFor();
     await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 2, null, { timeout: 15000 });
-    // Let in once, he comes back without asking again; then goes.
+    // KIASA-006: leaving lets every device go at once (no live track left on his page).
+    const live = await benMeet.evaluate(() => (window.__tracks ?? []).filter(track => track.readyState === "live").length);
+    if (live) throw new Error(`${live} camera or microphone tracks still live after Leave`);
+    // Let in once, he comes back without asking again: Rejoin shows the waiting screen
+    // (devices asked for afresh, no screen re-sent), then Join now; then goes.
     await benMeet.getByRole("button", { name: "Rejoin" }).click();
+    await benMeet.getByRole("button", { name: "Join now" }).click({ timeout: 15000 });
     await benMeet.locator(".meet-controls").waitFor({ timeout: 10000 });
     await adminMeet.waitForFunction(() => document.querySelectorAll(".meet-faces [data-tile]").length === 3, null, { timeout: 15000 });
     await benMeet.getByRole("button", { name: "Leave the meeting" }).click();
@@ -523,13 +534,21 @@ const tile = (page, name) => page.locator(".meet-faces [data-tile]", { has: page
     return `voices on the admin's page: ${before} before, one more after`;
   });
 
-  await step("the admin ends it for everyone: Ana's window says so, and the card in the chat reads Ended", async () => {
+  await step("the admin ends it for everyone: Ana's window says so, her camera and microphone are let go, and the card in the chat reads Ended", async () => {
     await adminMeet.getByRole("button", { name: "Leave the meeting" }).click();
     await adminMeet.getByRole("menuitem", { name: /^End for everyone/ }).click();
+    const ended = Date.now();
     await anaMeet.getByRole("heading", { name: "This meeting has ended" }).waitFor({ timeout: 10000 });
+    // KIASA-006: not only the words; every device and connection let go within 2 s of the ending.
+    await anaMeet.waitForFunction(() => (window.__tracks ?? []).every(track => track.readyState === "ended"), null, { timeout: 2000 }).catch(async () => {
+      const live = await anaMeet.evaluate(() => (window.__tracks ?? []).filter(track => track.readyState === "live").map(track => track.kind));
+      throw new Error(`still live on Ana's page after the end: ${live.join(", ")}`);
+    });
+    const releasedMs = Date.now() - ended;
     await ana.page.locator(".chat-row", { hasText: "Meeting test" }).first().click();
     await ana.page.locator(".chat-meeting[data-status='ended']").first().waitFor({ timeout: 10000 });
     await ana.page.screenshot({ path: path.join(out, "cards.png") });
+    return `Ana's devices let go within ${releasedMs} ms of the end`;
   });
 
   await step("the admin schedules one for tomorrow: Ana sees its card; it is called off, live", async () => {

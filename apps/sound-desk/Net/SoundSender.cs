@@ -146,6 +146,8 @@ public sealed class SoundSender : IDisposable
                 ice = await FreshIce();
                 Log.Write($"OfferTo: got {ice.Length} ICE servers from endpoint");
             }
+            foreach (var s in ice)
+                Log.Write($"  ICE: urls={s.urls} user={s.username?[..Math.Min(8, s.username.Length)]}");
             var config = new RTCConfiguration { iceServers = ice.ToList() };
             var pc = new RTCPeerConnection(config);
             var format = new SDPAudioVideoMediaFormat(SDPMediaTypesEnum.audio, 111, "opus", 48000, 2,
@@ -167,6 +169,7 @@ public sealed class SoundSender : IDisposable
             };
             pc.onconnectionstatechange += state =>
             {
+                Log.Write($"Peer {listener[..Math.Min(8, listener.Length)]}: connectionState={state}");
                 if (state == RTCPeerConnectionState.failed) Drop(listener);
             };
 
@@ -193,12 +196,16 @@ public sealed class SoundSender : IDisposable
 
     private static async Task Gathered(RTCPeerConnection pc, bool relay)
     {
+        Log.Write($"Gathered: waiting for {(relay ? "relay" : "srflx")} candidates (max {GatherMostMs}ms)");
         var done = new TaskCompletionSource();
         System.Timers.Timer? settle = null;
         var target = relay ? RTCIceCandidateType.relay : RTCIceCandidateType.srflx;
+        int total = 0;
 
         void OnCandidate(RTCIceCandidate candidate)
         {
+            Interlocked.Increment(ref total);
+            Log.Write($"Gathered: candidate type={candidate.type} proto={candidate.protocol} {candidate.ToString()?[..Math.Min(80, candidate.ToString()?.Length ?? 0)]}");
             if (candidate.type == target && settle == null)
             {
                 settle = new System.Timers.Timer(GatherSettleMs) { AutoReset = false };
@@ -206,13 +213,19 @@ public sealed class SoundSender : IDisposable
                 settle.Start();
             }
         }
-        void OnState(RTCIceGatheringState state) { if (state == RTCIceGatheringState.complete) done.TrySetResult(); }
+        void OnState(RTCIceGatheringState state)
+        {
+            Log.Write($"Gathered: state={state}");
+            if (state == RTCIceGatheringState.complete) done.TrySetResult();
+        }
 
         pc.onicecandidate += OnCandidate;
         pc.onicegatheringstatechange += OnState;
         if (pc.iceGatheringState == RTCIceGatheringState.complete) done.TrySetResult();
 
-        await Task.WhenAny(done.Task, Task.Delay(GatherMostMs));
+        var finished = await Task.WhenAny(done.Task, Task.Delay(GatherMostMs));
+        var timedOut = finished != done.Task;
+        Log.Write($"Gathered: done, {total} candidates, timedOut={timedOut}");
         pc.onicecandidate -= OnCandidate;
         pc.onicegatheringstatechange -= OnState;
         settle?.Dispose();
