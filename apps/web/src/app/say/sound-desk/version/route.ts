@@ -5,7 +5,7 @@ const SOUND_DESK_VERSION = "1.1.1";
 const SOUND_DESK_URL = "https://github.com/KIASA-Org/KIASA/releases/download/sound-desk-1.1.1/KiasaSoundDesk.exe";
 // SHA-256 of the exe above. The app refuses to apply an update that does not match this,
 // so a newer version is served only to builds that can verify exactly what they downloaded.
-const SOUND_DESK_SHA256 = "d15bab4820dafce8879b24aeb9f6737e7d1b3a81246f0e404b08a9edcc7c36c8";
+const SOUND_DESK_SHA256 = "aa6520f6f7fa26f104d67aa5c0ae3c26cda222f831b0d437e271937bf77c6919";
 
 export async function GET(request: Request) {
   if (!accountsLive) return Response.json({ version: "0.0.0" });

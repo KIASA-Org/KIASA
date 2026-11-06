@@ -578,10 +578,11 @@ public sealed class SupportSession : IDisposable
         if (!_running) return;
         var plan = _rate.Plan;
         var mode = EchoGuarded ? "computer sound lowered while you speak (echo guard)" : null;
+        var ver = SoundDesk.Net.Updater.CurrentVersion;
         _link?.Send("support", new
         {
             kind = "state", from = _id, seat = _rules.Seat, seq = _rules.NextSeq(),
-            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = _encW, height = _encH },
+            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = _encW, height = _encH, version = $"{ver.Major}.{ver.Minor}.{ver.Build}" },
         });
     }
 

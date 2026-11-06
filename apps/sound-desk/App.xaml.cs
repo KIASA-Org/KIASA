@@ -72,6 +72,12 @@ public partial class App : Application
     private void RefreshMenu(System.Windows.Forms.ContextMenuStrip menu)
     {
         menu.Items.Clear();
+        var ver = Updater.CurrentVersion;
+        var header = menu.Items.Add($"KIASA Sound Desk  v{ver.Major}.{ver.Minor}.{ver.Build}");
+        header!.Enabled = false;
+        var status = menu.Items.Add(_updater != null ? _updater.Status : "Sign in to receive updates");
+        status!.Enabled = false;
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         if (!_account.MayBeSignedIn)
         {
             menu.Items.Add("Sign in…", null, (_, _) => Dispatcher.BeginInvoke(() => ShowSignIn(null)));
@@ -144,6 +150,11 @@ public partial class App : Application
     private async void LookForInvites(object? sender, EventArgs e)
     {
         if (_support == null || _session != null || _consent != null || !_account.MayBeSignedIn) return;
+        // The member is idle, so this is the moment to look for and apply an update. CheckNow sees a
+        // freshly published build within one heartbeat (~15 s); if one is already downloaded and
+        // verified, apply it now (restarts the app) before checking invitations.
+        _updater?.CheckNow();
+        if (ApplyUpdateIfIdle()) return;
         try
         {
             var invite = (await _support.Mine()).FirstOrDefault(s => s.Status == "invited" && !_invitesSeen.Contains(s.Id));
@@ -218,16 +229,24 @@ public partial class App : Application
         // e.g. for a managed install that is updated by hand.
         if (Environment.GetEnvironmentVariable("KIASA_SOUND_DESK_UPDATER") == "off") return;
         _updater = new Updater(_account);
-        _updater.UpdateReady += () => Dispatcher.BeginInvoke(() =>
-        {
-            Log.Write("App: update ready, restarting");
-            var wasSharing = _sharing;
-            StopSharing();
-            if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
-            Updater.ApplyAndRestart(false);
-            Shutdown();
-        });
+        // Apply the moment it is ready only if the member is idle; otherwise the next idle heartbeat
+        // (LookForInvites) applies it. An update never interrupts sound sharing or a support session.
+        _updater.UpdateReady += () => Dispatcher.BeginInvoke(() => ApplyUpdateIfIdle());
         _updater.Start();
+    }
+
+    /// <summary>Install a downloaded, checksum-verified update, but only when the member is doing
+    /// nothing live — never while sharing sound, in a support session, or deciding on one. Returns
+    /// true when it is restarting into the new build.</summary>
+    private bool ApplyUpdateIfIdle()
+    {
+        if (_sharing || _session != null || _consent != null) return false;
+        if (!Updater.HasPendingUpdate()) return false;
+        Log.Write("App: applying pending update, restarting");
+        if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+        Updater.ApplyAndRestart(false);
+        Shutdown();
+        return true;
     }
 
     private void ShowSignIn(string? message)
