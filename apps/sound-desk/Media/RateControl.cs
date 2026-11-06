@@ -92,9 +92,11 @@ public sealed class RateControl
         // stops a stray packet among a handful — the floor's low packet rate — reading as a failing line.
         var bad = (measured > 0.08 && lostAbs >= 4) || (measured > 0.04 && lostAbs >= 4 && rtt > 300) || rtt > 750;
         // Clean enough to climb: a low loss rate, or — when few packets were seen — only a stray one or
-        // two lost. This is the fix for the field fault: it lets the picture climb off the floor on a
-        // clean line whose few packets would otherwise make every single loss look catastrophic.
-        var clean = (loss < 0.03 || lostAbs <= 2) && (rtt ?? 0) < 450;
+        // two lost (this lets the picture climb off the floor on a clean line whose few packets would
+        // otherwise make every single loss look catastrophic). But never climb while the *smoothed* loss
+        // is still high: on a genuinely lossy relay a small window can happen to show one or two losses,
+        // and climbing back on that alone only drives the picture into the storm and freezes it again.
+        var clean = (loss < 0.03 || lostAbs <= 2) && measured < 0.10 && (rtt ?? 0) < 450;
         _badStreak = bad ? _badStreak + 1 : 0;
         // Act on congestion confirmed over two windows (a lone bad one is a blip, not a failing line),
         // or on an outright severe burst (lost in real numbers); and at most once every 2 s.
