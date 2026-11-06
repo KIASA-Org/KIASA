@@ -54,6 +54,13 @@ static partial class RulesTests
         for (var i = 0; i < 200; i++) blip.Report(3, i % 6 == 0 ? 1 : 0, 150, 1);   // 3 packets/s, a stray loss now and then
         check("a stray lost packet among a few does not pin the picture at the floor", blip.Plan.VideoBps > 3 * pinned, $"{pinned / 1000} → {blip.Plan.VideoBps / 1000} kbit/s");
 
+        // The other side of that coin (field 2026-11-06): a genuinely lossy relay, 25% loss. A lucky
+        // small window (few packets, one lost) must NOT bounce the picture back up into the storm — the
+        // smoothed loss is still high — or it climbs, freezes, collapses, climbs, forever.
+        var lossy = new RateControl();
+        for (var i = 0; i < 120; i++) lossy.Report(i % 2 == 0 ? 40 : 4, i % 2 == 0 ? 10 : 1, 220, 1);
+        check("sustained heavy loss keeps the picture low, not oscillating back up", lossy.Plan.VideoBps <= 200_000, $"{lossy.Plan.VideoBps / 1000} kbit/s");
+
         var rate2 = new RateControl();
         rate2.Remb(200_000);
         p = rate2.Report(100, 0, 50, 1);
