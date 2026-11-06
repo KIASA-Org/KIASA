@@ -102,12 +102,31 @@ No recording, remote control, or unattended access added.
 `dotnet build` (sender): **0 errors** (4 pre-existing warnings, none from this change).
 `tsc --noEmit` + `eslint` on `support-link.ts` / `support-room.tsx`: **clean**.
 
+**Single-PC live media e2e** (real `KiasaSoundDesk.exe` + real Chromium, local Supabase, production
+build served on :3002) — `node scripts/support-local/e2e.cjs`, **15/15 PASS**. Measured on a clean
+(near-zero-loss) loopback path, so it proves the pipeline and the telemetry fixes, **not** loss
+recovery or RustDesk parity:
+
+| Observation | Value |
+|---|---|
+| Delivered picture | **1920×1080, 15.0 fps decoded**, NVIDIA H.264 MFT (hardware), 1200 kbit/s |
+| Sender size reported (was `0×0`) | **1920×1080** — the telemetry fix confirmed live |
+| Route actually chosen | direct, host → prflx, udp (not relay) |
+| Static/paused screen | "0 frames in 2.5 s while paused" — **not** falsely called degraded |
+| Audio / mic / two-way voice | reaches the manager; 445 voice packets back; 0 concealed |
+| Reconnect after page close | live again in 3.2 s | 
+| Stop / app-restart / offline-Stop | capture released at once; never auto-resumes |
+
 Commands:
 ```
 cd apps/sound-desk && dotnet run --project tests -- rules
 cd apps/sound-desk && dotnet build
 cd apps/web && npx tsc --noEmit && npx eslint src/components/support/*.ts*
+# live e2e: npx supabase start; build+serve on :3002 against the local copy; then:
+cd apps/web && node scripts/support-local/e2e.cjs
 ```
+Note: serve a **production build** (`next build` + `next start`) against the local copy — `next dev`'s
+HMR does not hydrate under Playwright, so the e2e's sign-in step times out against a dev server.
 
 ## 5. The remaining architectural gap (why parity still needs more)
 
