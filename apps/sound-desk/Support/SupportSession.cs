@@ -62,6 +62,7 @@ public sealed class SupportSession : IDisposable
     private long _framesSent, _bytesSent, _audioSent, _keyFrames, _feedbackSeen;
     private float _systemPeak;
     private string _screenDetail = "";
+    private int _encW, _encH;
     private string _encoderName = "";
     private uint _lastLostTotal, _lastHighest;
     private DateTime _lastReport = DateTime.UtcNow;
@@ -426,9 +427,11 @@ public sealed class SupportSession : IDisposable
         var loss = _lastHighest == 0 || expected == 0 ? rr.FractionLost / 256.0 : Math.Clamp(lostNow / (double)expected, 0, 1);
         _lastLostTotal = lost; _lastHighest = rr.ExtendedHighestSequenceNumber;
         // Nothing is resent, so a lost packet spoils the picture until a key frame. The browser's own
-        // requests for one cannot be read (SIPSorcery keeps only its REMB), so any new loss asks for one,
-        // at most every 1.5 s; the buffer cap keeps such key frames small.
-        if (lostNow > 0 && (now - _lastLossKey).TotalMilliseconds >= 1500) { _lastLossKey = now; Interlocked.Exchange(ref _keyAsked, 1); }
+        // requests for one cannot be read (SIPSorcery keeps only its REMB). But a full key frame is a
+        // burst that can itself cause loss, so asking on every single dropped packet feeds a storm
+        // (measured). Ask only on a real loss burst (more than two packets) and at most every 2 s; the
+        // buffer cap keeps such key frames small, and the 10 s GOP refreshes the picture anyway.
+        if (lostNow > 2 && (now - _lastLossKey).TotalMilliseconds >= 2000) { _lastLossKey = now; Interlocked.Exchange(ref _keyAsked, 1); }
         int? rtt = null;
         if (rr.LastSenderReportTimestamp != 0)
         {
@@ -532,6 +535,7 @@ public sealed class SupportSession : IDisposable
                     scale = plan.Scale;
                     nv12 = new byte[w * h * 3 / 2];
                     _screenDetail = $"{w}×{h}";
+                    _encW = w; _encH = h;
                     _ = _api.Note(Id, "diagnostics", new { encoder = _encoderName, width = w, height = h });
                     Interlocked.Exchange(ref _keyAsked, 1);
                 }
@@ -577,7 +581,7 @@ public sealed class SupportSession : IDisposable
         _link?.Send("support", new
         {
             kind = "state", from = _id, seat = _rules.Seat, seq = _rules.NextSeq(),
-            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = 0, height = 0 },
+            says = new { screen = ScreenPaused ? "paused" : ScreenState, system = SystemOn, mic = MicOn, mode, detail = _screenDetail, fps = plan.Fps, kbps = plan.VideoBps / 1000, width = _encW, height = _encH },
         });
     }
 
@@ -651,7 +655,7 @@ public sealed class SupportSession : IDisposable
     public string Diagnostics() => DiagnosticsText() + Reset();
     private string Reset() { _systemPeak = 0; return ""; }
     private string DiagnosticsText() =>
-        $"encoder {_encoderName}, {_screenDetail}, plan {_rate.Plan.VideoBps / 1000} kbit/s {_rate.Plan.Fps} fps scale {_rate.Plan.Scale:F2}, sent {_framesSent} frames {_bytesSent / 1024} KB, key frames {_keyFrames}, remb {(_rate.LastRemb is { } r ? r / 1000 + " kbit/s" : "none")}, voice packets {_voice?.Packets ?? 0}, audio frames sent {_audioSent}, computer sound peak {_systemPeak:F3}, echo guard {EchoGuarded}, dropped audio {_mixer?.Dropped ?? 0}";
+        $"encoder {_encoderName}, {_screenDetail}, plan {_rate.Plan.VideoBps / 1000} kbit/s {_rate.Plan.Fps} fps scale {_rate.Plan.Scale:F2}, smoothed loss {_rate.SmoothedLoss:P0}, sent {_framesSent} frames {_bytesSent / 1024} KB, key frames {_keyFrames}, remb {(_rate.LastRemb is { } r ? r / 1000 + " kbit/s" : "none")}, voice packets {_voice?.Packets ?? 0}, audio frames sent {_audioSent}, computer sound peak {_systemPeak:F3}, echo guard {EchoGuarded}, dropped audio {_mixer?.Dropped ?? 0}";
 
     public void Dispose() => Stop(EndReason.AppExit);
 }
