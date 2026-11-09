@@ -47,7 +47,7 @@ public partial class MainWindow : Window
         ShowGhost();
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         // A kept sign-in opens the desk even with no connection yet: the links keep trying and the top
         // bar says "Reconnecting…". Only a sign-in the server turns down goes back to signing in

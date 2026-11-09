@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -8,7 +8,7 @@
     <RootNamespace>LiveDesk</RootNamespace>
     <AssemblyName>KiasaLiveDesk</AssemblyName>
     <Product>KIASA Live Desk</Product>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <ApplicationIcon>assets\kiasa.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultPageItems>true</EnableDefaultPageItems>
