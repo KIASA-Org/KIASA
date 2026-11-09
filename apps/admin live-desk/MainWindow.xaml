@@ -248,7 +248,7 @@
               <Grid Margin="0,0,0,8">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,120,0">
                   <TextBlock x:Name="NotifyTo" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock x:Name="NotifyState" FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="8,0,0,0"/>
+                  <TextBlock x:Name="NotifyState" FontSize="13" FontWeight="Bold" Foreground="{StaticResource InkMute}" Margin="8,0,0,0" Background="Transparent"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                   <Button x:Name="SavedToggle" Style="{StaticResource Quiet}" Click="SavedToggle_Click" Padding="8,2" ToolTip="Show or hide your saved messages">

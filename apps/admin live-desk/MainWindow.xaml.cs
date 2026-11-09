@@ -533,19 +533,20 @@ public partial class MainWindow : Window
     private void ShowDelivery()
     {
         if (_notifyTarget == null) return;
-        string text;
-        string brush;
-        if (!_online.ContainsKey(_notifyTarget)) { text = "· desk not open"; brush = "InkMute"; }
-        else if (!_notify.Changes || _targetVersion == null) { text = ""; brush = "InkMute"; }
-        else if (_targetVersion == _notify.Version) { text = "✓ up to date"; brush = "Leaf"; }
+        // Only a mark; what it means is in its tooltip.
+        string mark, brush, tip;
+        if (!_online.ContainsKey(_notifyTarget)) { mark = "○"; brush = "InkMute"; tip = "Their desk is not open"; }
+        else if (!_notify.Changes || _targetVersion == null) { mark = ""; brush = "InkMute"; tip = ""; }
+        else if (_targetVersion == _notify.Version) { mark = "✓"; brush = "Leaf"; tip = "Up to date: their desk shows this"; }
         else
         {
             var waited = Environment.TickCount64 - _notify.SentAt;
-            if (waited < 2_500) { text = "sending…"; brush = "InkMute"; }
-            else { text = $"not there yet · {waited / 1000}s"; brush = "Warn"; }
+            if (waited < 2_500) { mark = "…"; brush = "InkMute"; tip = "Sending"; }
+            else { mark = "!"; brush = "Warn"; tip = $"Not there yet ({waited / 1000} s): the line is slow"; }
         }
-        if (NotifyState.Text != text) NotifyState.Text = text;
+        if (NotifyState.Text != mark) NotifyState.Text = mark;
         NotifyState.Foreground = (Brush)FindResource(brush);
+        NotifyState.ToolTip = tip.Length == 0 ? null : tip;
     }
 
     // ── Saved messages ───────────────────────────────────────────────────────────────────────────
