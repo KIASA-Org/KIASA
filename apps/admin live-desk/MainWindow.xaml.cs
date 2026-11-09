@@ -104,6 +104,8 @@ public partial class MainWindow : Window
     private readonly List<MemberItem> _allMembers = [];
     private readonly ObservableCollection<MemberItem> _members = [];
     private readonly NotifyLink _notify;
+    private readonly SavedMessages _saved;
+    private long? _targetVersion;   // the text version the chosen member's desk last reported
     private string? _notifyTarget;
     private long _notifySeq;
     private readonly DispatcherTimer _notifyTimer = new(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(50) };
@@ -124,7 +126,6 @@ public partial class MainWindow : Window
     private long _wroteAt;
     private bool _wasOn;
     private (int X, int Y, int WindowX, int WindowY)? _moving;
-    private BrowserDock? _dock;
     private bool _membersHidden;
 
     private sealed record Gesture(int Start, bool Add, HashSet<int> Base) { public bool Moved { get; set; } }
@@ -139,18 +140,18 @@ public partial class MainWindow : Window
         People.ItemsSource = _people;
         Members.ItemsSource = _members;
         _notify = new NotifyLink(_account);
+        _saved = new SavedMessages(_account.Folder);
+        SavedList.ItemsSource = _saved.Items;
+        _saved.Items.CollectionChanged += (_, _) => ShowSaved();
+        ShowSaved();
         _typer.WentIn += () => _icon.Landed();
         _caret.Changed += target =>
         {
             if (target.Writable) _icon.MoveTo(target);
         };
         _account.Ended += () => Dispatcher.BeginInvoke(() => ShowSignIn("Your sign-in has ended. Please sign in again."));
-        _beat.Tick += (_, _) => Beat();
+        _beat.Tick += (_, _) => { Beat(); ShowDelivery(); };
         _notifyTimer.Tick += (_, _) => NotifyTick();
-        _dock = new BrowserDock(this, BrowserHost);
-        LocationChanged += (_, _) => _dock?.Reposition();
-        SizeChanged += (_, _) => _dock?.Reposition();
-        StateChanged += (_, _) => _dock?.OnDeskState(WindowState);
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -198,7 +199,6 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         if (_hasHotkey) Native.UnregisterHotKey(_handle, HotkeyId);
-        _dock?.Close();
         _run?.Dispose();
         _local?.Stop();
         _presence?.Close();
@@ -214,11 +214,8 @@ public partial class MainWindow : Window
         if (message == Native.WM_MOUSEACTIVATE && _signedIn)
         {
             // A click never activates the window on its own, so the keyboard stays in the document.
-            // Clicking the message box brings the window forward explicitly (NotifyBox_Down). The
-            // exception is while the browser is embedded: the window must take focus then, or the
-            // browser inside it can take no keyboard (the admin agreed to this trade while browsing).
+            // Clicking the message box brings the window forward explicitly (NotifyBox_Down).
             handled = true;
-            if (_dock?.Docked == true) return Native.MA_ACTIVATE;
             return Native.MA_NOACTIVATE;
         }
         if (message == Native.WM_HOTKEY && wParam == HotkeyId)
@@ -315,7 +312,7 @@ public partial class MainWindow : Window
         Native.SetWindowLong(_handle, Native.GWL_EXSTYLE, Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) & ~Native.WS_EX_NOACTIVATE);
         DeskView.Visibility = Visibility.Collapsed;
         SignInView.Visibility = Visibility.Visible;
-        MembersToggle.Visibility = BrowserToggle.Visibility = Visibility.Collapsed;
+        MembersToggle.Visibility = Visibility.Collapsed;
         SignInSaid.Text = said ?? "";
         SignInSaid.Visibility = said == null ? Visibility.Collapsed : Visibility.Visible;
         _caret.Watching = false;
@@ -333,8 +330,7 @@ public partial class MainWindow : Window
         PasswordInput.Clear();
         SignInView.Visibility = Visibility.Collapsed;
         DeskView.Visibility = Visibility.Visible;
-        MembersToggle.Visibility = BrowserToggle.Visibility = Visibility.Visible;
-        ProxyBox.Text = BrowserProxy.Load(_account.Folder);
+        MembersToggle.Visibility = Visibility.Visible;
         WhoAmI.Text = _account.Name;
         _nextList = 0;
         if (Timing.On) Timing.Line("entered desk");
@@ -342,9 +338,9 @@ public partial class MainWindow : Window
         StartPresence();
     }
 
-    // ── Layout: hide the member list, dock the browser ────────────────────────────────────────────
+    // ── Layout: hide the member list ────────────────────────────────────────────
 
-    /// <summary>Hides or shows the member list down the left, giving the script and the browser the room.</summary>
+    /// <summary>Hides or shows the member list down the left, giving the script the room.</summary>
     private void Members_Click(object sender, RoutedEventArgs e)
     {
         _membersHidden = !_membersHidden;
@@ -352,94 +348,6 @@ public partial class MainWindow : Window
         MemberListGap.Width = new GridLength(_membersHidden ? 0 : 12);
         MembersPanel.Visibility = _membersHidden ? Visibility.Collapsed : Visibility.Visible;
         MembersToggleText.Foreground = (Brush)FindResource(_membersHidden ? "Leaf" : "InkSoft");
-    }
-
-    /// <summary>Shows or hides the embedded browser panel. Showing it opens the stealth browser through
-    /// the proxy in the bar and slots it into the panel; hiding it closes the browser.</summary>
-    private async void Browser_Click(object sender, RoutedEventArgs e)
-    {
-        if (_dock == null) return;
-        if (BrowserArea.Visibility == Visibility.Visible)
-        {
-            _dock.CloseBrowser();
-            HideBrowser();
-            BrowserToggleText.Foreground = (Brush)FindResource("InkSoft");
-            return;
-        }
-        ShowBrowser();
-        await OpenBrowser();
-    }
-
-    /// <summary>Opens (or reopens) the browser through whatever proxy is in the bar, saving that proxy.
-    /// A proxy only takes effect at launch, so a change closes the running browser and opens a new one.</summary>
-    private async Task OpenBrowser()
-    {
-        if (_dock == null) return;
-        // Read whatever shape was pasted (SOCKS5 - host:port:user:pass, host:port:user:pass, a URL…) into
-        // a proper proxy URL, and show that cleaned-up form so the admin sees what will be used.
-        var proxy = ProxyText.Normalize(ProxyBox.Text);
-        if (proxy != ProxyBox.Text) ProxyBox.Text = proxy;
-        BrowserProxy.Save(_account.Folder, proxy);
-        _dock.CloseBrowser();
-        BrowserHostHint.Text = "Opening the KIASA browser…";
-        BrowserToggle.IsEnabled = ProxyApply.IsEnabled = false;
-        BrowserToggleText.Text = "Opening…";
-        ProxyApplyText.Text = "Opening…";
-        var error = await _dock.Dock(proxy.Length == 0 ? null : proxy);
-        BrowserToggle.IsEnabled = ProxyApply.IsEnabled = true;
-        BrowserToggleText.Text = "Browser";
-        ProxyApplyText.Text = "Reopen";
-        if (error != null)
-        {
-            Status.Text = error;
-            BrowserHostHint.Text = error;
-            BrowserToggleText.Foreground = (Brush)FindResource("InkSoft");
-            return;
-        }
-        BrowserToggleText.Foreground = (Brush)FindResource("Leaf");
-    }
-
-    private async void ProxyApply_Click(object sender, RoutedEventArgs e)
-    {
-        if (BrowserArea.Visibility != Visibility.Visible) ShowBrowser();
-        await OpenBrowser();
-    }
-
-    private void ProxyBox_Changed(object sender, TextChangedEventArgs e)
-        => ProxyHint.Visibility = ProxyBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-    private async void ProxyBox_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Return or Key.Enter)) return;
-        e.Handled = true;
-        if (BrowserArea.Visibility != Visibility.Visible) ShowBrowser();
-        await OpenBrowser();
-    }
-
-    private void ShowBrowser()
-    {
-        BrowserGap.Width = new GridLength(10);
-        BrowserCol.Width = new GridLength(1.2, GridUnitType.Star);
-        BrowserArea.Visibility = Visibility.Visible;
-        if (Width < 1180) Width = 1180;
-        var area = SystemParameters.WorkArea;
-        if (Left + Width > area.Right) Left = Math.Max(area.Left, area.Right - Width);
-    }
-
-    private void HideBrowser()
-    {
-        BrowserArea.Visibility = Visibility.Collapsed;
-        BrowserGap.Width = new GridLength(0);
-        BrowserCol.Width = new GridLength(0);
-    }
-
-    private void BrowserHost_SizeChanged(object sender, SizeChangedEventArgs e) => _dock?.Reposition();
-
-    /// <summary>Opens the browser's own Settings window (its other options beyond the proxy).</summary>
-    private void BrowserSettings_Click(object sender, RoutedEventArgs e)
-    {
-        var error = _dock?.OpenSettings();
-        if (error != null) Status.Text = error;
     }
 
     /// <summary>Listens on the shared desk channel so each member can be marked online when they have
@@ -522,6 +430,17 @@ public partial class MainWindow : Window
         if (id == null || id == _account.Id) return;
         _online[id] = ("", Environment.TickCount64);
         UpdateOnline();
+        if (id != _notifyTarget) return;
+        // A user desk that reports a text version understands changes; one that asks ("want") has
+        // missed some (or just opened) and gets the whole text again.
+        long? reported = payload.TryGetProperty("v", out var vp) && vp.TryGetInt64(out var rv) ? rv : null;
+        _notify.Changes = reported != null;
+        _targetVersion = reported;
+        if (payload.TryGetProperty("want", out var want) && want.ValueKind == JsonValueKind.True)
+        {
+            _notify.Resync();
+            SendNotifyNow();
+        }
     }
 
     /// <summary>Marks each member online or not, by who has been heard from in the last few seconds.</summary>
@@ -543,6 +462,7 @@ public partial class MainWindow : Window
         if (_notifyTarget == userId) { CloseNotify(); return; }
         CloseNotify(clear: false);
         _notifyTarget = userId;
+        _targetVersion = null;
         foreach (var m in _members) m.Current = m.Id == userId;
         _notify.Open(userId, () => Dispatcher.BeginInvoke(() =>
         {
@@ -603,6 +523,68 @@ public partial class MainWindow : Window
         _notifyDirty = false;
         _notifySeq = Math.Max(_notifySeq + 1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         _notify.Send(text, start, len, _notifySeq);
+    }
+
+    // ── Has their desk got it? ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Beside the member's name: whether their desk shows what is in the box. Their desk
+    /// reports the version it has (a second or so after each change); a desk too old to report one
+    /// shows nothing here.</summary>
+    private void ShowDelivery()
+    {
+        if (_notifyTarget == null) return;
+        string text;
+        string brush;
+        if (!_online.ContainsKey(_notifyTarget)) { text = "· desk not open"; brush = "InkMute"; }
+        else if (!_notify.Changes || _targetVersion == null) { text = ""; brush = "InkMute"; }
+        else if (_targetVersion == _notify.Version) { text = "✓ up to date"; brush = "Leaf"; }
+        else
+        {
+            var waited = Environment.TickCount64 - _notify.SentAt;
+            if (waited < 2_500) { text = "sending…"; brush = "InkMute"; }
+            else { text = $"not there yet · {waited / 1000}s"; brush = "Warn"; }
+        }
+        if (NotifyState.Text != text) NotifyState.Text = text;
+        NotifyState.Foreground = (Brush)FindResource(brush);
+    }
+
+    // ── Saved messages ───────────────────────────────────────────────────────────────────────────
+
+    private void ShowSaved()
+    {
+        SavedEmpty.Visibility = _saved.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SavedToggleText.Text = _saved.Items.Count == 0 ? "Saved" : $"Saved ({_saved.Items.Count})";
+    }
+
+    private void SavedToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var show = SavedArea.Visibility != Visibility.Visible;
+        SavedArea.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        SavedToggleText.Foreground = (Brush)FindResource(show ? "Leaf" : "InkSoft");
+    }
+
+    /// <summary>Saves the selected text, or the whole box when nothing is selected.</summary>
+    private void SaveMessage_Click(object sender, RoutedEventArgs e)
+    {
+        var text = NotifyBox.SelectionLength > 0 ? NotifyBox.SelectedText : NotifyBox.Text;
+        if (text.Trim().Length == 0) { Status.Text = "Type or select something first, then press + Save."; return; }
+        _saved.Add(text);
+        if (SavedArea.Visibility != Visibility.Visible) SavedToggle_Click(sender, e);
+    }
+
+    /// <summary>Puts a saved message in where the cursor is in the box (replacing any selection);
+    /// the member sees it as if typed.</summary>
+    private void SavedUse_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SavedMessage message) return;
+        var at = NotifyBox.SelectionStart;
+        NotifyBox.SelectedText = message.Text;
+        NotifyBox.Select(at + message.Text.Length, 0);
+    }
+
+    private void SavedRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SavedMessage message) _saved.Remove(message);
     }
 
     // ── Who is live ─────────────────────────────────────────────────────────────────────────────
@@ -1098,7 +1080,6 @@ public partial class MainWindow : Window
     private void BeatNow()
     {
         if (!_signedIn) return;
-        if (_dock?.Docked == true) _dock.Reposition();   // keep the embedded browser filling its panel, snapping it back if dragged
         var now = Environment.TickCount64;
         if (now >= _nextList && !_listing)
         {

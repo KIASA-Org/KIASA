@@ -62,6 +62,7 @@ public sealed class RealtimeLink : ILink
 
     private readonly object _sendGate = new();
     private object? _latest;      // only the newest broadcast waits to go out
+    private readonly Queue<object> _ordered = new();   // broadcasts that must all arrive, in order
     private bool _draining;
 
     /// <summary>Sends a broadcast, keeping ONLY the newest in flight. On a slow line the admin types
@@ -77,6 +78,18 @@ public sealed class RealtimeLink : ILink
         if (start) _ = Drain();
     }
 
+    /// <summary>Sends a broadcast that must not be skipped: each one carries only a change to the one
+    /// before, so they all go, in order. Returns false when not joined (nothing was sent).</summary>
+    public bool SendInOrder(string name, object payload)
+    {
+        if (!_isJoined) return false;
+        var message = new { topic = _topic, @event = "broadcast", payload = new { type = "broadcast", @event = name, payload }, @ref = NextRef(), join_ref = _joinRef };
+        bool start;
+        lock (_sendGate) { _ordered.Enqueue(message); start = !_draining; if (start) _draining = true; }
+        if (start) _ = Drain();
+        return true;
+    }
+
     private async Task Drain()
     {
         while (true)
@@ -84,8 +97,8 @@ public sealed class RealtimeLink : ILink
             object? next;
             lock (_sendGate)
             {
-                next = _latest;
-                _latest = null;
+                if (_ordered.Count > 0) next = _ordered.Dequeue();
+                else { next = _latest; _latest = null; }
                 if (next == null) { _draining = false; return; }
             }
             await Write(_socket, next);
@@ -107,7 +120,13 @@ public sealed class RealtimeLink : ILink
         if (socket is not { State: WebSocketState.Open }) return;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(message);
         await _sending.WaitAsync();
-        try { await socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None); }
+        var sendAt = Environment.TickCount64;
+        try
+        {
+            await socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+            if (LiveDesk.Core.Timing.On && _topic.StartsWith("realtime:notify:", StringComparison.Ordinal))
+                LiveDesk.Core.Timing.Line($"SEND {_topic} bytes={bytes.Length} took={Environment.TickCount64 - sendAt}ms");
+        }
         catch (Exception) { /* The read side sees it close, and starts again. */ }
         finally { _sending.Release(); }
     }

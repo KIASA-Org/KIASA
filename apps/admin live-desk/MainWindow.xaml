@@ -29,14 +29,6 @@
           <Button x:Name="MembersToggle" Style="{StaticResource Quiet}" Click="Members_Click" Margin="20,0,0,0" Padding="9,3" Visibility="Collapsed" ToolTip="Hide or show the member list">
             <TextBlock x:Name="MembersToggleText" Text="Members" FontSize="12" Foreground="{StaticResource InkSoft}"/>
           </Button>
-          <Button x:Name="BrowserToggle" Style="{StaticResource Quiet}" Click="Browser_Click" Margin="3,0,0,0" Padding="9,3" Visibility="Collapsed" ToolTip="Open the KIASA browser inside this window. Right-click to set the proxy.">
-            <Button.ContextMenu>
-              <ContextMenu>
-                <MenuItem Header="Proxy &amp; settings…" Click="BrowserSettings_Click"/>
-              </ContextMenu>
-            </Button.ContextMenu>
-            <TextBlock x:Name="BrowserToggleText" Text="Browser" FontSize="12" Foreground="{StaticResource InkSoft}"/>
-          </Button>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center">
           <Button x:Name="PinButton" Style="{StaticResource Quiet}" Click="Pin_Click" ToolTip="Stay on top of other windows" Width="34" Height="30" Padding="0">
@@ -71,8 +63,6 @@
           <ColumnDefinition x:Name="MemberCol" Width="176"/>
           <ColumnDefinition x:Name="MemberListGap" Width="12"/>
           <ColumnDefinition x:Name="MainCol" Width="*"/>
-          <ColumnDefinition x:Name="BrowserGap" Width="0"/>
-          <ColumnDefinition x:Name="BrowserCol" Width="0"/>
         </Grid.ColumnDefinitions>
 
         <Border x:Name="MembersPanel" Background="#0C1712" BorderBrush="{StaticResource CardLine}" BorderThickness="1" CornerRadius="14" Padding="8">
@@ -251,10 +241,52 @@
             <Grid>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
-              <TextBlock x:Name="NotifyTo" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="0,0,0,8"/>
-              <TextBox x:Name="NotifyBox" Grid.Row="1" TextWrapping="Wrap" Background="Transparent" BorderThickness="0"
+              <!-- Who it goes to, whether their desk has it, and the saved messages. -->
+              <Grid Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,120,0">
+                  <TextBlock x:Name="NotifyTo" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock x:Name="NotifyState" FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="8,0,0,0"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                  <Button x:Name="SavedToggle" Style="{StaticResource Quiet}" Click="SavedToggle_Click" Padding="8,2" ToolTip="Show or hide your saved messages">
+                    <TextBlock x:Name="SavedToggleText" Text="Saved" FontSize="11.5"/>
+                  </Button>
+                  <Button Style="{StaticResource Quiet}" Click="SaveMessage_Click" Padding="8,2" Margin="2,0,0,0" ToolTip="Save the selected text (or all of it) for later">
+                    <TextBlock Text="+ Save" FontSize="11.5"/>
+                  </Button>
+                </StackPanel>
+              </Grid>
+              <!-- Saved messages: a click puts one in where the cursor is. -->
+              <Border x:Name="SavedArea" Grid.Row="1" Visibility="Collapsed" BorderBrush="{StaticResource CardLine}" BorderThickness="0,0,0,1" Padding="0,0,0,8" Margin="0,0,0,8">
+                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                  <StackPanel>
+                    <TextBlock x:Name="SavedEmpty" Text="Nothing saved yet. Select text and press + Save." FontSize="11.5" Foreground="{StaticResource InkMute}" TextWrapping="Wrap"/>
+                    <ItemsControl x:Name="SavedList" Focusable="False">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Background="{StaticResource NightControl}" CornerRadius="7" Margin="0,0,6,6" MaxWidth="240">
+                            <StackPanel Orientation="Horizontal">
+                              <Button Style="{StaticResource Quiet}" Click="SavedUse_Click" Padding="9,3" ToolTip="{Binding Text}">
+                                <TextBlock Text="{Binding Short}" FontSize="11.5" Foreground="{StaticResource Ink}" TextTrimming="CharacterEllipsis" MaxWidth="200"/>
+                              </Button>
+                              <Button Style="{StaticResource Quiet}" Click="SavedRemove_Click" Padding="5,3" ToolTip="Remove">
+                                <TextBlock Text="×" FontSize="12" Foreground="{StaticResource InkMute}"/>
+                              </Button>
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </ScrollViewer>
+              </Border>
+              <TextBox x:Name="NotifyBox" Grid.Row="2" TextWrapping="Wrap" Background="Transparent" BorderThickness="0"
                        Foreground="{StaticResource Ink}" FontSize="14"
                        VerticalAlignment="Stretch" VerticalContentAlignment="Top"
                        AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
@@ -270,36 +302,6 @@
                      Text="Click in a box, then click a card: it goes in where your cursor is. Drag across several, or hold Ctrl to add. Pick the sentence being written and each one goes in as it finishes, or press Word by word to write each word as it comes. Ctrl+Alt+Space writes the bubble's words now."/>
         </Grid>
 
-        <!-- The embedded browser: a proxy bar on top, then the panel the stealth Chrome is reparented into. -->
-        <Grid x:Name="BrowserArea" Grid.Column="4" Visibility="Collapsed">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
-          <Border Grid.Row="0" Background="{StaticResource NightRaised}" BorderBrush="{StaticResource CardLine}" BorderThickness="1,1,1,0" Padding="7,5">
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-              </Grid.ColumnDefinitions>
-              <TextBlock Text="Proxy" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}" Margin="2,0,8,0"/>
-              <Border Grid.Column="1" Background="{StaticResource Night}" BorderBrush="#33ECFFF3" BorderThickness="1" CornerRadius="7" Height="28" Padding="8,0">
-                <Grid>
-                  <TextBlock x:Name="ProxyHint" Text="http://host:port  ·  socks5://host:port  ·  leave blank for a direct connection" Foreground="{StaticResource InkMute}" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                  <TextBox x:Name="ProxyBox" BorderThickness="0" Background="Transparent" Foreground="{StaticResource Ink}" CaretBrush="{StaticResource Leaf}" VerticalContentAlignment="Center" FontSize="12"
-                           PreviewMouseLeftButtonDown="Field_Down" TextChanged="ProxyBox_Changed" KeyDown="ProxyBox_KeyDown"/>
-                </Grid>
-              </Border>
-              <Button x:Name="ProxyApply" Grid.Column="2" Style="{StaticResource Quiet}" Click="ProxyApply_Click" Margin="8,0,0,0" Padding="13,4" Background="{StaticResource NightControl}" ToolTip="Open the browser through this proxy (reopens it if it is already on)">
-                <TextBlock x:Name="ProxyApplyText" Text="Open" FontSize="12" Foreground="{StaticResource InkSoft}"/>
-              </Button>
-            </Grid>
-          </Border>
-          <Border x:Name="BrowserHost" Grid.Row="1" Background="#0A0A0A" BorderBrush="{StaticResource CardLine}" BorderThickness="1" SizeChanged="BrowserHost_SizeChanged">
-            <TextBlock x:Name="BrowserHostHint" Text="Set a proxy above if you need one, then press Open." Foreground="{StaticResource InkMute}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
-          </Border>
-        </Grid>
       </Grid>
     </Grid>
   </Border>
