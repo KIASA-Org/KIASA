@@ -6,6 +6,7 @@ import type { JobsMe } from "@/lib/jobs/types";
 import { checkGenerated, importPrompt, saveBaseResume, saveTailored, textForJob, type BaseStatus } from "@/lib/resume/actions";
 import { parseImportedProfile } from "@/lib/resume/import-answer";
 import { emptyProfile } from "@/lib/resume/profile-form";
+import { PASS_SCORE } from "@/lib/resume/score";
 import { ProfileSchema, type Profile } from "@/lib/resume/schema";
 import { Confirm } from "../chat/chat-dialog";
 import { Copy, Download, Pencil } from "../site/icons";
@@ -18,7 +19,7 @@ import { useTailor } from "./jobs-tailor";
 import { ResumeEditor } from "./jobs-resume-editor";
 
 type Base = { profile: Profile; status: BaseStatus; updated_at: string };
-type Tailored = { job_id: string; updated_at: string; edited: boolean; base: unknown; jobs: { title: string | null; company: string | null; url: string } | null };
+type Tailored = { job_id: string; updated_at: string; edited: boolean; base: unknown; score: unknown; jobs: { title: string | null; company: string | null; url: string } | null };
 type Posting = { id: string; title: string | null; company: string | null };
 type Mode =
   // `next`: after saving, go on to write it with the init prompt (step 2).
@@ -48,7 +49,7 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
   const fetchAll = useCallback(async () => {
     const [found, made] = await Promise.all([
       supabase.from("resume_profiles").select("profile, status, updated_at").eq("user_id", me.id).maybeSingle(),
-      supabase.from("tailored_resumes").select("job_id, updated_at, edited, base:report->base, jobs(title, company, url)").eq("user_id", me.id).order("updated_at", { ascending: false }).limit(100),
+      supabase.from("tailored_resumes").select("job_id, updated_at, edited, base:report->base, score:report->score->score, jobs(title, company, url)").eq("user_id", me.id).order("updated_at", { ascending: false }).limit(100),
     ]);
     const parsed = ProfileSchema.safeParse(found.data?.profile);
     return {
@@ -167,7 +168,8 @@ export function BaseResume({ me, supabase, zone, today, onEditing }: { me: JobsM
         {tailored.map(job => <li key={job.job_id}>
           <div className="jobs-ledger-main">
             <p className="jobs-ledger-title">{job.jobs?.title ?? "A job"}{job.base === true && <span className="jobs-you">Base résumé (no description)</span>}{job.edited && <span className="jobs-you">Edited</span>}</p>
-            <p className="jobs-row-meta">{job.jobs?.company && <span>{job.jobs.company}</span>}<span>{dayName(partsIn(zone, job.updated_at).day, today)}</span></p>
+            <p className="jobs-row-meta">{job.jobs?.company && <span>{job.jobs.company}</span>}<span>{dayName(partsIn(zone, job.updated_at).day, today)}</span>
+              {typeof job.score === "number" && <span className="resume-made-score" data-pass={job.score >= PASS_SCORE || undefined} title={`Match score for this job (needs ${PASS_SCORE})`}>Score {job.score}</span>}</p>
           </div>
           <div className="jobs-row-actions">
             <button type="button" className="chat-pill" disabled={printing === job.job_id} onClick={() => void pdf(`job=${job.job_id}`, job.job_id, jobPlace({ id: job.job_id, company: job.jobs?.company, title: job.jobs?.title }))}><Download /> {printing === job.job_id ? "Making…" : "PDF"}</button>

@@ -1,4 +1,5 @@
 import { JobPostingSchema, JobRecordSchema, type JobPosting, type JobRecord, type Profile } from "./schema";
+import type { ResumeScore } from "./score";
 
 export interface BuildJobRecordOptions {
   profileId?: string;
@@ -27,6 +28,27 @@ export function buildJobRecord(posting: JobPosting, profile: Profile, opts: Buil
 
 /** The full text to paste into a new chat: the prompt first, then the job record in a json code block. */
 export function buildPasteText(promptText: string, record: JobRecord): string {
+  return `${promptText.trimEnd()}\n\n\`\`\`json\n${JSON.stringify(record, null, 2)}\n\`\`\`\n`;
+}
+
+/** The text for a fix round: the fix prompt, then the job, the score, the
+ * keywords the résumé lacks, and the résumé as it is now (without email and
+ * phone). ChatGPT's answer is a change list for that résumé. */
+export function buildFixText(
+  promptText: string,
+  job: { company: string; title: string; jd: string },
+  profile: Profile,
+  score: Pick<ResumeScore, "score" | "needed" | "missing" | "title">,
+): string {
+  const record = {
+    company: job.company,
+    title: job.title,
+    jd: job.jd,
+    score: score.score,
+    needed: score.needed,
+    missing: { required: score.missing.required, preferred: score.missing.preferred, title: score.title.missing },
+    profile: blankContact(profile),
+  };
   return `${promptText.trimEnd()}\n\n\`\`\`json\n${JSON.stringify(record, null, 2)}\n\`\`\`\n`;
 }
 

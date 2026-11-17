@@ -567,7 +567,34 @@ own, changeable under Plans).
   downloaded as a PDF made on the server (`/jobs/resume/pdf`: the app's
   one-column template, Source Sans 3 inlined, through a headless Chromium:
   `@sparticuz/chromium` on Vercel, the computer's Chrome or Edge locally).
-  What was applied, skipped or refused is shown. **The résumé folder**
+  What was applied, skipped or refused is shown. **The match score**
+  (`src/lib/resume/score.ts`, `rounds.ts`): every tailored résumé is scored
+  against its job's description, 0 to 100, as an applicant tracking system's
+  keyword scan sees it, and only one scoring **96** or more (`PASS_SCORE`) is
+  kept and printed. The description is read in its sections: benefits, pay,
+  equal-opportunity text and "about the company" are left out; what is under a
+  "preferred" or "nice to have" heading, or on a line saying "a plus", is
+  preferred, the rest required. The skills, tools and practices it names are
+  found from a list of known ones with their other spellings (Kubernetes and
+  K8s; "Go" only as a name, never "go above and beyond"), and so are product
+  names it says twice (HorizonDB); the employer's own name never counts. Each
+  weighs 3 required, 1 preferred (a product name found by its shape, always 1),
+  one more when said three times or more; the job title's words in the
+  headline are a tenth of the score. The same résumé always scores the same.
+  Under 96, the server hands back a **fix round**: the fix prompt
+  (`prompts/SCORE_FIX_PROMPT.md`, KIASA's own), the job, the score, what is
+  missing and the résumé as it is (without email and phone), for ChatGPT to
+  answer with the same kind of change list, adding each missing keyword to the
+  skills and, for a required one, to a bullet of the two newest roles. The
+  server replays every answer so far onto the base résumé (nothing unkept is
+  trusted from the browser), checks the facts as for one answer, and scores
+  again. After two fix rounds still under 96, it is **rejected**: not kept, no
+  PDF, and Auto mode lists it with its score and what it lacks, then goes on.
+  The Tailor dialog shows the score and what is missing; Ask ChatGPT for me
+  runs the fix rounds itself, and by hand each round's text is copied like the
+  first. A résumé changed in the editor is scored again (kept, whatever its
+  score). A job with no description anywhere gets the base résumé, unscored.
+  `npm run resume:score:check` checks the score and the rounds. **The résumé folder**
   (`jobs-resume-folder.ts`, Chrome and Edge): a member chooses a folder once
   (and gives its path, which a browser never tells a page); every PDF is then
   saved straight into it, a job's in a folder for the day (the computer's
@@ -580,7 +607,9 @@ own, changeable under Plans).
   localStorage); other browsers download as before. **The KIASA ChatGPT
   Bridge** (`bridge/`, a Chrome extension; downloaded from `/jobs/bridge.zip`,
   made from those files; Résumés tab, with install steps and "Test the
-  bridge"): Chris chose it over OpenAI's API, knowing OpenAI's terms do not
+  bridge"; it runs only on kiasa.tech, so the site served on this computer by
+  `npm run dev` gives instead "KIASA ChatGPT Bridge (local)", the same files
+  for that address alone, to install beside it): Chris chose it over OpenAI's API, knowing OpenAI's terms do not
   allow automated use of ChatGPT (the card says so). On KIASA's pages it carries
   a question to ChatGPT in the member's own signed-in browser (a small window
   of its own, a new chat each time: the prompt pasted, sent, the whole answer
@@ -658,6 +687,24 @@ own, changeable under Plans).
   clipboard (the member's clipboard is left alone). ChatGPT's new code viewer
   may show a long answer only in part; reading the page is the fallback.
   (The mark, not a message: a message arrives after the click.)
+  **ChatGPT stuck** (`askChatGPT` in `jobs-bridge.ts`, any bridge): KIASA
+  watches each question as it goes. Once sent, an answer that does not grow
+  for 6 minutes (`STUCK_MINUTES`; none at all counts too), no word from the
+  bridge for 4 minutes (it reports every few seconds while it works), or one
+  still going after 20 minutes is stopped (the bridge presses ChatGPT's
+  Stop), and the question asked again in a new chat after 5 seconds; so is
+  one whose page fails: ChatGPT answering or showing an error, its tab closed
+  or reloaded, its message box or Send button missing, the bridge dropping or
+  busy. Three tries in all (`ASK_TRIES`); the dialog and Auto mode say why it
+  is trying again. Still stuck after three, Auto mode lists the job to do by
+  hand and goes on (a bridge gone quiet waits a minute, as other trouble
+  reaching ChatGPT). Its limit and signing in are never retried this way.
+  Each fix round of the match score is its own question, with its own tries.
+  A stop that the bridge does not confirm in 30 seconds ends anyway.
+  Bridge 1.4.0: ChatGPT's error notices ("Something went wrong", "error in
+  message stream", "Request timed out", …), with it not writing and nothing
+  new for 15 seconds, end the question at once (KIASA tries again), instead of
+  after 6 minutes; "Too many requests" is its limit.
   **Tailor for any job** (Today, members; `jobs-any-job.tsx`, Chris's
   choice): a job found elsewhere, its description pasted (company, title and
   link optional), Ask ChatGPT for me or copy and paste, then the PDF.

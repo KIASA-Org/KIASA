@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { TailorReport } from "@/lib/resume/actions";
+import { FIX_ROUNDS, type ResumeScore } from "@/lib/resume/score";
 import { Copy } from "../site/icons";
 
 /** When a call to the server fails: no connection, or the page is from before an update. */
@@ -45,6 +46,24 @@ export function ReportLists({ report }: { report: Pick<TailorReport, "applied" |
     </div>}
     {report.rejected.length > 0 && <div data-tone="warn"><strong>Refused ({report.rejected.length}):</strong><List items={report.rejected} /></div>}
     {report.warnings.length > 0 && <details data-tone="warn"><summary>Please check ({report.warnings.length})</summary><List items={report.warnings} /></details>}
+  </div>;
+}
+
+/** A résumé's match score for its job: the number against the pass mark, the
+ * keywords it has, and those it lacks (required first). `fixing`: the fix
+ * round now asking ChatGPT to add them. */
+export function ScoreView({ score, fixing }: { score: ResumeScore; fixing?: number }) {
+  const words = (items: string[]) => items.join(", ");
+  return <div className="resume-score" data-pass={score.pass || undefined}>
+    <p className="resume-score-head">
+      <span className="resume-score-number">{score.score}</span>
+      <span>match score, of 100 · needs {score.needed} · {score.pass ? "passes" : fixing ? `under it: fix round ${fixing} of ${FIX_ROUNDS}, asking ChatGPT to add what is missing` : "under it"}</span>
+    </p>
+    <p>Required keywords {score.required.found} of {score.required.total} · preferred {score.preferred.found} of {score.preferred.total}
+      {score.title.wanted ? <> · title {score.title.missing.length ? <>lacks <b>{words(score.title.missing)}</b></> : "matches"}</> : null}
+      {score.thin ? " · the description names few keywords, so the score says little" : ""}</p>
+    {score.missing.required.length > 0 && <p className="resume-score-missing">Missing, required: <b>{words(score.missing.required)}</b></p>}
+    {score.missing.preferred.length > 0 && <p className="resume-score-missing">Missing, preferred: <b>{words(score.missing.preferred)}</b></p>}
   </div>;
 }
 

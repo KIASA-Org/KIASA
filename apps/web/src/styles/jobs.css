@@ -421,6 +421,17 @@
 .resume-report p { margin-top: 6px; color: var(--ink-mute); }
 .resume-result { margin-top: 4px; }
 .resume-done { font-size: 14.5px; font-weight: 600; color: var(--leaf); }
+/* The match score: its number against the pass mark, the keywords found, and those missing. */
+.resume-score { display: grid; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--night-raised); box-shadow: inset 3px 0 0 #ffb4a2; font-size: 13.5px; line-height: 1.5; }
+.resume-score[data-pass] { box-shadow: inset 3px 0 0 var(--leaf); }
+.resume-score-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.resume-score-number { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: #ffb4a2; }
+.resume-score[data-pass] .resume-score-number { color: var(--leaf); }
+.resume-score p { color: var(--ink-soft); }
+.resume-score-missing b { color: var(--ink); font-weight: 650; }
+.resume-fix { display: grid; gap: 8px; margin-top: 10px; }
+.resume-made-score { font-variant-numeric: tabular-nums; color: #ffb4a2; }
+.resume-made-score[data-pass] { color: var(--leaf); }
 .jobs-tailor[data-done] { color: var(--leaf); }
 .jobs-tailored { color: var(--leaf); }
 @media (max-width: 760px) {

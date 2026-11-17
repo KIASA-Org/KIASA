@@ -10,7 +10,8 @@ import { askChatGPT, bridgeVersion, canRead, canRun, progressText, readJobPage, 
 import { addDays, dayName, linkLabel } from "./jobs-format";
 import { canChooseFolder, copyText, folderPath, hasFile, jobPlace, pathOf, savePdf, savedName, writableFolder, type Saved } from "./jobs-resume-folder";
 import { ResumeFolder } from "./jobs-resume-folder-card";
-import { CopyButton, LOST, ReportLists } from "./jobs-resume-parts";
+import { FIX_ROUNDS, PASS_SCORE } from "@/lib/resume/score";
+import { CopyButton, LOST, ReportLists, ScoreView } from "./jobs-resume-parts";
 
 /** Copying a job's résumé path: being saved first, copied (the path), or what went wrong. */
 type Copying = { job: string; state: "busy" | "done" | "failed"; text?: string };
@@ -28,13 +29,15 @@ export type AutoState = {
   phase: "applying" | "saving" | null; since: number; usual: number | null; timed: number;
   /** Waiting to try again (ChatGPT's usage limit, or trouble reaching it): "Try again now" wakes it. */
   waiting: boolean;
+  /** The job's résumé scored under the pass mark: its score, and the fix round asking ChatGPT to add what it lacks. */
+  fixing: { score: number; round: number } | null;
 };
 /** `plain`: of the jobs with a résumé, those whose is the base résumé as it is. */
 type Tailoring = {
   made: Set<string>; plain: Set<string>; open: (job: Job) => void; copyPath: (job: JobNamed) => void; copying: Copying | null;
   auto: AutoState; startAuto: (day: string) => void; stopAuto: () => void; retryAuto: () => void; today: string;
 };
-const IDLE: AutoState = { on: false, day: "", job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0, waiting: false };
+const IDLE: AutoState = { on: false, day: "", job: null, progress: null, done: 0, based: 0, failed: [], note: "", phase: null, since: 0, usual: null, timed: 0, waiting: false, fixing: null };
 /** How long a job's résumé is guessed to take before one has been timed: ChatGPT thinks for a while. */
 export const USUAL_GUESS = 150_000;
 const LOST_REPORT: TailorReport = { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] };
@@ -135,9 +138,11 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
           await pause(60_000);
           continue;
         }
-        update({ job: next, progress: null, phase: null, note: "", since: Date.now() });
+        update({ job: next, progress: null, phase: null, note: "", since: Date.now(), fixing: null });
         const lost = () => ({ text: undefined, error: LOST, needsBase: false, needsDescription: false });
         let text = await textForJob(next.id, "tailor").catch(lost);
+        // A description read off the job's page here: the résumé is scored against it.
+        let described: string | undefined;
         // No description on KIASA: read off the job's page in this browser.
         if (!text.text && text.needsDescription) {
           let found: { text: string; form: boolean };
@@ -153,7 +158,7 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
           }
           dropped = 0;
           troubled = 0;
-          if (found.text) text = await textForJob(next.id, "tailor", found.text).catch(lost);
+          if (found.text) { described = found.text; text = await textForJob(next.id, "tailor", found.text).catch(lost); }
           // None there either (often only an application form): the base résumé, as it is.
           if (!text.text && text.needsDescription) {
             const { errors } = await baseResumeFor(next.id).catch(() => ({ errors: [LOST] }));
@@ -173,23 +178,43 @@ export function TailorProvider({ me, supabase, today, onMade, onNeedBase, childr
           fail(next, text.error ?? "Its text could not be made.");
           continue;
         }
-        let answer: string;
-        try {
-          answer = await askChatGPT(text.text, progress => update({ progress }), control.signal);
-        } catch (error) {
-          const why = (error as Error).message;
-          if (control.signal.aborted) break;
-          if (isDrop(why) && ++dropped < 2) continue;
-          // ChatGPT's limit, or trouble reaching it: waited out, then the same job again.
-          if (/usage limit|not signed in|message box|bridge|did not open|send button/i.test(why)) { if (await waitOut(why)) continue; break; }
-          fail(next, why);
-          continue;
+        /** ChatGPT's answer; or, when there is none, what to do: the same job
+         * again (from its start), stop, or leave this job (already listed). */
+        const ask = async (question: string): Promise<{ said: string } | { then: "again" | "stop" | "left" }> => {
+          try {
+            const said = await askChatGPT(question, progress => update({ progress }), control.signal);
+            dropped = 0;
+            troubled = 0;
+            return { said };
+          } catch (error) {
+            const why = (error as Error).message;
+            if (control.signal.aborted) return { then: "stop" };
+            if (isDrop(why) && ++dropped < 2) return { then: "again" };
+            // ChatGPT's limit, or trouble reaching it: waited out, then the same job again.
+            if (/usage limit|not signed in|message box|bridge|did not open|send button/i.test(why)) return { then: await waitOut(why) ? "again" : "stop" };
+            fail(next, why);
+            return { then: "left" };
+          }
+        };
+        // The tailoring answer, then, while it scores under the pass mark, fix rounds.
+        const answers: string[] = [];
+        let question = text.text;
+        let outcome: Awaited<ReturnType<typeof tailorFromAnswer>> | null = null;
+        let instead: "again" | "stop" | "left" | null = null;
+        for (;;) {
+          const asked = await ask(question);
+          if ("then" in asked) { instead = asked.then; break; }
+          answers.push(asked.said);
+          update({ phase: "applying", progress: null });
+          outcome = await tailorFromAnswer(next.id, answers, described).catch(() => ({ saved: false, report: LOST_REPORT }));
+          if (outcome.saved || !outcome.fix) break;
+          question = outcome.fix;
+          update({ phase: null, progress: null, fixing: { score: outcome.report.score?.score ?? 0, round: answers.length } });
         }
-        dropped = 0;
-        troubled = 0;
-        update({ phase: "applying", progress: null });
-        const { saved, report } = await tailorFromAnswer(next.id, answer).catch(() => ({ saved: false, report: LOST_REPORT }));
-        if (!saved) { fail(next, report.errors[0] ?? "ChatGPT's answer could not be used."); continue; }
+        update({ fixing: null });
+        if (instead === "stop") break;
+        if (instead) continue;
+        if (!outcome?.saved) { fail(next, outcome?.report.errors[0] ?? "ChatGPT's answer could not be used."); continue; }
         madeFor(next.id, false);
         update({ phase: "saving" });
         // Into the résumé folder; with none, kept on KIASA only (a page cannot download dozens of files unasked).
@@ -278,6 +303,12 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
   const [answer, setAnswer] = useState("");
   const [step, setStep] = useState<"idle" | "applying" | "printing">("idle");
   const [result, setResult] = useState<{ saved: boolean; report: TailorReport; file: Saved | null } | null>(null);
+  // Under the match score: the answers so far (the tailoring answer, then fix
+  // rounds'), and the next fix round's text for ChatGPT.
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [fix, setFix] = useState<string | null>(null);
+  // The description the text was made from, when KIASA had none (read or pasted): the résumé is scored against it.
+  const [described, setDescribed] = useState<string | undefined>(undefined);
   // The ChatGPT bridge, when installed: "Ask ChatGPT for me" does steps 1 to 3.
   const [bridge, setBridge] = useState<string | null>(null);
   const [asking, setAsking] = useState<BridgeProgress | "asking" | null>(null);
@@ -307,7 +338,7 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
         askingControl.current = null;
         if (stopped) return;
         setAsking(null);
-        if (found?.text) made = await textForJob(job.id, "tailor", found.text).catch(lost);
+        if (found?.text) { setDescribed(found.text); made = await textForJob(job.id, "tailor", found.text).catch(lost); }
         else if (found) setPageSaid(found.form
           ? "Its page has no description: it seems to be only an application form."
           : "No description was found on its page either.");
@@ -339,23 +370,40 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
   const withDescription = async () => {
     setProblem("");
     const made = await textForJob(job.id, "tailor", description).catch(() => ({ text: undefined, error: LOST }));
-    if (made.text) { setText(made.text); setNeeds(false); } else setProblem(made.error ?? "That did not work. Please try again.");
+    if (made.text) { setText(made.text); setNeeds(false); setDescribed(description); } else setProblem(made.error ?? "That did not work. Please try again.");
   };
-  const load = async (given = answer, asked?: Awaited<ReturnType<typeof writableFolder>>) => {
+  /** An answer applied (after the answers before it, in a fix round): kept and
+   * its PDF saved when it reaches the match score; else the next fix round's
+   * text, returned (or, with no rounds left, rejected). */
+  const load = async (given = answer, asked?: Awaited<ReturnType<typeof writableFolder>>, before = answers): Promise<string | null> => {
     // The résumé folder, asked for first, while the click still counts.
     const folder = asked === undefined ? await writableFolder() : asked;
     setStep("applying");
     setResult(null);
+    const sent = [...before, given];
     // A call that fails (the connection, or a page from before an update) says so, instead of waiting for ever.
-    const { saved, report } = await tailorFromAnswer(job.id, given).catch(() => ({ saved: false, report: LOST_REPORT }));
-    if (!saved) { setStep("idle"); return setResult({ saved, report, file: null }); }
+    const outcome = await tailorFromAnswer(job.id, sent, described).catch(() => ({ saved: false, report: LOST_REPORT, fix: undefined }));
+    const { saved, report } = outcome;
+    if (outcome.fix) {
+      setAnswers(sent);
+      setFix(outcome.fix);
+      setAnswer("");
+      setStep("idle");
+      setResult({ saved, report, file: null });
+      return outcome.fix;
+    }
+    setAnswers([]);
+    setFix(null);
+    if (!saved) { setStep("idle"); setResult({ saved, report, file: null }); return null; }
     onMade(false);
     setStep("printing");
     const file = await savePdf(`job=${job.id}`, folder, job.id, jobPlace(job));
     setStep("idle");
     setResult({ saved, report, file });
+    return null;
   };
-  /** Steps 1 to 3 by the bridge: ChatGPT asked in a new chat, its answer pasted here, then Load PDF. */
+  /** Steps 1 to 3 by the bridge: ChatGPT asked in a new chat, its answer
+   * pasted here, then Load PDF; under the match score, each fix round too. */
   const askForMe = async () => {
     if (!text) return;
     const folder = await writableFolder();
@@ -365,10 +413,19 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
     setProblem("");
     setAsking("asking");
     try {
-      const said = await askChatGPT(text, progress => setAsking(progress), control.signal);
-      setAnswer(said);
-      setAsking(null);
-      await load(said, folder);
+      // A fix round already waiting carries on from it.
+      let question = fix ?? text;
+      let before = fix ? answers : [];
+      for (;;) {
+        const said = await askChatGPT(question, progress => setAsking(progress), control.signal);
+        setAnswer(said);
+        setAsking(null);
+        const next = await load(said, folder, before);
+        if (!next || control.signal.aborted) break;
+        before = [...before, said];
+        question = next;
+        setAsking("asking");
+      }
     } catch (error) {
       setAsking(null);
       if (!control.signal.aborted) setProblem((error as Error).message);
@@ -376,6 +433,8 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
       askingControl.current = null;
     }
   };
+  /** A fix round waiting: dropped, to start again from the tailoring prompt. */
+  const startOver = () => { setAnswers([]); setFix(null); setResult(null); setAnswer(""); };
   /** No description anywhere: the base résumé, as it is, is this job's résumé. */
   const takeBase = async () => {
     const folder = await writableFolder();
@@ -434,8 +493,15 @@ function TailorDialog({ job, before, onMade, onNeedBase, onClose }: { job: Job; 
         </label>
       </li>
     </ol>
-    {step === "printing" && <p className="jobs-hint" role="status">Applied and kept. Now making the PDF: usually a few seconds, up to about 20 when it is the first in a while.</p>}
+    {fix && <div className="resume-fix">
+      <p className="jobs-hint">Fix round {answers.length} of {FIX_ROUNDS}: its match score is under {PASS_SCORE}. {bridge
+        ? <>Ask ChatGPT for me carries on, or do it yourself: copy</> : <>Copy</>} this for ChatGPT, send it in a <b>new chat</b>, paste its whole answer in step 3 and press Load PDF.</p>
+      <span className="resume-folder-row"><CopyButton text={fix} label="Copy the fix for ChatGPT" />
+        <button type="button" className="chat-pill" disabled={step !== "idle" || asking !== null} onClick={startOver}>Start over</button></span>
+    </div>}
+    {step === "printing" && <p className="jobs-hint" role="status">Applied, scored and kept. Now making the PDF: usually a few seconds, up to about 20 when it is the first in a while.</p>}
     {result && <div className="resume-result" role="status">
+      {result.report.score && <ScoreView score={result.report.score} fixing={fix ? answers.length : undefined} />}
       {result.saved && file && (file.error
         ? <p className="b-form-error">{file.error}</p>
         : <div className="resume-saved">
@@ -485,7 +551,7 @@ export function AutoBar({ day }: { day: string }) {
         {auto.job && <TimeBar since={auto.since} usual={auto.usual} />}
       </>
       : <>
-        <p className="auto-text"><b>Auto mode</b>: ChatGPT makes a résumé for every job to do {which(day)} without one, one after another (through the ChatGPT bridge), and saves each PDF in your résumé folder. A job with no description anywhere (only an application form) gets your base résumé.{auto.note && <> <span className="auto-note">{auto.done ? `${auto.done} made${auto.based ? ` (${auto.based} with your base résumé)` : ""}. ` : ""}{auto.note}</span></>}</p>
+        <p className="auto-text"><b>Auto mode</b>: ChatGPT makes a résumé for every job to do {which(day)} without one, one after another (through the ChatGPT bridge), and saves each PDF in your résumé folder. Each must reach a match score of {PASS_SCORE} for its job: under it, ChatGPT is asked to add what is missing (up to {FIX_ROUNDS} times), and one still under it is not kept. A job with no description anywhere (only an application form) gets your base résumé.{auto.note && <> <span className="auto-note">{auto.done ? `${auto.done} made${auto.based ? ` (${auto.based} with your base résumé)` : ""}. ` : ""}{auto.note}</span></>}</p>
         <button type="button" className="jobs-button" data-primary="" onClick={start}>Start auto mode</button>
         <div className="auto-status"><BridgeStatusLine status={status} check={check} onSetUp={() => setSettingUp(true)} /></div>
       </>}
@@ -499,9 +565,10 @@ export function AutoBar({ day }: { day: string }) {
 
 /** What Auto mode is doing for its job now, in words. */
 export function autoStep(auto: AutoState): string {
-  if (auto.phase === "applying") return "Applying ChatGPT's changes to your résumé…";
+  if (auto.phase === "applying") return "Applying ChatGPT's changes and scoring the résumé…";
   if (auto.phase === "saving") return "Saving the PDF…";
-  return auto.progress ? progressText(auto.progress) : "Getting the job ready…";
+  const fixing = auto.fixing ? `Match score ${auto.fixing.score}, under ${PASS_SCORE}: fix round ${auto.fixing.round} of ${FIX_ROUNDS} · ` : "";
+  return fixing + (auto.progress ? progressText(auto.progress) : auto.fixing ? "Asking ChatGPT to add the missing keywords…" : "Getting the job ready…");
 }
 
 /** The job's row brought into view (when it is on this page of the list), and flashed. */
