@@ -149,12 +149,18 @@ checked October 2026 across the database, the server and the browser):
 - **An admin is an account, not an email.** `admins.user_id` is the account;
   every rule (`is_admin`, `jobs_admin`, `can_chat`, `am_admin`) and
   `currentViewer` ask by `auth.uid()`. Someone with an admin's address in their
-  token (an account made with it, or an email changed to it) is no admin. A row
-  added before its account exists links to nothing; add an admin after their
-  account (see step 4 below).
-- **Tries counted** (`attempts`, `too_many`, `note_attempt`; server only):
-  sign-in, 8 wrong passwords for one email from one address, and 30 tries in
-  all from one address, per 15 minutes; 5 account requests an hour from one
+  token (an account made with it, or an email changed to it) is no admin. Since
+  `20261117120000_hardening.sql` an admin row is never matched to an account by
+  email at all (anyone can make an account with any address, before the admin
+  is added): the row names its account's `user_id`, and that account must be
+  marked `app_metadata.kiasa_admin = true`, which only the database's own
+  powers can set (see step 4 below). An error while checking an admin's device
+  gives that sign-in no powers.
+- **Tries counted** (`attempts`, `too_many`, `note_attempt`, `take_attempt`;
+  server only): sign-in, 8 wrong passwords for one email from one address, 30
+  tries in all from one address, and 60 for one email from anywhere, per 15
+  minutes (counted and checked in one step, so a burst at once cannot slip
+  through; the counter not answering stops the sign-in); 5 account requests an hour from one
   address; 5 wrong current passwords per 15 minutes on changing it. Counted on
   Vercel (the visitor's address is `x-real-ip`), or locally with
   `KIASA_LIMITS=on`.
@@ -701,6 +707,14 @@ own, changeable under Plans).
   reaching ChatGPT). Its limit and signing in are never retried this way.
   Each fix round of the match score is its own question, with its own tries.
   A stop that the bridge does not confirm in 30 seconds ends anyway.
+  Bridge 1.5.0 (a security update; KIASA asks members to update): it answers
+  only KIASA's own pages (its manifest's addresses for `kiasa.js`) and its own
+  parts, takes questions up to 400,000 characters, and opens only a public job
+  page (http or https, a named site: never localhost, an IP address, a
+  `.local`/`.internal`-like name, or a link carrying a password). KIASA's
+  `/jobs/bridge/job` gives it no other link. A description a member pastes, or
+  the bridge reads, is used for that member only; only an admin's is kept on
+  the job for everyone.
   Bridge 1.4.0: ChatGPT's error notices ("Something went wrong", "error in
   message stream", "Request timed out", …), with it not writing and nothing
   new for 15 seconds, end the question at once (KIASA tries again), instead of
@@ -1067,15 +1081,18 @@ Once, in this order:
    `supabase/migrations/20261029210000_jobright_bot.sql` (the Jobright bot: a computer's Job Saving Bot, run from the job desk), then
    `supabase/migrations/20261029230000_admin_devices.sql` (admins on their own devices only; then switch on the hook under Authentication → Hooks → Customize Access Token → `public.custom_access_token_hook`), then
    `supabase/migrations/20261030090000_resume_tailor.sql` (tailored résumés: each job's description, members' base résumés and those made for jobs), then
-   `supabase/migrations/20261102090000_job_reads.sql` (links sent to the Jobright bot for its browser to read).
+   `supabase/migrations/20261102090000_job_reads.sql` (links sent to the Jobright bot for its browser to read), and every later file in order, ending with
+   `supabase/migrations/20261117120000_hardening.sql` (admins only by a marked account, sign-in tries counted at once, the device check failing closed, safe bot links, admin names kept).
    Each file is safe to run again.
 4. **Make the admin.** Supabase → Authentication → Users → Add user → Create
    new user: chrislim@kiasa.tech, a password of your choosing, and tick "Auto
    Confirm User". Only you know that password; the site never sees it.
-   Another admin: make their account first, then add them in the SQL Editor:
-   `insert into public.admins (email, name) values ('them@kiasa.tech', 'Their Name');`
-   (the row takes the account with that email; a row made before the account
-   makes no one an admin).
+   Another admin: make their account first (as above), copy its id from
+   Authentication → Users, then in the SQL Editor:
+   `update auth.users set raw_app_meta_data = raw_app_meta_data || '{"kiasa_admin": true}' where id = '<id>';`
+   `insert into public.admins (email, name, user_id) values ('them@kiasa.tech', 'Their Name', '<id>');`
+   A row without `user_id`, or naming an account not so marked, is refused:
+   admins are never found by email.
 5. **Close the side door.** Supabase → Authentication → Sign In / Providers:
    turn off "Allow new users to sign up". The site still creates accounts (it
    uses its secret key); this only stops anyone making one around the approval.
@@ -1091,8 +1108,8 @@ Once, in this order:
    Environment Variables yourself, then deploy. Without them, the "Alert me"
    button does not appear.
 
-To add an admin: add a user in Supabase as in step 4, then, in the SQL Editor,
-`insert into public.admins (email, name) values ('name@kiasa.tech', 'Their Name');`.
+To add an admin: add a user in Supabase as in step 4, mark the account and
+insert the row with its `user_id`, both as in step 4.
 
 The test suite checks the sample pages and must never reach the real database
 (its sign-up test sends the form). Once the keys are on your computer, blank

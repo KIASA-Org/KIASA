@@ -23,9 +23,33 @@ async function chatgptStatus() {
   }
 }
 
+/** KIASA's own pages, as the bridge's manifest names them for its part there
+ * (kiasa.tech; the local copy, its one address). Only they may ask anything. */
+const KIASA_PAGES = (chrome.runtime.getManifest().content_scripts || [])
+  .filter(script => (script.js || []).includes("kiasa.js"))
+  .flatMap(script => script.matches || [])
+  .map(pattern => pattern.replace(/\*$/, ""));
+const fromKiasa = sender => sender?.id === chrome.runtime.id && !!sender.tab && typeof sender.url === "string"
+  && KIASA_PAGES.some(start => sender.url.startsWith(start));
+
+/** A job's page the bridge may open: a web page on a named site, never this
+ * computer or its network (whatever link a job has). */
+function publicPage(url) {
+  let address;
+  try { address = new URL(url); } catch { return false; }
+  if (address.protocol !== "https:" && address.protocol !== "http:") return false;
+  if (address.username || address.password) return false;
+  const host = address.hostname.toLowerCase();
+  if (!/^([a-z0-9-]+\.)+[a-z][a-z0-9-]+$/.test(host)) return false;
+  return !/(^|\.)(localhost|local|internal|lan|home|corp|intranet)$/.test(host);
+}
+
+/** The longest question taken: KIASA's prompt, a job and a résumé are far less. */
+const LONGEST = 400000;
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Only the bridge's own part on KIASA's pages asks.
-  if (message?.type !== "status" || sender.id !== chrome.runtime.id || !sender.tab) return;
+  if (message?.type !== "status" || !fromKiasa(sender)) return;
   chatgptStatus().then(respond);
   return true;
 });
@@ -47,6 +71,7 @@ function release() {
 
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== "kiasa") return;
+  if (!fromKiasa(port.sender)) { port.disconnect(); return; }
   let stopped = false;
   let chat = null;
   port.onMessage.addListener(async message => {
@@ -64,6 +89,9 @@ chrome.runtime.onConnect.addListener(port => {
       return;
     }
     if (message.type !== "ask") return;
+    if (typeof message.text !== "string" || !message.text.trim() || message.text.length > LONGEST) {
+      return port.postMessage({ type: "error", error: "That question is empty or too long for the bridge." });
+    }
     if (busy) return port.postMessage({ type: "error", error: "The bridge is busy with another question. Wait for it, or stop it first." });
     busy = true;
     hold();
@@ -142,7 +170,7 @@ async function ask(text, progress, opened, stopped) {
  * its own), read once it has settled, and closed. `{ text: "" }` when the page
  * has none: often it is only an application form (`form`). */
 async function readJob(url, stopped) {
-  if (!/^https?:\/\//i.test(url)) throw new Error("That is not a web page.");
+  if (typeof url !== "string" || !publicPage(url)) throw new Error("That job's link is not a public web page, so the bridge does not open it.");
   const { tab: chat } = await chrome.storage.session.get("tab");
   const beside = typeof chat === "number" ? await chrome.tabs.get(chat).catch(() => null) : null;
   let own = null, tab;

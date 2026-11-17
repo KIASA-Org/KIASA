@@ -104,6 +104,7 @@ public sealed class WordWriter
 
     public void Update(string text, int start, long now)
     {
+        text = BoxRules.Clean(text);
         lock (_gate)
         {
             if (text == _text && start == _start) return;

@@ -28,3 +28,13 @@ func Error(title, text string) { show(title, text, iconError) }
 
 // Info shows a notice and waits until it is closed.
 func Info(title, text string) { show(title, text, iconInfo) }
+
+// Ask shows a question with Yes and No (No chosen unless Yes is pressed) and says
+// whether Yes was pressed.
+func Ask(title, text string) bool {
+	const yesNo, iconWarning, secondDefault, idYes = 0x4, 0x30, 0x100, 6
+	t, _ := syscall.UTF16PtrFromString(title)
+	x, _ := syscall.UTF16PtrFromString(text)
+	pressed, _, _ := messageBox.Call(0, uintptr(unsafe.Pointer(x)), uintptr(unsafe.Pointer(t)), yesNo|iconWarning|secondDefault|onTop)
+	return pressed == idYes
+}

@@ -88,6 +88,7 @@ public sealed class Typer : IDisposable
 
     public void Write(string words)
     {
+        words = BoxRules.Clean(words);
         if (string.IsNullOrWhiteSpace(words)) return;
         _waiting.Enqueue(words);
         Interlocked.Increment(ref _count);

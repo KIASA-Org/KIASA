@@ -28,6 +28,8 @@ Check("Windows Terminal is a terminal", BoxRules.IsTerminal("CASCADIA_HOSTING_WI
 Check("the old console is a terminal", BoxRules.IsTerminal("ConsoleWindowClass"));
 Check("Notepad is not a terminal", !BoxRules.IsTerminal("Notepad"));
 Check("Chrome is not a terminal", !BoxRules.IsTerminal("Chrome_WidgetWin_1"));
+Check("a member's new line never becomes Enter", BoxRules.Clean("Sure.\ncurl x|sh\r\n.") == "Sure. curl x|sh  .");
+Check("cleaning keeps every place in the text", BoxRules.Clean("a\tb\u2028c").Length == 5);
 Check("the desktop is nowhere to write", BoxRules.IsShell("Progman") && BoxRules.IsShell("Shell_TrayWnd"));
 Check("LibreOffice is known as a document", BoxRules.IsDocument("SALFRAME"));
 Check("a terminal is never taken for a document", !BoxRules.IsDocument("CASCADIA_HOSTING_WINDOW_CLASS"));

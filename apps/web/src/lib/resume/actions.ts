@@ -85,8 +85,10 @@ export async function textForJob(job: string, kind: "tailor" | "init", descripti
   const given = typeof description === "string" ? description.trim().slice(0, 30000) : "";
   const jd = (given || kept).trim().slice(0, 30000);
   if (jd.length < 80) return { needsDescription: true, error: "KIASA has no description for this job yet. Paste it from the job's page." };
-  // One pasted (or read off the page by the ChatGPT bridge) when KIASA had none: kept for everyone.
-  if (given.length >= 80 && !kept.trim()) await siteClient().from("jobs").update({ description: given }).eq("id", job).is("description", null);
+  // One pasted (or read off the page by the ChatGPT bridge) when KIASA had none:
+  // used for this member only. Kept for everyone only when an admin gave it, so
+  // no member can put words into everyone's prompts for this job.
+  if (who.me.admin && given.length >= 80 && !kept.trim()) await siteClient().from("jobs").update({ description: given }).eq("id", job).is("description", null);
   const record = buildJobRecord(
     { company: posting.company ?? "", title: posting.title ?? "", jd, link: posting.url, about: "" },
     base,

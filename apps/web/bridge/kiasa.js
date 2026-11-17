@@ -28,7 +28,7 @@
     const data = event.data;
     if (!data || data.source !== "kiasa-page" || (data.id !== undefined && typeof data.id !== "string")) return;
     if (data.type === "hello") return reply({ type: "hello", version: VERSION });
-    if (data.type === "ask" && typeof data.text === "string" && data.id) return carry(data.id, { type: "ask", text: data.text });
+    if (data.type === "ask" && typeof data.text === "string" && data.text.length <= 400000 && data.id) return carry(data.id, { type: "ask", text: data.text });
     if (data.type === "read" && typeof data.job === "string" && JOB.test(data.job) && data.id) {
       const found = await fetch(`/jobs/bridge/job?id=${data.job}`, { credentials: "same-origin", cache: "no-store" })
         .then(response => response.json()).catch(() => null);

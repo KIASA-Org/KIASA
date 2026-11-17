@@ -13,6 +13,16 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LARGEST = 400_000;
 const say = (text: string, status: number) => new Response(text, { status, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
 
+/** How many PDFs a signed-in person may have printed in an hour: the printer
+ * is shared, so no one can keep it busy for everyone else. */
+const PERSON_HOURLY = 90;
+/** Too many PDFs from this person this hour (counted), else null. */
+async function overPersonLimit(id: string) {
+  if (await tooMany("resume-pdf", id, 60, PERSON_HOURLY)) return say("Too many PDFs this hour. Please try again later.", 429);
+  await noteAttempt("resume-pdf", id);
+  return null;
+}
+
 /** How many résumés a KIASA Browser may have printed in an hour: well above the
  * pace of a working day, and low enough that a lost key cannot run up the bill. */
 const AGENT_HOURLY = 120;
@@ -71,6 +81,8 @@ export async function GET(request: Request) {
     : await db.from("resume_profiles").select("profile").eq("user_id", user).maybeSingle();
   const parsed = ProfileSchema.safeParse(found.data?.profile);
   if (!parsed.success) return say(job ? "There is no résumé made for this job yet." : "There is no base résumé yet.", 404);
+  const over = await overPersonLimit(me.id);
+  if (over) return over;
   return printed(parsed.data, asked.get("inline") === "1");
 }
 
@@ -85,5 +97,7 @@ export async function POST(request: Request) {
   try { sent = (JSON.parse(body) as { profile?: unknown }).profile; } catch { return say("That résumé could not be read.", 400); }
   const parsed = ProfileSchema.safeParse(sent);
   if (!parsed.success) return say("That résumé could not be read.", 400);
+  const over = await overPersonLimit(me.id);
+  if (over) return over;
   return printed(parsed.data, false);
 }

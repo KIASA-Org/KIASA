@@ -8,7 +8,7 @@ import { reasons } from "@/content/accounts";
 import { noticeDecision, noticeRequest } from "@/lib/chat/server";
 import { TEAM_COLORS } from "@/lib/teams/colors";
 import { alertPerson, isAlertAddress, pushReady } from "./push";
-import { accountsLive, currentViewer, noteAttempt, publicSupabase, siteClient, tooMany, visitorAddress, visitorClient } from "./server";
+import { accountsLive, currentViewer, noteAttempt, publicSupabase, signInAllowed, siteClient, tooMany, visitorAddress, visitorClient } from "./server";
 import { sessionOf, trustSignIn } from "./devices";
 import { VIEWER_COOKIE, initialsOf, photoUrl, type ViewerBadge } from "./viewer";
 
@@ -27,6 +27,14 @@ async function setBadge(badge: ViewerBadge) {
   (await cookies()).set(VIEWER_COOKIE, JSON.stringify(badge), {
     path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 60 * 60 * 24 * 30,
   });
+}
+
+/** Whether `name` is an admin's (matched whole, any case): no one else may
+ * take it, so no one passes for an admin in the chat or on a request. */
+async function adminsName(name: string): Promise<boolean> {
+  const exact = name.replace(/[\\%_]/g, char => `\\${char}`);
+  const { data } = await siteClient().from("admins").select("email").ilike("name", exact).limit(1);
+  return !!data?.length;
 }
 
 /** A request for an account, from the sign-up page. The person can sign in only
@@ -53,6 +61,7 @@ export async function requestAccount(_: FormState, form: FormData): Promise<Form
 
   const site = siteClient();
   const name = `${first} ${last}`;
+  if (await adminsName(name)) return { error: "Please give your own name." };
   const created = await site.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name } });
   if (created.error || !created.data.user) {
     const code = created.error?.code;
@@ -92,9 +101,7 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   // From one place: a few wrong passwords for one email, and not too many tries
   // in all, every 15 minutes. So no one guesses a password.
   const from = await visitorAddress();
-  const [busy, guessing] = await Promise.all([tooMany("sign-in", from, 15, 30), tooMany("sign-in-wrong", `${from} ${email}`, 15, 8)]);
-  if (busy || guessing) return { error: TOO_MANY };
-  after(() => noteAttempt("sign-in", from));
+  if (!(await signInAllowed(from, email))) return { error: TOO_MANY };
 
   const visitor = await visitorClient();
   const { data, error } = await visitor.auth.signInWithPassword({ email, password });
@@ -305,6 +312,7 @@ export async function updateDetails(_: FormState, form: FormData): Promise<FormS
   const reason = text(form, "reason", 80);
   if (name.length < 2) return { error: "Please give your name." };
   if (!(reasons as readonly string[]).includes(reason)) return { error: "Please choose what brings you to KIASA." };
+  if (name.toLowerCase() !== viewer.member.name.toLowerCase() && await adminsName(name)) return { error: "That name is an admin's. Please give your own." };
   const site = siteClient();
   const { error } = await site.from("profiles").update({ name, organization: organization || null, reason }).eq("id", viewer.id);
   if (error) return { error: RETRY };
