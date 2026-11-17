@@ -301,8 +301,25 @@
 .jobs-clock-face { display: grid; justify-items: end; line-height: 1.2; }
 .jobs-clock-time { font-size: 26px; font-weight: 650; letter-spacing: 0.02em; color: var(--leaf); font-variant-numeric: tabular-nums; }
 .jobs-clock-day, .jobs-clock-team { font-size: 12.5px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
-.jobs-zone-pick { margin-left: 0; }
-.jobs-zone-pick select { max-width: 280px; }
+/* The zone picker: a button, then a list with a search box over the page. */
+.jobs-zone-pick { position: relative; display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-mute); }
+.jobs-zone-button { display: inline-flex; align-items: center; gap: 8px; height: 36px; max-width: 300px; padding: 0 12px 0 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--night-control); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.jobs-zone-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jobs-zone-button svg { flex: none; width: 16px; height: 16px; color: var(--ink-mute); }
+.jobs-zone-button:hover, .jobs-zone-button[aria-expanded="true"] { border-color: var(--leaf); }
+.jobs-zone-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; display: grid; width: min(380px, calc(100vw - 32px)); padding: 8px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--night-raised); box-shadow: 0 16px 40px rgb(0 0 0 / 0.5); }
+.jobs-zone-search { height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--night); color: var(--ink); font: inherit; font-size: 14px; }
+.jobs-zone-search:focus { border-color: var(--leaf); outline: none; }
+.jobs-zone-list { max-height: min(360px, 55vh); margin: 6px 0 0; padding: 0; overflow-y: auto; list-style: none; overscroll-behavior: contain; }
+.jobs-zone-list [role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; color: var(--ink-soft); font-size: 14px; cursor: pointer; }
+.jobs-zone-list [role="option"][data-active] { background: rgb(184 236 147 / 0.12); color: var(--ink); }
+.jobs-zone-list [role="option"][aria-selected="true"] { color: var(--leaf); font-weight: 600; }
+.jobs-zone-list [data-first="quick"], .jobs-zone-list [data-first="all"] { position: relative; margin-top: 22px; }
+.jobs-zone-list [data-first]::after { position: absolute; top: -20px; left: 10px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-mute); pointer-events: none; }
+.jobs-zone-list [data-first="quick"]::after { content: "Quick"; }
+.jobs-zone-list [data-first="all"]::after { content: "All time zones"; }
+.jobs-zone-offset { flex: none; font-size: 12.5px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.jobs-zone-none { padding: 14px 10px; font-size: 13.5px; color: var(--ink-mute); }
 .jobs-week-now { position: absolute; left: 0; right: 0; z-index: 2; height: 2px; translate: 0 -1px; background: var(--leaf); pointer-events: none; }
 .jobs-week-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--leaf); }
 .jobs-week { margin-top: 12px; overflow: hidden; border: 1px solid var(--card-line); border-radius: 14px; }
@@ -374,6 +391,7 @@
   .jobs-resume-pick { margin-left: 0; }
   .jobs-clock { margin-left: 0; }
   .jobs-clock-face { justify-items: start; }
+  .jobs-zone-pop { right: auto; left: 0; }
   .jobs-tile-value { font-size: 24px; }
   .jobs-form-pair { grid-template-columns: minmax(0, 1fr); }
   .jobs-search { max-width: none; }
@@ -662,3 +680,5 @@
 .apply-actions { display: flex; flex: none; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 @media (max-width: 640px) { .apply-row { flex-wrap: wrap; } .apply-actions { width: 100%; justify-content: flex-start; } }
 .apply-gmail { margin-top: 16px; }
+/* The one capture there is, named beside the button. */
+.interview-source-name { display: inline-flex; align-items: center; height: 38px; padding: 0 14px; border-radius: 19px; background: var(--night-control); color: var(--ink-soft); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
