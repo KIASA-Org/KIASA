@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { after } from "next/server";
 import { sessionOf, trustSignIn } from "@/lib/accounts/devices";
-import { accountsLive, noteAttempt, publicSupabase, siteClient, tooMany, visitorAddress } from "@/lib/accounts/server";
+import { accountsLive, noteAttempt, publicSupabase, signInAllowed, siteClient, visitorAddress } from "@/lib/accounts/server";
 
 const TOO_MANY = "Too many tries. Please wait 15 minutes, then try again.";
 const RETRY = "That did not work just now. Please try again in a minute.";
@@ -24,9 +23,7 @@ export async function POST(request: Request) {
 
   // The same counts as the site's sign-in page: having more ways in gives no more guesses.
   const from = await visitorAddress();
-  const [busy, guessing] = await Promise.all([tooMany("sign-in", from, 15, 30), tooMany("sign-in-wrong", `${from} ${email}`, 15, 8)]);
-  if (busy || guessing) return answer({ error: TOO_MANY }, 429);
-  after(() => noteAttempt("sign-in", from));
+  if (!(await signInAllowed(from, email))) return answer({ error: TOO_MANY }, 429);
 
   // Not the visitor's cookies: the app holds its own sign-in, and this answer carries it.
   const visitor = createClient(publicSupabase.url, publicSupabase.key, { auth: { persistSession: false, autoRefreshToken: false } });

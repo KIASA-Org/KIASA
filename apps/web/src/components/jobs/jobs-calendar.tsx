@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Interview, InterviewOutcome, Job, JobsMe, TeamPerson } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
 import { ArrowLeft, Plus } from "../site/icons";
 import { InterviewDialog, type InterviewForm } from "./jobs-dialogs";
-import { addDays, clockIn, dayName, initialsOf, instantIn, partsIn, shortDay, weekStart, weekdayOf } from "./jobs-format";
+import { addDays, clockIn, dayIn, dayName, initialsOf, instantIn, partsIn, shortDay, weekStart, weekdayOf } from "./jobs-format";
 
 const HOUR = 52;
 const OUTCOMES: { id: InterviewOutcome; label: string }[] = [
@@ -15,12 +15,59 @@ const OUTCOMES: { id: InterviewOutcome; label: string }[] = [
 const KIND: Record<Interview["kind"], string> = { video: "Video call", phone: "Phone call", technical: "Technical", onsite: "On site", other: "Interview" };
 const whatOf = (interview: Interview) => [interview.job?.title ?? interview.title, interview.job?.company ?? interview.company].filter(Boolean).join(" · ") || "Interview";
 
+/** The calendar's time zone as this member chose it, kept in this browser (none: the team's). */
+const ZONE_KEY = "kiasa.jobs.calendar-zone";
+const zoneHeard = new Set<() => void>();
+const onZone = (heard: () => void) => {
+  zoneHeard.add(heard);
+  window.addEventListener("storage", heard);
+  return () => { zoneHeard.delete(heard); window.removeEventListener("storage", heard); };
+};
+const storedZone = () => { try { return localStorage.getItem(ZONE_KEY); } catch { return null; } };
+const keepZone = (zone: string | null) => {
+  try { if (zone) localStorage.setItem(ZONE_KEY, zone); else localStorage.removeItem(ZONE_KEY); } catch { /* not kept */ }
+  zoneHeard.forEach(heard => heard());
+};
+const realZone = (zone: string | null): zone is string => {
+  if (!zone) return false;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); return true; } catch { return false; }
+};
+
+/** The time now, to the second (0 on the server, so the page renders the same). */
+const everySecond = (tick: () => void) => { const timer = window.setInterval(tick, 1000); return () => window.clearInterval(timer); };
+const useSecond = () => useSyncExternalStore(everySecond, () => Math.floor(Date.now() / 1000) * 1000, () => 0);
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+const OPTIONS = {
+  clock: { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" },
+  day: { weekday: "short", month: "short", day: "numeric" },
+  offset: { timeZoneName: "shortOffset" },
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+const formatIn = (zone: string, kind: keyof typeof OPTIONS) => {
+  const key = `${kind}|${zone}`;
+  let format = formats.get(key);
+  if (!format) formats.set(key, format = new Intl.DateTimeFormat(kind === "clock" ? "en-GB" : "en-US", { timeZone: zone, ...OPTIONS[kind] }));
+  return format;
+};
+/** "UTC−8", "UTC+5:30", "UTC". */
+const offsetOf = (zone: string, at: number) => {
+  const name = formatIn(zone, "offset").formatToParts(at).find(part => part.type === "timeZoneName")?.value ?? "GMT";
+  return name.replace(/^GMT/, "UTC").replace(/^UTC[+-]0$/, "UTC").replace("-", "−");
+};
+const zoneName = (zone: string) => zone.replace(/_/g, " ");
+
 /** Interviews on a week's calendar, live: a member's own, or for an admin
  * everyone's (or one member's). Each opens to its details and outcome. */
-export function CalendarView({ me, supabase, zone, today, team, version, onInterview }: {
+export function CalendarView({ me, supabase, zone: teamZone, today: teamToday, team, version, onInterview }: {
   me: JobsMe; supabase: SupabaseClient; zone: string; today: string; team: TeamPerson[]; version: number;
   onInterview: (job: Job | null, form: InterviewForm) => Promise<string | null>;
 }) {
+  // Shown in the zone this member chose here (kept in this browser), else the team's.
+  const stored = useSyncExternalStore(onZone, storedZone, () => null);
+  const chosen = realZone(stored);
+  const zone = chosen ? stored : teamZone;
+  const second = useSecond();
+  const today = second ? dayIn(zone, new Date(second)) : teamToday;
   const [week, setWeek] = useState<string | null>(null);
   const start = week ?? weekStart(today);
   const [interviews, setInterviews] = useState<Interview[] | null>(null);
@@ -42,6 +89,9 @@ export function CalendarView({ me, supabase, zone, today, team, version, onInter
   const first = Math.min(8, ...placed.map(entry => entry.hour));
   const last = Math.max(20, ...placed.map(entry => Math.min(24, Math.ceil(entry.hour + (entry.minute + entry.interview.minutes) / 60))));
   const person = (id: string) => team.find(entry => entry.id === id);
+  // A line across today at this minute.
+  const nowAt = second ? partsIn(zone, new Date(second).toISOString()) : null;
+  const nowTop = nowAt && nowAt.hour >= first && nowAt.hour < last ? (nowAt.hour * 60 + nowAt.minute - first * 60) / 60 * HOUR : null;
   const startAdding = async () => {
     const { data } = await supabase.from("applications").select("job:jobs(id, title, company, url)").eq("user_id", me.id).neq("status", "skipped")
       .order("updated_at", { ascending: false }).limit(200);
@@ -67,7 +117,10 @@ export function CalendarView({ me, supabase, zone, today, team, version, onInter
           {me.member && <button type="button" className="jobs-button" data-primary="" onClick={() => void startAdding()}><Plus /> Add an interview</button>}
         </div>
       </div>
-      <p className="jobs-card-sub">{interviews ? `${shown.length === 1 ? "1 interview" : `${shown.length} interviews`} this week · times in ${zone}` : "Loading…"}</p>
+      <div className="jobs-calendar-bar">
+        <p className="jobs-card-sub">{interviews ? `${shown.length === 1 ? "1 interview" : `${shown.length} interviews`} this week · times in ${zoneName(zone)}` : "Loading…"}</p>
+        <ZoneClock zone={zone} team={teamZone} chosen={chosen} second={second} />
+      </div>
 
       <div className="jobs-week" style={{ ["--hours" as string]: last - first }}>
         <div className="jobs-week-head" aria-hidden="true">
@@ -89,6 +142,7 @@ export function CalendarView({ me, supabase, zone, today, team, version, onInter
               return { ...entry, begin, lane };
             });
             return <div key={day} className="jobs-week-day" data-today={day === today || undefined} aria-label={dayName(day, today)}>
+              {day === today && nowTop !== null && <span className="jobs-week-now" style={{ top: nowTop }} aria-hidden="true" />}
               {laid.map(entry => {
                 const height = Math.max(24, entry.interview.minutes / 60 * HOUR - 3);
                 const who = person(entry.interview.user_id)?.name ?? "A member";
@@ -129,9 +183,44 @@ export function CalendarView({ me, supabase, zone, today, team, version, onInter
       </ol>
     </section>
     {adding && <InterviewDialog job={null} jobs={adding} zone={zone} today={today} onClose={() => setAdding(null)}
-      onSave={async form => { const failed = await onInterview(form.job ? { id: form.job } as Job : null, form); if (!failed) setLocal(value => value + 1); return failed; }} />}
+      onSave={async form => { const failed = await onInterview(form.job ? { id: form.job } as Job : null, { ...form, zone }); if (!failed) setLocal(value => value + 1); return failed; }} />}
     {open && <InterviewCard interview={open} me={me} zone={zone} today={today} person={person(open.user_id)} supabase={supabase}
       onClose={() => setOpen(null)} onChanged={() => setLocal(value => value + 1)} />}
+  </div>;
+}
+
+/** The time now in the calendar's zone, ticking, and where to choose that zone:
+ * the team's, this computer's, or any; the team's time beside it when they differ. */
+function ZoneClock({ zone, team, chosen, second }: { zone: string; team: string; chosen: boolean; second: number }) {
+  const up = second > 0;
+  const here = useMemo(() => up ? Intl.DateTimeFormat().resolvedOptions().timeZone : null, [up]);
+  // Every zone with its offset now: worked out once the page is up, and again each hour.
+  const hour = Math.floor(second / 3_600_000) * 3_600_000;
+  const zones = useMemo(() => {
+    if (!hour) return [];
+    const at = hour;
+    const names = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+    return (names.includes(zone) ? names : [zone, ...names]).map(name => ({ name, label: `${zoneName(name)} (${offsetOf(name, at)})` }));
+  }, [hour, zone]);
+  const clock = up ? formatIn(zone, "clock").format(second) : "--:--:--";
+  return <div className="jobs-clock">
+    <div className="jobs-clock-face" role="timer" aria-label={up ? `Now ${clock.slice(0, 5)} in ${zoneName(zone)}` : "Clock"}>
+      <time className="jobs-clock-time">{clock}</time>
+      <span className="jobs-clock-day">{up ? `${formatIn(zone, "day").format(second)} · ${offsetOf(zone, second)}` : ""}</span>
+      {up && zone !== team && <span className="jobs-clock-team">Team time {formatIn(team, "clock").format(second).slice(0, 5)} · {zoneName(team)}</span>}
+    </div>
+    <label className="jobs-resume-pick jobs-zone-pick"><span>Time zone</span>
+      <select value={chosen ? zone : "team"} onChange={event => keepZone(event.target.value === "team" ? null : event.target.value)}>
+        <optgroup label="Quick">
+          <option value="team">Team time · {zoneName(team)}</option>
+          {here && here !== team && <option value={here}>This computer · {zoneName(here)}</option>}
+        </optgroup>
+        <optgroup label="All time zones">
+          {zones.length ? zones.map(entry => <option key={entry.name} value={entry.name}>{entry.label}</option>)
+            : chosen && <option value={zone}>{zoneName(zone)}</option>}
+        </optgroup>
+      </select>
+    </label>
   </div>;
 }
 

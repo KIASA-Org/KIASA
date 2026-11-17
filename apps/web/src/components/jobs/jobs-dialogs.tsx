@@ -43,13 +43,15 @@ export function FormDialog({ title, action, busyAction, children, onSubmit, onCl
 export type InterviewForm = {
   day: string; time: string; minutes: number; kind: InterviewKind; stage: string; place: string; note: string;
   job: string | null; company: string; title: string;
+  /** The zone `day` and `time` are in (else the team's). */
+  zone?: string;
 };
 const KINDS: { id: InterviewKind; label: string }[] = [
   { id: "video", label: "Video call" }, { id: "phone", label: "Phone call" }, { id: "technical", label: "Technical" }, { id: "onsite", label: "On site" }, { id: "other", label: "Other" },
 ];
 
 /** Scheduling an interview: for a job (from its row), or chosen here among one's
- * jobs, or one from elsewhere. The time is in the team's time zone. */
+ * jobs, or one from elsewhere. The time is in `zone` (the team's, or the one the calendar shows). */
 export function InterviewDialog({ job, jobs, zone, today, onSave, onClose }: {
   job: Job | null; jobs?: Pick<Job, "id" | "title" | "company" | "url">[]; zone: string; today: string;
   onSave: (form: InterviewForm) => Promise<string | null>; onClose: () => void;

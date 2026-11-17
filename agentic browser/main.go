@@ -90,6 +90,20 @@ func main() {
 		if err != nil {
 			fatalf("This link could not start the KIASA Browser. Press Start the KIASA Browser on the Auto apply page of KIASA.")
 		}
+		if text != "" && !sameBrowser(saved.Link, text) && saved.Link != "" {
+			// Any website can open a link like this one. A code for another browser
+			// (so, perhaps, another member's account) replaces this one only when the
+			// person here says so; and the Gmail connected for the old one is let go,
+			// so the new one never reads this person's mail.
+			if !winmsg.Ask("KIASA Browser", "This link connects the KIASA Browser to a different KIASA connection than the one it has now.\n\n"+
+				"Say Yes only if you just pressed Start the KIASA Browser on your own Auto apply page on kiasa.tech. "+
+				"If you did not, say No: a website may be trying to make this browser work for someone else.") {
+				fatalf("The KIASA Browser kept its own connection. To change it, press Start the KIASA Browser on your own Auto apply page.")
+			}
+			if err := os.Remove(brand.GmailTokenPath()); err != nil && !os.IsNotExist(err) {
+				log.Printf("[!] Could not let go of the old Gmail connection: %v\n", err)
+			}
+		}
 		if text != "" {
 			saved.Link = text
 			if err := settings.Save(brand.SettingsPath(), saved); err != nil {
@@ -531,6 +545,17 @@ func findChrome() (string, error) {
 }
 
 // fatalf ends the program with a message that stays on the screen until it is read.
+// sameBrowser says whether two codes are for the same browser (the same secret).
+// A code that cannot be read is not the same.
+func sameBrowser(saved, given string) bool {
+	old, err := link.Parse(saved)
+	if err != nil {
+		return false
+	}
+	now, err := link.Parse(given)
+	return err == nil && old.Secret != "" && old.Secret == now.Secret
+}
+
 func fatalf(format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	log.Println("[-] " + message)

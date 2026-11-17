@@ -82,6 +82,37 @@ export async function noteAttempt(kind: string, key: string) {
   if (limited) await siteClient().rpc("note_attempt", { what: kind, who: key });
 }
 
+/** A try counted and checked in one step (so a burst at once cannot all slip
+ * through before any is counted): whether there were already `most` in the
+ * last `minutes`. The database not answering: too many (a sign-in waits rather
+ * than going unguarded). A database without the step yet (its SQL not run):
+ * checked, then counted, as before. */
+async function takeAttempt(kind: string, key: string, minutes: number, most: number) {
+  const { data, error } = await siteClient().rpc("take_attempt", { what: kind, who: key, within: `${minutes} minutes`, most });
+  if (!error) return data === true;
+  if (error.code === "PGRST202" || error.code === "42883") {
+    const over = await tooMany(kind, key, minutes, most);
+    await noteAttempt(kind, key);
+    return over;
+  }
+  console.error("Counting a try failed:", error.message);
+  return true;
+}
+
+/** Whether a sign-in with a password may be tried now (it is counted): not too
+ * many from this address, nor for this email from anywhere (guesses spread
+ * over many addresses), nor wrong ones for this email from here. Every way in
+ * (the site, the desks) shares these counts. */
+export async function signInAllowed(from: string, email: string) {
+  if (!limited) return true;
+  const [busy, everywhere, guessing] = await Promise.all([
+    takeAttempt("sign-in", from, 15, 30),
+    takeAttempt("sign-in-email", email, 15, 60),
+    tooMany("sign-in-wrong", `${from} ${email}`, 15, 8),
+  ]);
+  return !busy && !everywhere && !guessing;
+}
+
 type ProfileRow = {
   id: string; email: string; name: string; organization: string | null; reason: string; digest: boolean;
   status: AccountStatus; asked_at: string; decided_at: string | null; last_sign_in_at: string | null;
@@ -119,11 +150,11 @@ export const signedIn = cache(async (): Promise<{ id: string; email: string; ses
 });
 
 /** Admins on their own devices only (lib/accounts/devices.ts): on, unless the
- * database turns it off (a local test copy); off while the database has no
- * such switch yet (this code before its SQL). */
+ * database turns it off (a local test copy). The database not answering, or no
+ * setting: on (never let an outage open the lock). */
 export async function deviceLockOn(): Promise<boolean> {
   const { data, error } = await siteClient().from("security_settings").select("admin_devices").eq("id", 1).maybeSingle();
-  return !error && !!data && data.admin_devices !== false;
+  return !!error || !data || data.admin_devices !== false;
 }
 
 /** Who is signed in; whether they are one of KIASA's admins; their request, if

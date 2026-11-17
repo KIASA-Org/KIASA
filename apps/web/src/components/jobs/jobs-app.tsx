@@ -224,7 +224,7 @@ export function JobsApp({ me, start, realtime, tab: asked }: { me: JobsMe; start
         }
         const { error } = await supabase.from("interviews").insert({
           user_id: me.id, job_id: id, company: id ? null : form.company || null, title: id ? null : form.title || null,
-          starts_at: instantIn(zone, form.day, form.time), minutes: form.minutes, kind: form.kind,
+          starts_at: instantIn(form.zone ?? zone, form.day, form.time), minutes: form.minutes, kind: form.kind,
           stage: form.stage || null, place: form.place || null, note: form.note || null,
         });
         if (error) return "The interview could not be saved. Please try again.";

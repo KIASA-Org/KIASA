@@ -295,6 +295,16 @@
 
 /* The calendar: a week of days, each interview at its time. */
 .jobs-calendar-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* The time now, ticking, in the zone the calendar shows (chosen beside it). */
+.jobs-calendar-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.jobs-clock { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-left: auto; }
+.jobs-clock-face { display: grid; justify-items: end; line-height: 1.2; }
+.jobs-clock-time { font-size: 26px; font-weight: 650; letter-spacing: 0.02em; color: var(--leaf); font-variant-numeric: tabular-nums; }
+.jobs-clock-day, .jobs-clock-team { font-size: 12.5px; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.jobs-zone-pick { margin-left: 0; }
+.jobs-zone-pick select { max-width: 280px; }
+.jobs-week-now { position: absolute; left: 0; right: 0; z-index: 2; height: 2px; translate: 0 -1px; background: var(--leaf); pointer-events: none; }
+.jobs-week-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--leaf); }
 .jobs-week { margin-top: 12px; overflow: hidden; border: 1px solid var(--card-line); border-radius: 14px; }
 .jobs-week-head, .jobs-week-body { display: grid; grid-template-columns: 54px repeat(7, minmax(0, 1fr)); }
 .jobs-week-head { border-bottom: 1px solid var(--card-line); background: var(--night-raised); }
@@ -362,6 +372,8 @@
   .jobs-row { flex-wrap: wrap; gap: 10px 12px; }
   .jobs-row-actions { width: 100%; padding-left: 52px; }
   .jobs-resume-pick { margin-left: 0; }
+  .jobs-clock { margin-left: 0; }
+  .jobs-clock-face { justify-items: start; }
   .jobs-tile-value { font-size: 24px; }
   .jobs-form-pair { grid-template-columns: minmax(0, 1fr); }
   .jobs-search { max-width: none; }

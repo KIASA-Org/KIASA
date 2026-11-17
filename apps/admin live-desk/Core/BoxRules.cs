@@ -21,4 +21,26 @@ public static class BoxRules
     /// <summary>Document programs that tell Windows nothing about their cursor. Measured:
     /// LibreOffice is SALFRAME, and reports only its window.</summary>
     public static bool IsDocument(string windowClass) => Documents.Contains(windowClass);
+
+    /// <summary>A member's words made safe to type anywhere: every control character (new lines,
+    /// tabs, escapes) and line or paragraph separator becomes a space, one for one, so places in the
+    /// text stay where they were. The words come from a member's page; a new line inside them must
+    /// never press Enter in whatever program has the cursor (a terminal would run it as a command).
+    /// The desk adds its own new lines, only between sentences and only in documents.</summary>
+    public static string Clean(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var chars = text.ToCharArray();
+        var changed = false;
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            if (char.IsControl(c) || c is '\u2028' or '\u2029' or '\u0085')
+            {
+                chars[i] = ' ';
+                changed = true;
+            }
+        }
+        return changed ? new string(chars) : text;
+    }
 }
