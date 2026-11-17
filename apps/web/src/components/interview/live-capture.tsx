@@ -11,7 +11,8 @@ import { useLiveSession } from "./use-live-session";
  * once the member turns the live script on it keeps running as they move around
  * KIASA (to the Job desk and back), not only on the Interview page. While it is
  * on, a KIASA admin can read it, and the bar below says so on every page. */
-const PORT = process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "8765";
+/** The app's own port (1.2.0 on: 8765, before, is taken by other programs on some PCs). */
+const PORT = process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "48765";
 const SERVICE = `ws://127.0.0.1:${PORT}/ws`;
 const APP_LINK = "kiasa-live://start";
 const DOWNLOAD = "https://github.com/KIASA-Org/KIASA/releases/download/live-script-1.1.0/KIASA-Live-Script.zip";
@@ -27,18 +28,15 @@ const wasOn = () => { try { return sessionStorage.getItem(RESUMING) === "1"; } c
 
 export type Phase = "off" | "looking" | "loading" | "ready" | "connecting" | "listening" | "failed";
 
-/** Where the words come from. Each member's choice, kept in their browser. */
+/** Where the words come from: the app's own speech model ("kiasa") or Windows'
+ * Live Captions ("system"). Only system live capture is offered now; the app
+ * keeps its own model, unused, for older pages. */
 export type Source = "kiasa" | "system";
-const SOURCE_KEY = "kiasa-live-source";
-let pickedSource: Source | null = null; // for a browser that will not store it
 const sourceListeners = new Set<() => void>();
-const chosenSource = (): Source => {
-  if (pickedSource) return pickedSource;
-  try { return localStorage.getItem(SOURCE_KEY) === "system" ? "system" : "kiasa"; } catch { return "kiasa"; }
-};
+const chosenSource = (): Source => "system";
+/** Kept for callers; there is nothing left to choose. */
 const chooseSource = (source: Source) => {
-  pickedSource = source;
-  try { localStorage.setItem(SOURCE_KEY, source); } catch { /* It lasts until this page is reloaded. */ }
+  void source;
   sourceListeners.forEach(listener => listener());
 };
 const onSourceChange = (listener: () => void) => {
@@ -97,7 +95,7 @@ export function LiveCaptureProvider({ realtime, children }: { realtime: { url: s
   const [hasText, setHasText] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [outdated, setOutdated] = useState(false);
-  const chosen = useSyncExternalStore(onSourceChange, chosenSource, () => "kiasa" as const);
+  const chosen = useSyncExternalStore(onSourceChange, chosenSource, () => "system" as const);
   const [inUse, setInUse] = useState<Source | null>(null);
 
   const socket = useRef<WebSocket | null>(null);

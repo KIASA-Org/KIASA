@@ -199,7 +199,7 @@ def _out_of_reach(pid: int) -> bool:
 
 def _keep_up(pid: int) -> None:
     """Minimised, Live Captions is exactly what Windows slows down after a while (see
-    keep_fast in live_script.py). Lift that for as long as it runs."""
+    keep_fast in basics.py). Lift that for as long as it runs."""
     kernel32 = ctypes.windll.kernel32
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
@@ -220,7 +220,7 @@ def _keep_up(pid: int) -> None:
 
 class Engine:
     """Follows the Live Captions window. Talks to the service through ui_q, like the
-    engine in live_script.py, and is started and closed the same way."""
+    engine the service starts and closes."""
 
     def __init__(self, ui_q, fix=lambda text: text):
         self.ui_q = ui_q

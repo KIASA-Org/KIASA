@@ -13,13 +13,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** The Interview area: for approved members and KIASA's admins, as the Job desk is. */
+/** The Interview area (live capture): for KIASA's admins only. Members are sent to their Job desk. */
 export default async function InterviewPage() {
   if (!accountsLive) redirect("/");
   const person = await signedIn();
   if (!person) redirect("/sign-in");
   const [me, badges] = await Promise.all([jobsViewer(), ranks()]);
   if (!me) redirect("/account");
+  if (!me.admin) redirect("/jobs");
   return <RanksProvider initial={badges} realtime={publicSupabase} me={me.id}>
     <div className="site jobs-page">
       <a href="#main-content" className="skip-link">Skip to content</a>

@@ -26,7 +26,7 @@ const AREAS: { area: AppArea; href: string; label: string; admins?: true }[] = [
   { area: "storage", href: "/admin/storage", label: "Storage", admins: true },
   { area: "chat", href: "/chat", label: "Chat" },
   { area: "jobs", href: "/jobs", label: "Job desk" },
-  { area: "interview", href: "/interview", label: "Interview" },
+  { area: "interview", href: "/interview", label: "Interview", admins: true },
   { area: "apply", href: "/apply", label: "Auto apply" },
 ];
 
