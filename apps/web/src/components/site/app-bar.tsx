@@ -11,7 +11,7 @@ import { ChevronDown, Leave, Speaker } from "./icons";
 import { YourPhoto } from "./your-photo";
 import { useSound } from "../sound/sound-share";
 
-export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "sounds" | "model" | "support";
+export type AppArea = "admin" | "teams" | "simulated" | "chat" | "jobs" | "interview" | "apply" | "live" | "sounds" | "model" | "storage" | "support";
 /** Who is signed in, as the bar shows them. `id` and `photo` once accounts are connected. */
 export type AppPerson = { id?: string; name: string; detail: string; admin: boolean; photo?: string | null };
 
@@ -23,6 +23,7 @@ const AREAS: { area: AppArea; href: string; label: string; admins?: true }[] = [
   { area: "live", href: "/admin/live", label: "Live scripts", admins: true },
   { area: "sounds", href: "/admin/sounds", label: "Live sounds", admins: true },
   { area: "model", href: "/admin/model", label: "Model", admins: true },
+  { area: "storage", href: "/admin/storage", label: "Storage", admins: true },
   { area: "chat", href: "/chat", label: "Chat" },
   { area: "jobs", href: "/jobs", label: "Job desk" },
   { area: "interview", href: "/interview", label: "Interview" },
