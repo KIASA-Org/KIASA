@@ -97,6 +97,24 @@ a.account-row:hover .account-row-title { text-decoration: underline; text-decora
 .model-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 14px; }
 .model-row-main { flex: 1; min-width: 0; }
 .model-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+/* The Storage page: a bar for each store, then the biggest tables and files. */
+.storage-card { display: grid; gap: 28px; }
+.storage-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.storage-meter-pct { font-size: 14px; font-weight: 600; color: var(--leaf); font-variant-numeric: tabular-nums; }
+.storage-bar { height: 12px; margin-top: 10px; overflow: hidden; border-radius: 6px; background: var(--night-control, rgb(255 255 255 / 0.06)); }
+.storage-bar span { display: block; height: 100%; border-radius: 6px; background: var(--leaf); transition: width 0.4s; }
+.storage-meter[data-state="warn"] .storage-bar span { background: #ffd27a; }
+.storage-meter[data-state="warn"] .storage-meter-pct { color: #ffd27a; }
+.storage-meter[data-state="bad"] .storage-bar span { background: #ffb4a2; }
+.storage-meter[data-state="bad"] .storage-meter-pct { color: #ffb4a2; }
+.storage-facts { margin-bottom: 4px; }
+.storage-live { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--leaf); vertical-align: 1px; animation: storage-pulse 2s ease-in-out infinite; }
+@keyframes storage-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .storage-live { animation: none; } }
+.storage-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.storage-table th { padding: 6px 8px; font-size: 12.5px; font-weight: 500; color: var(--ink-mute); text-align: left; }
+.storage-table td { padding: 8px; border-top: 1px solid var(--line-strong); overflow-wrap: anywhere; }
+.storage-table th:not(:first-child), .storage-table td:not(:first-child) { text-align: right; white-space: nowrap; }
 .admin-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: var(--header); padding-block: 10px; }
 .admin-user { display: flex; align-items: center; gap: 12px; }
 .admin-user .account-initials { width: 36px; height: 36px; font-size: 13px; }
