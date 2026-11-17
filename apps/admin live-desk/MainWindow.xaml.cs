@@ -73,7 +73,7 @@ public sealed class MemberItem : INotifyPropertyChanged
 public partial class MainWindow : Window
 {
     private const int HotkeyId = 1;
-    private const long ListEveryMs = 3_000;
+    private const long ListEveryMs = 6_000;
     private const long FlashMs = 1_800;
     private const long OnlineExpiryMs = 18_000;
     private const long PruneEveryMs = 2_000;
@@ -104,6 +104,8 @@ public partial class MainWindow : Window
     private readonly List<MemberItem> _allMembers = [];
     private readonly ObservableCollection<MemberItem> _members = [];
     private readonly NotifyLink _notify;
+    private readonly SavedMessages _saved;
+    private long? _targetVersion;   // the text version the chosen member's desk last reported
     private string? _notifyTarget;
     private long _notifySeq;
     private readonly DispatcherTimer _notifyTimer = new(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(50) };
@@ -124,6 +126,7 @@ public partial class MainWindow : Window
     private long _wroteAt;
     private bool _wasOn;
     private (int X, int Y, int WindowX, int WindowY)? _moving;
+    private bool _membersHidden;
 
     private sealed record Gesture(int Start, bool Add, HashSet<int> Base) { public bool Moved { get; set; } }
 
@@ -137,13 +140,17 @@ public partial class MainWindow : Window
         People.ItemsSource = _people;
         Members.ItemsSource = _members;
         _notify = new NotifyLink(_account);
+        _saved = new SavedMessages(_account.Folder);
+        SavedList.ItemsSource = _saved.Items;
+        _saved.Items.CollectionChanged += (_, _) => ShowSaved();
+        ShowSaved();
         _typer.WentIn += () => _icon.Landed();
         _caret.Changed += target =>
         {
             if (target.Writable) _icon.MoveTo(target);
         };
         _account.Ended += () => Dispatcher.BeginInvoke(() => ShowSignIn("Your sign-in has ended. Please sign in again."));
-        _beat.Tick += (_, _) => Beat();
+        _beat.Tick += (_, _) => { Beat(); ShowDelivery(); };
         _notifyTimer.Tick += (_, _) => NotifyTick();
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -305,6 +312,7 @@ public partial class MainWindow : Window
         Native.SetWindowLong(_handle, Native.GWL_EXSTYLE, Native.GetWindowLong(_handle, Native.GWL_EXSTYLE) & ~Native.WS_EX_NOACTIVATE);
         DeskView.Visibility = Visibility.Collapsed;
         SignInView.Visibility = Visibility.Visible;
+        MembersToggle.Visibility = Visibility.Collapsed;
         SignInSaid.Text = said ?? "";
         SignInSaid.Visibility = said == null ? Visibility.Collapsed : Visibility.Visible;
         _caret.Watching = false;
@@ -322,11 +330,24 @@ public partial class MainWindow : Window
         PasswordInput.Clear();
         SignInView.Visibility = Visibility.Collapsed;
         DeskView.Visibility = Visibility.Visible;
+        MembersToggle.Visibility = Visibility.Visible;
         WhoAmI.Text = _account.Name;
         _nextList = 0;
         if (Timing.On) Timing.Line("entered desk");
         _ = LoadMembers();
         StartPresence();
+    }
+
+    // ── Layout: hide the member list ────────────────────────────────────────────
+
+    /// <summary>Hides or shows the member list down the left, giving the script the room.</summary>
+    private void Members_Click(object sender, RoutedEventArgs e)
+    {
+        _membersHidden = !_membersHidden;
+        MemberCol.Width = new GridLength(_membersHidden ? 0 : 176);
+        MemberListGap.Width = new GridLength(_membersHidden ? 0 : 12);
+        MembersPanel.Visibility = _membersHidden ? Visibility.Collapsed : Visibility.Visible;
+        MembersToggleText.Foreground = (Brush)FindResource(_membersHidden ? "Leaf" : "InkSoft");
     }
 
     /// <summary>Listens on the shared desk channel so each member can be marked online when they have
@@ -409,6 +430,17 @@ public partial class MainWindow : Window
         if (id == null || id == _account.Id) return;
         _online[id] = ("", Environment.TickCount64);
         UpdateOnline();
+        if (id != _notifyTarget) return;
+        // A user desk that reports a text version understands changes; one that asks ("want") has
+        // missed some (or just opened) and gets the whole text again.
+        long? reported = payload.TryGetProperty("v", out var vp) && vp.TryGetInt64(out var rv) ? rv : null;
+        _notify.Changes = reported != null;
+        _targetVersion = reported;
+        if (payload.TryGetProperty("want", out var want) && want.ValueKind == JsonValueKind.True)
+        {
+            _notify.Resync();
+            SendNotifyNow();
+        }
     }
 
     /// <summary>Marks each member online or not, by who has been heard from in the last few seconds.</summary>
@@ -430,14 +462,16 @@ public partial class MainWindow : Window
         if (_notifyTarget == userId) { CloseNotify(); return; }
         CloseNotify(clear: false);
         _notifyTarget = userId;
+        _targetVersion = null;
         foreach (var m in _members) m.Current = m.Id == userId;
         _notify.Open(userId, () => Dispatcher.BeginInvoke(() =>
         {
             if (NotifyBox.Text.Length > 0) PushNotify();
         }));
-        NotifyGap.Width = new GridLength(12);
+        NotifyGap.Width = new GridLength(8);
         NotifyCol.Width = new GridLength(0.85, GridUnitType.Star);
         NotifyPanel.Visibility = Visibility.Visible;
+        PanelSplit.Visibility = Visibility.Visible;
         NotifyTo.Text = $"→ {name}";
         NotifyBox.Text = "";
         // No focus is forced here: the admin keeps writing to their document until they click the
@@ -454,6 +488,7 @@ public partial class MainWindow : Window
         foreach (var m in _members) m.Current = false;
         _notify.Close();
         NotifyPanel.Visibility = Visibility.Collapsed;
+        PanelSplit.Visibility = Visibility.Collapsed;
         NotifyGap.Width = new GridLength(0);
         NotifyCol.Width = new GridLength(0);
         if (_signedIn) Keyboard.ClearFocus();
@@ -490,6 +525,69 @@ public partial class MainWindow : Window
         _notify.Send(text, start, len, _notifySeq);
     }
 
+    // ── Has their desk got it? ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Beside the member's name: whether their desk shows what is in the box. Their desk
+    /// reports the version it has (a second or so after each change); a desk too old to report one
+    /// shows nothing here.</summary>
+    private void ShowDelivery()
+    {
+        if (_notifyTarget == null) return;
+        // Only a mark; what it means is in its tooltip.
+        string mark, brush, tip;
+        if (!_online.ContainsKey(_notifyTarget)) { mark = "○"; brush = "InkMute"; tip = "Their desk is not open"; }
+        else if (!_notify.Changes || _targetVersion == null) { mark = ""; brush = "InkMute"; tip = ""; }
+        else if (_targetVersion == _notify.Version) { mark = "✓"; brush = "Leaf"; tip = "Up to date: their desk shows this"; }
+        else
+        {
+            var waited = Environment.TickCount64 - _notify.SentAt;
+            if (waited < 2_500) { mark = "…"; brush = "InkMute"; tip = "Sending"; }
+            else { mark = "!"; brush = "Warn"; tip = $"Not there yet ({waited / 1000} s): the line is slow"; }
+        }
+        if (NotifyState.Text != mark) NotifyState.Text = mark;
+        NotifyState.Foreground = (Brush)FindResource(brush);
+        NotifyState.ToolTip = tip.Length == 0 ? null : tip;
+    }
+
+    // ── Saved messages ───────────────────────────────────────────────────────────────────────────
+
+    private void ShowSaved()
+    {
+        SavedEmpty.Visibility = _saved.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SavedToggleText.Text = _saved.Items.Count == 0 ? "Saved" : $"Saved ({_saved.Items.Count})";
+    }
+
+    private void SavedToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var show = SavedArea.Visibility != Visibility.Visible;
+        SavedArea.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        SavedToggleText.Foreground = (Brush)FindResource(show ? "Leaf" : "InkSoft");
+    }
+
+    /// <summary>Saves the selected text, or the whole box when nothing is selected.</summary>
+    private void SaveMessage_Click(object sender, RoutedEventArgs e)
+    {
+        var text = NotifyBox.SelectionLength > 0 ? NotifyBox.SelectedText : NotifyBox.Text;
+        if (text.Trim().Length == 0) { Status.Text = "Type or select something first, then press + Save."; return; }
+        _saved.Add(text);
+        if (SavedArea.Visibility != Visibility.Visible) SavedToggle_Click(sender, e);
+    }
+
+    /// <summary>Puts a saved message in where the cursor is in the box (replacing any selection);
+    /// the member sees it as if typed.</summary>
+    private void SavedUse_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SavedMessage message) return;
+        var at = NotifyBox.SelectionStart;
+        NotifyBox.SelectedText = message.Text;
+        NotifyBox.Select(at + message.Text.Length, 0);
+    }
+
+    private void SavedRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SavedMessage message) _saved.Remove(message);
+    }
+
     // ── Who is live ─────────────────────────────────────────────────────────────────────────────
 
     private async Task LoadList()
@@ -524,6 +622,10 @@ public partial class MainWindow : Window
         finally
         {
             _listing = false;
+            // Measure the gap from when the poll FINISHED, not when it started: on a slow, lossy line a
+            // poll can take many seconds, and re-firing the instant it returns hammers the line and
+            // starves the realtime typing channel (measured 2026-11-06). A quiet gap lets words through.
+            _nextList = Environment.TickCount64 + ListEveryMs;
         }
     }
 
@@ -980,9 +1082,9 @@ public partial class MainWindow : Window
     {
         if (!_signedIn) return;
         var now = Environment.TickCount64;
-        if (now >= _nextList)
+        if (now >= _nextList && !_listing)
         {
-            _nextList = now + ListEveryMs;
+            _nextList = now + ListEveryMs;   // a floor; the real next time is set when this poll finishes
             _ = LoadList();
         }
         if (now >= _nextPrune)

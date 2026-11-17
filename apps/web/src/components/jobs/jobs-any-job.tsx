@@ -6,7 +6,8 @@ import type { Profile } from "@/lib/resume/schema";
 import { Copy, Download, Pencil } from "../site/icons";
 import { askChatGPT, bridgeVersion, progressText, type BridgeProgress } from "./jobs-bridge";
 import { copyText, jobPlace, savePdf, writableFolder, type Saved } from "./jobs-resume-folder";
-import { CopyButton, LOST, ReportLists } from "./jobs-resume-parts";
+import { FIX_ROUNDS, PASS_SCORE } from "@/lib/resume/score";
+import { CopyButton, LOST, ReportLists, ScoreView } from "./jobs-resume-parts";
 
 /** "Tailor for any job" on Today: a job found elsewhere, not on KIASA's list. */
 export function AnyJobButton() {
@@ -30,6 +31,9 @@ function AnyJobDialog({ onClose }: { onClose: () => void }) {
   const [answer, setAnswer] = useState("");
   const [step, setStep] = useState<"idle" | "preparing" | "applying" | "printing">("idle");
   const [result, setResult] = useState<{ report: TailorReport; profile: Profile | null; file: Saved | null } | null>(null);
+  // Under the match score: the answers so far, and the next fix round's text for ChatGPT.
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [fix, setFix] = useState<string | null>(null);
   const [bridge, setBridge] = useState<string | null>(null);
   const [asking, setAsking] = useState<BridgeProgress | "asking" | null>(null);
   const control = useRef<AbortController | null>(null);
@@ -44,8 +48,10 @@ function AnyJobDialog({ onClose }: { onClose: () => void }) {
 
   const edit = (part: keyof typeof job) => (event: { target: { value: string } }) => {
     setJob(current => ({ ...current, [part]: event.target.value }));
-    // A change to the job: its text is made again.
+    // A change to the job: its text is made again, and any fix round dropped.
     setText(null);
+    setAnswers([]);
+    setFix(null);
   };
   const place = () => jobPlace({ id: key.current.slice(4), company: job.company || null, title: job.title || null });
 
@@ -59,19 +65,35 @@ function AnyJobDialog({ onClose }: { onClose: () => void }) {
     setText(made.text);
     return made.text;
   };
-  const load = async (given = answer, asked?: Awaited<ReturnType<typeof writableFolder>>) => {
+  /** An answer applied (after the answers before it, in a fix round) and
+   * scored: printed when it reaches the match score; else the next fix
+   * round's text, returned (or, with no rounds left, rejected). */
+  const load = async (given = answer, asked?: Awaited<ReturnType<typeof writableFolder>>, before = answers): Promise<string | null> => {
     const folder = asked === undefined ? await writableFolder() : asked;
     setStep("applying");
     setResult(null);
-    const { profile, report } = await tailorAnyJob(given)
-      .catch(() => ({ profile: undefined, report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] } as TailorReport }));
-    if (!profile) { setStep("idle"); return setResult({ report, profile: null, file: null }); }
+    const sent = [...before, given];
+    const outcome = await tailorAnyJob(job, sent)
+      .catch(() => ({ profile: undefined, fix: undefined, report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [LOST] } as TailorReport }));
+    const { profile, report } = outcome;
+    if (outcome.fix) {
+      setAnswers(sent);
+      setFix(outcome.fix);
+      setAnswer("");
+      setStep("idle");
+      setResult({ report, profile: null, file: null });
+      return outcome.fix;
+    }
+    setAnswers([]);
+    setFix(null);
+    if (!profile) { setStep("idle"); setResult({ report, profile: null, file: null }); return null; }
     setStep("printing");
     const file = await savePdf({ profile }, folder, key.current, place());
     setStep("idle");
     setResult({ report, profile, file });
+    return null;
   };
-  /** Steps 2 and 3 by the bridge: ChatGPT asked in a new chat, then Load PDF. */
+  /** Steps 2 and 3 by the bridge: ChatGPT asked in a new chat, then Load PDF; under the match score, each fix round too. */
   const askForMe = async () => {
     const folder = await writableFolder();
     const ready = text ?? await prepare();
@@ -81,10 +103,19 @@ function AnyJobDialog({ onClose }: { onClose: () => void }) {
     setResult(null);
     setAsking("asking");
     try {
-      const said = await askChatGPT(ready, progress => setAsking(progress), stop.signal);
-      setAnswer(said);
-      setAsking(null);
-      await load(said, folder);
+      // A fix round already waiting carries on from it.
+      let question = fix ?? ready;
+      let before = fix ? answers : [];
+      for (;;) {
+        const said = await askChatGPT(question, progress => setAsking(progress), stop.signal);
+        setAnswer(said);
+        setAsking(null);
+        const next = await load(said, folder, before);
+        if (!next || stop.signal.aborted) break;
+        before = [...before, said];
+        question = next;
+        setAsking("asking");
+      }
     } catch (error) {
       setAsking(null);
       if (!stop.signal.aborted) setProblem((error as Error).message);
@@ -137,8 +168,15 @@ function AnyJobDialog({ onClose }: { onClose: () => void }) {
         </label>
       </li>
     </ol>
-    {step === "printing" && <p className="jobs-hint" role="status">Applied. Now making the PDF: usually a few seconds.</p>}
+    {fix && <div className="resume-fix">
+      <p className="jobs-hint">Fix round {answers.length} of {FIX_ROUNDS}: its match score is under {PASS_SCORE}. {bridge
+        ? <>Ask ChatGPT for me carries on, or do it yourself: copy</> : <>Copy</>} this for ChatGPT, send it in a <b>new chat</b>, paste its whole answer in step 3 and press Load PDF.</p>
+      <span className="resume-folder-row"><CopyButton text={fix} label="Copy the fix for ChatGPT" />
+        <button type="button" className="chat-pill" disabled={busy} onClick={() => { setAnswers([]); setFix(null); setResult(null); setAnswer(""); }}>Start over</button></span>
+    </div>}
+    {step === "printing" && <p className="jobs-hint" role="status">Applied and scored. Now making the PDF: usually a few seconds.</p>}
     {result && <div className="resume-result" role="status">
+      {result.report.score && <ScoreView score={result.report.score} fixing={fix ? answers.length : undefined} />}
       {result.profile && file && (file.error
         ? <p className="b-form-error">{file.error}</p>
         : <div className="resume-saved">

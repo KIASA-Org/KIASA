@@ -3,24 +3,23 @@
 import { siteClient, visitorClient } from "@/lib/accounts/server";
 import { descriptionFor } from "@/lib/jobs/page";
 import { jobsViewer } from "@/lib/jobs/server";
-import { applyComprehensive } from "./apply-comprehensive";
 import { applyInit } from "./apply-init";
 import { extractJson } from "./extract-json";
 import { buildJobRecord, buildPasteText } from "./job-record";
 import { tidyProfile, validateProfile } from "./profile-form";
+import { answersOf, failedReport as failed, tailorRounds, type TailorOutcome, type TailorReport } from "./rounds";
 import { ProfileSchema, type Profile } from "./schema";
+import { scoreResume, scoreSummary } from "./score";
 import { prompt } from "./server";
 
-/** What applying an answer did (the Resume Tailor App's report). `base`: no
- * description could be found (the job's page is only a form), so the job's
- * résumé is the member's base résumé as it is. */
-export type TailorReport = { ok: boolean; applied: string[]; unmatched: string[]; rejected: string[]; warnings: string[]; errors: string[]; base?: boolean };
+export type { TailorOutcome, TailorReport } from "./rounds";
 export type BaseStatus = "typed" | "imported" | "generated";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ONLY = "Tailored résumés are for KIASA's members.";
 /** The longest answer taken: a whole résumé in JSON is far less. */
 const LONGEST_ANSWER = 200_000;
+const fixPrompt = () => prompt("fix");
 
 /** A member, signed in, with the database as them (its rules decide what they may touch). */
 async function member() {
@@ -115,20 +114,17 @@ export async function textForAnyJob(job: AnyJob): Promise<{ text?: string; error
   return { text: buildPasteText(prompt("tailor"), record) };
 }
 
-/** The chat's answer for a job not on KIASA's list: its changes applied to the
- * member's base résumé, and the résumé given back (to print), not kept. */
-export async function tailorAnyJob(answer: string): Promise<{ profile?: Profile; report: TailorReport }> {
-  const empty = (error: string) => ({ report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [error] } });
+/** The chat's answers for a job not on KIASA's list (the tailoring answer,
+ * then any fix rounds'): applied to the member's base résumé and scored
+ * against that job; the résumé given back (to print), not kept. */
+export async function tailorAnyJob(job: AnyJob, answers: string | string[]): Promise<TailorOutcome & { profile?: Profile }> {
   const who = await member();
-  if (!who) return empty(ONLY);
+  if (!who) return { report: failed(ONLY) };
+  const given = answersOf(answers);
+  if (!given) return { report: failed("The answers could not be read. Please start again.") };
   const base = await baseOf(who.db, who.me.id);
-  if (!base) return empty("Make your base résumé first.");
-  const found = extractJson(String(answer ?? "").slice(0, LONGEST_ANSWER));
-  if (!found.ok) return empty(found.error);
-  const result = applyComprehensive(base, found.value);
-  const report: TailorReport = { ok: result.ok, applied: result.applied, unmatched: result.unmatched, rejected: result.rejected, warnings: result.warnings, errors: result.errors };
-  if (result.errors.length || !result.applied.length || !result.profile) return { report };
-  return { profile: result.profile, report };
+  if (!base) return { report: failed("Make your base résumé first.") };
+  return tailorRounds(base, given, { company: field(job?.company, 120), title: field(job?.title, 200), jd: field(job?.jd, 30000) }, fixPrompt);
 }
 
 /** The chat's answer to the init prompt, checked against the base résumé sent:
@@ -144,23 +140,30 @@ export async function checkGenerated(answer: string): Promise<{ profile?: Profil
   return { profile: result.profile ?? undefined, repairs: result.repairs, warnings: result.warnings, errors: result.errors };
 }
 
-/** The chat's answer to the tailoring prompt for one job: its changes applied
- * to the member's base résumé, and kept as their résumé for that job. Not kept
- * when the answer could not be used at all. */
-export async function tailorFromAnswer(job: string, answer: string): Promise<{ saved: boolean; report: TailorReport }> {
-  const empty = (error: string): { saved: boolean; report: TailorReport } => ({ saved: false, report: { ok: false, applied: [], unmatched: [], rejected: [], warnings: [], errors: [error] } });
+/** The chat's answers for one job (the tailoring answer, then any fix
+ * rounds'): applied to the member's base résumé, scored against the job's
+ * description, and kept as their résumé for that job when it reaches the pass
+ * mark. Under it, `fix` is the next round's text, until the rounds run out and
+ * it is rejected. `description`: the one the member gave (or the bridge read)
+ * for the text, when KIASA had none. */
+export async function tailorFromAnswer(job: string, answers: string | string[], description?: string): Promise<TailorOutcome & { saved: boolean }> {
+  const empty = (error: string) => ({ saved: false, report: failed(error) });
   const who = await member();
   if (!who) return empty(ONLY);
   if (typeof job !== "string" || !ID.test(job)) return empty("That job is not known.");
-  const base = await baseOf(who.db, who.me.id);
+  const given = answersOf(answers);
+  if (!given) return empty("The answers could not be read. Please start again.");
+  const [{ data: posting }, base] = await Promise.all([
+    who.db.from("jobs").select("title, company, description").eq("id", job).maybeSingle(),
+    baseOf(who.db, who.me.id),
+  ]);
+  if (!posting) return empty("That job is no longer on the list.");
   if (!base) return empty("Make your base résumé first.");
-  const found = extractJson(String(answer ?? "").slice(0, LONGEST_ANSWER));
-  if (!found.ok) return empty(found.error);
-  const result = applyComprehensive(base, found.value);
-  const report: TailorReport = { ok: result.ok, applied: result.applied, unmatched: result.unmatched, rejected: result.rejected, warnings: result.warnings, errors: result.errors };
-  // An answer that could not be read, or that broke the résumé's facts, is not kept.
-  if (result.errors.length || !result.applied.length) return { saved: false, report };
-  const { error } = await who.db.from("tailored_resumes").upsert({ job_id: job, user_id: who.me.id, profile: result.profile, report, edited: false });
+  // The description the text was made from (as textForJob chose it).
+  const jd = ((typeof description === "string" ? description.trim().slice(0, 30000) : "") || (posting.description ?? "")).trim().slice(0, 30000);
+  const { profile, report, fix } = tailorRounds(base, given, { company: posting.company ?? "", title: posting.title ?? "", jd }, fixPrompt);
+  if (!profile) return { saved: false, report, fix };
+  const { error } = await who.db.from("tailored_resumes").upsert({ job_id: job, user_id: who.me.id, profile, report, edited: false });
   if (error) return { saved: false, report: { ...report, errors: ["That did not save. Please try again."] } };
   return { saved: true, report };
 }
@@ -186,7 +189,15 @@ export async function saveTailored(job: string, input: unknown): Promise<{ error
   if (typeof job !== "string" || !ID.test(job)) return { errors: ["That job is not known."] };
   const result = checked(input);
   if ("errors" in result) return result;
-  const { data, error } = await who.db.from("tailored_resumes").update({ profile: result.profile, edited: true })
+  // Its match score again, for the résumé as changed (kept, whatever it is: the member chose these words).
+  const [{ data: posting }, { data: kept }] = await Promise.all([
+    who.db.from("jobs").select("title, company, description").eq("id", job).maybeSingle(),
+    who.db.from("tailored_resumes").select("report").eq("job_id", job).eq("user_id", who.me.id).maybeSingle(),
+  ]);
+  const report = { ...((kept?.report ?? {}) as Partial<TailorReport>) };
+  const jd = (posting?.description ?? "").trim();
+  if (jd.length >= 80 && !report.base) report.score = scoreSummary(scoreResume(result.profile, { title: posting?.title, company: posting?.company, jd }));
+  const { data, error } = await who.db.from("tailored_resumes").update({ profile: result.profile, edited: true, report })
     .eq("job_id", job).eq("user_id", who.me.id).select("job_id");
   return error || !data?.length ? { errors: ["That did not save. Please try again."] } : {};
 }

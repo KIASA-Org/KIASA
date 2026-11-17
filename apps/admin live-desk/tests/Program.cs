@@ -606,10 +606,15 @@ Same("fingerprint, not plain letters", 695248037u, ScriptReader.Fingerprint("Caf
     reader.Tick();
     Same("says how far", "seen", link.Sent[^1].Name);
 
-    // Silence: waiting, then a new connection.
+    // Silence: waiting, but the same connection is kept a while (a new one takes 5–30 s on a poor
+    // line, so replacing it at 7 s meant none ever heard anything)...
     now += 8_000;
     reader.Tick();
     Same("quiet: waiting", ReadingState.Waiting, states[^1]);
+    Check("quiet: not replaced at once", link.Opened == 1, $"opened {link.Opened}");
+    // ...and replaced once it has been quiet past ReopenQuietMs (20 s).
+    now += 13_000;
+    reader.Tick();
     Check("quiet: a new connection", link.Opened >= 2, $"opened {link.Opened}");
     reader.Heard("tick", J($$"""{"s":"abc","n":12,"l":{{90 + text.Length}},"h":{{ScriptReader.Fingerprint(text)}}}"""));
     Same("words again: live", ReadingState.Live, states[^1]);

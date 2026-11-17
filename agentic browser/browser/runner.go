@@ -38,11 +38,18 @@ type LaunchOptions struct {
 	FixedViewport bool
 }
 
+// localProxy is a proxy this program runs on 127.0.0.1 to log in to the real proxy for
+// the browser. Both the HTTP Forwarder and the SOCKS5 SocksForwarder satisfy it.
+type localProxy interface {
+	URL() string
+	Close() error
+}
+
 type Engine struct {
 	pw        *playwright.Playwright
 	context   playwright.BrowserContext
 	channel   string
-	forwarder *proxy.Forwarder
+	forwarder localProxy
 
 	gmailMu  sync.Mutex
 	gmailTab playwright.Page
@@ -181,7 +188,8 @@ func (e *Engine) Start(opts LaunchOptions) (playwright.Page, error) {
 				Server: opts.ProxyURL,
 			}
 			if parsedProxy.User != nil {
-				if parsedProxy.Scheme == "http" || parsedProxy.Scheme == "https" {
+				switch parsedProxy.Scheme {
+				case "http", "https":
 					// The browser gets a local proxy with no login, and the forwarder
 					// adds the login. If Playwright handled the login, Google and Gmail
 					// would never finish loading; proxy.Forwarder explains why.
@@ -192,7 +200,19 @@ func (e *Engine) Start(opts LaunchOptions) (playwright.Page, error) {
 					}
 					e.forwarder = forwarder
 					p.Server = forwarder.URL()
-				} else {
+				case "socks5", "socks5h":
+					// Chrome cannot log in to a SOCKS5 proxy, so a local SOCKS5 forwarder
+					// logs in for it and the browser talks to a local SOCKS5 proxy with no
+					// login. Host names still go to the real proxy to resolve, so DNS does
+					// not leak and the exit IP is unchanged; proxy.SocksForwarder explains.
+					forwarder, err := proxy.NewSocksForwarder(opts.ProxyURL)
+					if err != nil {
+						e.Close()
+						return nil, fmt.Errorf("failed to start the SOCKS proxy forwarder: %w", err)
+					}
+					e.forwarder = forwarder
+					p.Server = forwarder.URL()
+				default:
 					p.Username = playwright.String(parsedProxy.User.Username())
 					if pass, ok := parsedProxy.User.Password(); ok {
 						p.Password = playwright.String(pass)

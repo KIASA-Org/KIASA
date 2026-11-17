@@ -23,8 +23,9 @@
   // messages per hour", "You've hit your GPT-5 limit", "usage cap"). Looked for
   // only in its notices and in a short answer with no code block: a résumé or a
   // job's description saying "rate limiting" is not one.
-  const LIMIT = /you(['’]ve| have) (reached|hit) (our|your|the) (current )?([\w.-]+ )?(usage |message )?(limit|cap)|usage cap|(reached|hit) (the|your|our) (usage|message) limit/i;
-  const FAILED = /something went wrong|an error occurred|network error|conversation not found/i;
+  const LIMIT = /you(['’]ve| have) (reached|hit) (our|your|the) (current )?([\w.-]+ )?(usage |message )?(limit|cap)|usage cap|(reached|hit) (the|your|our) (usage|message) limit|too many requests/i;
+  // ChatGPT failing (as its answer, or as a notice): KIASA asks again in a new chat.
+  const FAILED = /something went wrong|something seems to have gone wrong|an error occurred|error (in|generating|while generating)|network error|conversation not found|request timed out|timed out|unable to load|failed to (get|load|send)|connection (lost|error)|try again later|please try again/i;
   const NOTICES = '[role="alert"], [role="status"], [data-testid*="error" i], [class*="text-token-text-error"]';
 
   const first = list => { for (const selector of list) { try { const found = document.querySelector(selector); if (found) return found; } catch { /* a selector this browser cannot read */ } } return null; };
@@ -168,6 +169,10 @@
       if (limited) return { error: `ChatGPT's usage limit is reached (“${(plain && LIMIT.test(said) ? said : notice).trim().slice(0, 160)}”).` };
       if (plain && FAILED.test(said) && said.length < 400) return { error: `ChatGPT answered with an error: “${said.trim().slice(0, 160)}”` };
       if (said !== last) { last = said; steadySince = Date.now(); }
+      // An error notice (not its limit), with ChatGPT not writing and nothing new for fifteen seconds: it has failed.
+      const failing = quiet && Date.now() - steadySince > 15000 && !(turn && finished(turn))
+        && [...document.querySelectorAll(NOTICES)].map(each => (each.textContent || "").trim()).find(words => words && words.length < 400 && FAILED.test(words) && !LIMIT.test(words));
+      if (failing) return { error: `ChatGPT showed an error: “${failing.slice(0, 160)}”` };
       if (Date.now() - reported > 5000) { reported = Date.now(); progress({ step: "thinking", seconds: Math.round((Date.now() - started) / 1000), chars: said.length }); }
       const busy = !quiet;
       // Finished: its Copy button is there; or (should ChatGPT rename its buttons)

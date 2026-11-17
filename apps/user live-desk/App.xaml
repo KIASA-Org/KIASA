@@ -110,6 +110,29 @@
       </ControlTemplate.Triggers>
     </ControlTemplate>
 
+    <!-- An on/off switch: a small track with a knob that slides right and turns leaf green. -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Border x:Name="Track" Width="34" Height="18" CornerRadius="9" Background="#2EECFFF3">
+              <Ellipse x:Name="Knob" Width="12" Height="12" Margin="3,0" Fill="{StaticResource InkSoft}" HorizontalAlignment="Left"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Track" Property="Background" Value="{StaticResource Leaf}"/>
+                <Setter TargetName="Knob" Property="Fill" Value="{StaticResource Night}"/>
+                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Track" Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- A thin dark-theme slider with a leaf thumb. -->
     <Style x:Key="ThinSlider" TargetType="Slider">
       <Setter Property="Height" Value="18"/>

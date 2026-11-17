@@ -29,14 +29,12 @@
             <Ellipse x:Name="ConnDot" Width="7" Height="7" Fill="{StaticResource Off}" VerticalAlignment="Center" Margin="16,0,0,0"/>
             <TextBlock x:Name="ConnStatus" Text="Connecting…" FontSize="11.5" Foreground="{StaticResource InkMute}" VerticalAlignment="Center" Margin="6,0,0,0"/>
           </StackPanel>
+          <TextBlock x:Name="GhostNote" FontSize="11.5" Foreground="{StaticResource Leaf}" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center">
           <Button x:Name="SettingsButton" Style="{StaticResource Quiet}" Click="Settings_Click" ToolTip="Settings" Width="34" Height="30" Padding="0">
             <Path Data="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"
                   Fill="{StaticResource InkSoft}" Stretch="Uniform" Width="15" Height="15"/>
-          </Button>
-          <Button x:Name="PinButton" Style="{StaticResource Quiet}" Click="Pin_Click" ToolTip="Stay on top of other windows" Width="34" Height="30" Padding="0">
-            <Path x:Name="PinMark" Data="M5,0 L11,0 L11,1.5 L9.8,1.5 L9.8,6 L12,8.5 L12,10 L8.7,10 L8.7,15 L7.3,15 L7.3,10 L4,10 L4,8.5 L6.2,6 L6.2,1.5 L5,1.5 Z" Fill="{StaticResource Leaf}" Stretch="Uniform" Width="11" Height="14"/>
           </Button>
           <Button Style="{StaticResource Quiet}" Click="Minimise_Click" ToolTip="Minimise" Width="34" Height="30" Padding="0">
             <Rectangle Width="11" Height="1.2" Fill="{StaticResource InkSoft}"/>
@@ -49,7 +47,7 @@
 
       <!-- Settings popup. -->
       <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsButton}" Placement="Bottom"
-             StaysOpen="False" AllowsTransparency="True" HorizontalOffset="-186" VerticalOffset="2">
+             StaysOpen="False" AllowsTransparency="True" HorizontalOffset="-186" VerticalOffset="2" Opened="SettingsPopup_Opened">
         <Border Background="{StaticResource NightControl}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="14,12" Width="230" Margin="8">
           <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.5" Color="#000000"/></Border.Effect>
           <StackPanel>
@@ -60,6 +58,46 @@
             <TextBlock Text="See the screen behind this window." FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="0,2,0,8" TextWrapping="Wrap"/>
             <Slider x:Name="OpacitySlider" Style="{StaticResource ThinSlider}" Minimum="0.25" Maximum="1" Value="1"
                     IsMoveToPointEnabled="True" LargeChange="0.05" SmallChange="0.01" ValueChanged="Opacity_Changed"/>
+
+            <Grid Margin="0,14,0,0">
+              <StackPanel Margin="0,0,84,0">
+                <TextBlock Text="Text size" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                <TextBlock x:Name="FontValue" Text="18" FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="0,2,0,0"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="FontDown" Style="{StaticResource Quiet}" Click="FontDown_Click" Width="36" Height="28" Padding="0" Background="{StaticResource NightRaised}" ToolTip="Smaller">
+                  <TextBlock Text="A−" FontSize="11.5"/>
+                </Button>
+                <Button x:Name="FontUp" Style="{StaticResource Quiet}" Click="FontUp_Click" Width="36" Height="28" Padding="0" Margin="6,0,0,0" Background="{StaticResource NightRaised}" ToolTip="Larger">
+                  <TextBlock Text="A+" FontSize="14"/>
+                </Button>
+              </StackPanel>
+            </Grid>
+
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,14,0,12"/>
+            <Grid>
+              <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="Stay on top" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                <TextBlock Text="Keep this window above other windows." FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+              </StackPanel>
+              <CheckBox x:Name="PinSwitch" Style="{StaticResource Switch}" IsChecked="True" Checked="Pin_Click" Unchecked="Pin_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,14,0,0">
+              <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="Hide from screen sharing" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                <TextBlock x:Name="HideNote" Text="You see it; shares and recordings don't." FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+              </StackPanel>
+              <CheckBox x:Name="HideSwitch" Style="{StaticResource Switch}" Checked="Hide_Click" Unchecked="Hide_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,14,0,0">
+              <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="Ghost" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                <TextBlock x:Name="GhostHint" Text="Clicks go through to the apps behind." FontSize="11.5" Foreground="{StaticResource InkMute}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+              </StackPanel>
+              <CheckBox x:Name="GhostSwitch" Style="{StaticResource Switch}" Checked="Ghost_Click" Unchecked="Ghost_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,0,0"/>
+            </Grid>
           </StackPanel>
         </Border>
       </Popup>
@@ -98,7 +136,8 @@
                      Background="Transparent" BorderThickness="0" Padding="0" IsReadOnly="True"
                      Foreground="{StaticResource Ink}"
                      VerticalAlignment="Stretch" VerticalContentAlignment="Top"
-                     VerticalScrollBarVisibility="Auto" Visibility="Collapsed"/>
+                     VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                     ScrollViewer.ScrollChanged="NotifyBox_Scrolled" SizeChanged="NotifyBox_SizeChanged"/>
             <!-- A caret drawn by hand, so it shows even when this window is not the active one. -->
             <Rectangle x:Name="Caret" Width="2" Fill="{StaticResource Ink}" IsHitTestVisible="False"
                        HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed"/>

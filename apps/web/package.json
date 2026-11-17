@@ -22,7 +22,9 @@
     "support:local:e2e": "node scripts/support-local/e2e.cjs",
     "teams:local:e2e": "node scripts/teams-local/e2e.cjs",
     "sims:local:e2e": "node scripts/sims-local/e2e.cjs",
-    "sims:presence:check": "node --no-warnings scripts/sims-local/presence-check.mjs"
+    "sims:presence:check": "node --no-warnings scripts/sims-local/presence-check.mjs",
+    "resume:score:check": "node --no-warnings scripts/resume-score/check.mjs",
+    "bridge:stuck:check": "node --no-warnings scripts/bridge-local/stuck-check.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",

@@ -7,10 +7,13 @@ namespace LiveDesk.Win;
 internal static class Native
 {
     public const int WM_MOUSEACTIVATE = 0x0021, MA_NOACTIVATE = 3, WM_HOTKEY = 0x0312;
-    public const int GWL_EXSTYLE = -20, GWL_STYLE = -16;
+    public const int GWL_EXSTYLE = -20, GWL_STYLE = -16, GWL_HWNDPARENT = -8;
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero, HWND_TOPMOST = new(-1), HWND_NOTOPMOST = new(-2);
     public const long WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80, WS_EX_TRANSPARENT = 0x20, WS_EX_APPWINDOW = 0x40000, WS_EX_TOPMOST = 0x8;
     public const long ES_MULTILINE = 0x4;
-    public const uint SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10, SWP_ASYNCWINDOWPOS = 0x4000;
+    public const long WS_CHILD = 0x40000000, WS_POPUP = 0x80000000, WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000, WS_SYSMENU = 0x00080000, WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000;
+    public const int MA_ACTIVATE = 1;
+    public const uint SWP_NOSIZE = 1, SWP_NOZORDER = 4, SWP_NOACTIVATE = 0x10, SWP_FRAMECHANGED = 0x20, SWP_ASYNCWINDOWPOS = 0x4000;
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003, EVENT_OBJECT_FOCUS = 0x8005, EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
     public const uint WINEVENT_OUTOFCONTEXT = 0, WINEVENT_SKIPOWNPROCESS = 2;
     public const int OBJID_CARET = -8;
@@ -22,6 +25,7 @@ internal static class Native
     public const uint QS_ALLINPUT = 0x04FF, PM_REMOVE = 1;
     public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, TOKEN_QUERY = 8;
     public const uint MONITOR_DEFAULTTONEAREST = 2;
+    public const int SW_MINIMIZE = 6, SW_RESTORE = 9;
 
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; }
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
@@ -33,6 +37,16 @@ internal static class Native
         public RECT rcCaret;
     }
     [StructLayout(LayoutKind.Sequential)] public struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct PROCESSENTRY32
+    {
+        public uint dwSize, cntUsage, th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID, cntThreads, th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile;
+    }
     [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
     [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
@@ -40,8 +54,18 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public INPUTUNION u; }
 
     public delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
+    public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
     [DllImport("user32")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32")] public static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
+    [DllImport("user32", SetLastError = true)] public static extern IntPtr SetParent(IntPtr child, IntPtr parent);
+    [DllImport("user32")] public static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32")] public static extern bool IsIconic(IntPtr h);
+    [DllImport("user32")] public static extern bool ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32")] public static extern bool AttachThreadInput(uint attach, uint to, bool join);
+    [DllImport("user32")] public static extern IntPtr SetFocus(IntPtr h);
+    [DllImport("user32")] public static extern IntPtr GetParent(IntPtr h);
+    [DllImport("user32")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32")] public static extern bool GetGUIThreadInfo(uint thread, ref GUITHREADINFO info);
     [DllImport("user32", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr h, StringBuilder s, int n);
@@ -68,6 +92,29 @@ internal static class Native
     [DllImport("dwmapi")] public static extern int DwmSetWindowAttribute(IntPtr h, int attribute, ref int value, int size);
     [DllImport("kernel32", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32")] public static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32", SetLastError = true)] public static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32", CharSet = CharSet.Unicode)] public static extern bool Process32First(IntPtr snap, ref PROCESSENTRY32 e);
+    [DllImport("kernel32", CharSet = CharSet.Unicode)] public static extern bool Process32Next(IntPtr snap, ref PROCESSENTRY32 e);
+
+    /// <summary>The given process and every process descended from it. Used to tell the browser WE
+    /// launched (and its Chrome) apart from the admin's own Chrome windows.</summary>
+    public static HashSet<uint> DescendantPids(uint root)
+    {
+        var result = new HashSet<uint> { root };
+        var pairs = new List<(uint Pid, uint Parent)>();
+        var snap = CreateToolhelp32Snapshot(0x2, 0);   // TH32CS_SNAPPROCESS
+        if (snap == new IntPtr(-1)) return result;
+        try
+        {
+            var e = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32>() };
+            if (Process32First(snap, ref e))
+                do { pairs.Add((e.th32ProcessID, e.th32ParentProcessID)); } while (Process32Next(snap, ref e));
+        }
+        finally { CloseHandle(snap); }
+        bool grew = true;
+        while (grew) { grew = false; foreach (var (pid, parent) in pairs) if (result.Contains(parent) && result.Add(pid)) grew = true; }
+        return result;
+    }
     [DllImport("advapi32", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
 
     public static string ClassOf(IntPtr h)

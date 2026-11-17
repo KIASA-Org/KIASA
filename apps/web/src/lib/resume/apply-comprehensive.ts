@@ -211,7 +211,7 @@ function parseIndex(v: number | string | null | undefined): number | null {
 }
 
 /** Safety net: the invariants the prompt promises, checked on the result. */
-function integrityErrors(before: Profile, after: Profile, editable: number): string[] {
+export function integrityErrors(before: Profile, after: Profile, editable: number): string[] {
   const errors: string[] = [];
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   for (const key of ["name", "location", "email", "phone", "linkedin"] as const) {

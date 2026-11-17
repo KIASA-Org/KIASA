@@ -6,6 +6,19 @@ export const runtime = "nodejs";
 /** The KIASA ChatGPT Bridge's files (the folder `bridge/`, sent along by next.config.ts). */
 const FILES = ["manifest.json", "background.js", "kiasa.js", "chatgpt.js", "chatgpt-main.js"];
 const FOLDER = "kiasa-chatgpt-bridge";
+/** The site served on this computer (`npm run dev`), not kiasa.tech. */
+const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/** For the site on this computer (development only): the bridge for that
+ * address alone ("KIASA ChatGPT Bridge (local)"), so it works there without
+ * the bridge every member downloads ever running on a local address. Its
+ * version is the same; it can sit beside the one for kiasa.tech. */
+function localManifest(text: string, origin: string): Uint8Array {
+  const manifest = JSON.parse(text) as { name: string; content_scripts: { matches: string[]; js: string[] }[] };
+  manifest.name = `${manifest.name} (local)`;
+  for (const script of manifest.content_scripts) if (script.js.includes("kiasa.js")) script.matches = [`${origin}/*`];
+  return new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
+}
 
 const TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -21,13 +34,17 @@ function crc32(bytes: Uint8Array) {
 /** The bridge as a .zip (stored, not compressed: four small files), to unzip
  * and load in Chrome (chrome://extensions → Developer mode → Load unpacked).
  * Made from the files themselves, so it is always the version KIASA expects. */
-export function GET() {
+export function GET(request: Request) {
+  const origin = new URL(request.url).origin;
+  const onThisComputer = process.env.NODE_ENV !== "production" && LOCAL.test(origin);
+  const folder = onThisComputer ? `${FOLDER}-local` : FOLDER;
   const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
   for (const file of FILES) {
-    const data = new Uint8Array(readFileSync(join(process.cwd(), "bridge", file)));
-    const name = new TextEncoder().encode(`${FOLDER}/${file}`);
+    const read = readFileSync(join(process.cwd(), "bridge", file));
+    const data = onThisComputer && file === "manifest.json" ? localManifest(read.toString("utf8"), origin) : new Uint8Array(read);
+    const name = new TextEncoder().encode(`${folder}/${file}`);
     const crc = crc32(data);
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(6, 0x0800, true);
@@ -47,6 +64,6 @@ export function GET() {
   end.setUint32(12, size, true); end.setUint32(16, offset, true);
   const zip = new Blob([...parts, ...central, new Uint8Array(end.buffer)] as BlobPart[]);
   return new Response(zip, {
-    headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${FOLDER}.zip"`, "Cache-Control": "no-store" },
+    headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${folder}.zip"`, "Cache-Control": "no-store" },
   });
 }

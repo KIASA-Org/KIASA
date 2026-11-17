@@ -7,8 +7,10 @@ import type { Profile } from "./schema";
 
 /** The prompts, as the Resume Tailor App keeps them: the init and tailoring
  * prompts are never edited (prompts/CHECKSUMS.json); the import prompt is the
- * app's own. Read once, from this folder (next.config.ts sends it along). */
-const PROMPTS = { init: "AUTO_GENERAGE_PROMPT_init.md", tailor: "AUTO_UPDATE_PROMPT_COMPREHENSIVE.md", import: "IMPORT_PROMPT.md" } as const;
+ * app's own, and so is the fix prompt (SCORE_FIX_PROMPT.md: a résumé under
+ * the match score, made to add its missing keywords). Read once, from this
+ * folder (next.config.ts sends it along). */
+const PROMPTS = { init: "AUTO_GENERAGE_PROMPT_init.md", tailor: "AUTO_UPDATE_PROMPT_COMPREHENSIVE.md", import: "IMPORT_PROMPT.md", fix: "SCORE_FIX_PROMPT.md" } as const;
 export type PromptName = keyof typeof PROMPTS;
 const read = new Map<PromptName, string>();
 export function prompt(name: PromptName): string {
