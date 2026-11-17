@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Interview, InterviewOutcome, Job, JobsMe, TeamPerson } from "@/lib/jobs/types";
 import { Avatar } from "../site/avatar";
-import { ArrowLeft, Plus } from "../site/icons";
+import { ArrowLeft, ChevronDown, Plus } from "../site/icons";
 import { InterviewDialog, type InterviewForm } from "./jobs-dialogs";
 import { addDays, clockIn, dayIn, dayName, initialsOf, instantIn, partsIn, shortDay, weekStart, weekdayOf } from "./jobs-format";
 
@@ -189,19 +189,10 @@ export function CalendarView({ me, supabase, zone: teamZone, today: teamToday, t
   </div>;
 }
 
-/** The time now in the calendar's zone, ticking, and where to choose that zone:
- * the team's, this computer's, or any; the team's time beside it when they differ. */
+/** The time now in the calendar's zone, ticking, and where to choose that zone
+ * (ZonePicker); the team's time beside it when they differ. */
 function ZoneClock({ zone, team, chosen, second }: { zone: string; team: string; chosen: boolean; second: number }) {
   const up = second > 0;
-  const here = useMemo(() => up ? Intl.DateTimeFormat().resolvedOptions().timeZone : null, [up]);
-  // Every zone with its offset now: worked out once the page is up, and again each hour.
-  const hour = Math.floor(second / 3_600_000) * 3_600_000;
-  const zones = useMemo(() => {
-    if (!hour) return [];
-    const at = hour;
-    const names = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-    return (names.includes(zone) ? names : [zone, ...names]).map(name => ({ name, label: `${zoneName(name)} (${offsetOf(name, at)})` }));
-  }, [hour, zone]);
   const clock = up ? formatIn(zone, "clock").format(second) : "--:--:--";
   return <div className="jobs-clock">
     <div className="jobs-clock-face" role="timer" aria-label={up ? `Now ${clock.slice(0, 5)} in ${zoneName(zone)}` : "Clock"}>
@@ -209,18 +200,149 @@ function ZoneClock({ zone, team, chosen, second }: { zone: string; team: string;
       <span className="jobs-clock-day">{up ? `${formatIn(zone, "day").format(second)} · ${offsetOf(zone, second)}` : ""}</span>
       {up && zone !== team && <span className="jobs-clock-team">Team time {formatIn(team, "clock").format(second).slice(0, 5)} · {zoneName(team)}</span>}
     </div>
-    <label className="jobs-resume-pick jobs-zone-pick"><span>Time zone</span>
-      <select value={chosen ? zone : "team"} onChange={event => keepZone(event.target.value === "team" ? null : event.target.value)}>
-        <optgroup label="Quick">
-          <option value="team">Team time · {zoneName(team)}</option>
-          {here && here !== team && <option value={here}>This computer · {zoneName(here)}</option>}
-        </optgroup>
-        <optgroup label="All time zones">
-          {zones.length ? zones.map(entry => <option key={entry.name} value={entry.name}>{entry.label}</option>)
-            : chosen && <option value={zone}>{zoneName(zone)}</option>}
-        </optgroup>
-      </select>
-    </label>
+    <ZonePicker zone={zone} team={team} chosen={chosen} second={second} />
+  </div>;
+}
+
+/** Names people search by that a zone's own name does not hold: its country. */
+const COUNTRIES: Record<string, string> = {
+  "Asia/Kolkata": "India Calcutta", "Asia/Calcutta": "India Kolkata", "Asia/Shanghai": "China", "Asia/Hong_Kong": "Hong Kong China",
+  "Asia/Tokyo": "Japan", "Asia/Seoul": "Korea South Korea", "Asia/Manila": "Philippines", "Asia/Karachi": "Pakistan",
+  "Asia/Dhaka": "Bangladesh", "Asia/Ho_Chi_Minh": "Vietnam Saigon", "Asia/Saigon": "Vietnam Ho Chi Minh", "Asia/Bangkok": "Thailand",
+  "Asia/Jakarta": "Indonesia", "Asia/Singapore": "Singapore", "Asia/Kuala_Lumpur": "Malaysia", "Asia/Dubai": "UAE Emirates",
+  "Asia/Riyadh": "Saudi Arabia", "Asia/Jerusalem": "Israel", "Asia/Taipei": "Taiwan", "Asia/Kathmandu": "Nepal",
+  "Asia/Colombo": "Sri Lanka", "Asia/Tehran": "Iran", "Europe/London": "UK England Britain", "Europe/Dublin": "Ireland",
+  "Europe/Paris": "France", "Europe/Berlin": "Germany", "Europe/Madrid": "Spain", "Europe/Rome": "Italy",
+  "Europe/Amsterdam": "Netherlands Holland", "Europe/Warsaw": "Poland", "Europe/Kyiv": "Ukraine Kiev", "Europe/Kiev": "Ukraine Kyiv",
+  "Europe/Istanbul": "Turkey", "Europe/Moscow": "Russia", "Europe/Lisbon": "Portugal", "Europe/Stockholm": "Sweden",
+  "Africa/Lagos": "Nigeria", "Africa/Cairo": "Egypt", "Africa/Nairobi": "Kenya", "Africa/Johannesburg": "South Africa",
+  "America/New_York": "USA US East Eastern", "America/Chicago": "USA US Central", "America/Denver": "USA US Mountain",
+  "America/Los_Angeles": "USA US West Pacific California", "America/Phoenix": "USA US Arizona", "America/Anchorage": "USA US Alaska",
+  "Pacific/Honolulu": "USA US Hawaii", "America/Toronto": "Canada", "America/Vancouver": "Canada", "America/Mexico_City": "Mexico",
+  "America/Sao_Paulo": "Brazil", "America/Argentina/Buenos_Aires": "Argentina", "America/Bogota": "Colombia", "America/Lima": "Peru",
+  "Australia/Sydney": "Australia", "Australia/Melbourne": "Australia", "Australia/Perth": "Australia", "Pacific/Auckland": "New Zealand",
+};
+const longFormats = new Map<string, Intl.DateTimeFormat>();
+/** "Pacific Standard Time" and the like, for searching by. */
+const longName = (zone: string, at: number) => {
+  let format = longFormats.get(zone);
+  if (!format) longFormats.set(zone, format = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "long" }));
+  return format.formatToParts(at).find(part => part.type === "timeZoneName")?.value ?? "";
+};
+
+type ZoneChoice = { value: string; zone: string; label: string; offset: string; shift: string; find: string; city: string; country: string; group: "quick" | "all" };
+
+/** An offset as typed ("UTC+5:30", "gmt-8", "+05:30", "+0530") made one way ("+5:30", "-8"); null when it is no offset. */
+function shiftOf(text: string): string | null {
+  const found = /^(?:utc|gmt)?([+-])0?(\d{1,2})(?::?(\d{2}))?$/.exec(text.toLowerCase().replace(/\u2212/g, "-"));
+  if (!found) return /^(utc|gmt)$/i.test(text) ? "+0" : null;
+  const minutes = found[3] && found[3] !== "00" ? `:${found[3]}` : "";
+  return found[2] === "0" && !minutes ? "+0" : `${found[1]}${Number(found[2])}${minutes}`;
+}
+/** Whether `word` is a whole word of `text`. */
+const wordIn = (word: string, text: string) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text);
+/** How well a zone answers a search: 0 its city or country by that word (India before Indiana),
+ * 1 a city starting so, 2 a word found elsewhere (its long name, its region). */
+const rankOf = (choice: ZoneChoice, words: string[]) =>
+  words.some(word => wordIn(word, choice.city) || wordIn(word, choice.country)) ? 0 : words.some(word => choice.city.startsWith(word)) ? 1 : 2;
+
+/** Choosing the calendar's zone: a button, and a list with a search box (a
+ * city, a country, "pacific", "UTC+5:30" …), worked by mouse or keyboard. */
+function ZonePicker({ zone, team, chosen, second }: { zone: string; team: string; chosen: boolean; second: number }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  // Under the keys (null: the zone shown now, until a key or a search moves it).
+  const [moved, setActive] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const hour = Math.floor(second / 3_600_000) * 3_600_000;
+  const listId = "jobs-zone-list";
+
+  // Every zone, with its offset and long name now: worked out when the list opens (and each hour).
+  const choices = useMemo<ZoneChoice[]>(() => {
+    if (!open || !hour) return [];
+    const at = hour;
+    const make = (value: string, name: string, label: string, group: ZoneChoice["group"]): ZoneChoice => {
+      const offset = offsetOf(name, at);
+      const find = [name, zoneName(name), label, longName(name, at), COUNTRIES[name] ?? ""].join(" ").toLowerCase();
+      const city = zoneName(name.split("/").pop() ?? name).toLowerCase();
+      return { value, zone: name, label, offset, shift: shiftOf(offset) ?? "+0", find, city, country: (COUNTRIES[name] ?? "").toLowerCase(), group };
+    };
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const names = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+    return [
+      make("team", team, `Team time · ${zoneName(team)}`, "quick"),
+      ...(here && here !== team ? [make(here, here, `This computer · ${zoneName(here)}`, "quick")] : []),
+      ...(names.includes(zone) ? names : [zone, ...names]).map(name => make(name, name, zoneName(name), "all")),
+    ];
+  }, [open, hour, team, zone]);
+
+  // Each word found in the zone's names, or an offset the zone has now exactly (so "UTC+1" is not "UTC+10").
+  // Its city or country first: "india" is India before Indiana.
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = !words.length ? choices : choices
+    .filter(choice => words.every(word => { const shift = shiftOf(word); return shift ? choice.shift === shift : choice.find.includes(word); }))
+    .map((choice, index) => ({ choice, index, rank: rankOf(choice, words.filter(word => !shiftOf(word))) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(entry => entry.choice);
+  const current = chosen ? zone : "team";
+  const active = moved ?? (words.length ? 0 : Math.max(0, shown.findIndex(choice => choice.value === current)));
+
+  const close = (focus = true) => { setOpen(false); setQuery(""); if (focus) button.current?.focus(); };
+  const pick = (choice: ZoneChoice) => { keepZone(choice.value === "team" ? null : choice.value); close(); };
+
+  // A click outside closes it.
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(false); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
+  // The one chosen (or under the keys) kept in sight.
+  useEffect(() => {
+    list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open, choices.length]);
+
+  const openList = () => {
+    setOpen(true);
+    setQuery("");
+    setActive(null);
+  };
+
+  const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    const by = (step: number) => { event.preventDefault(); setActive(Math.max(0, Math.min(shown.length - 1, active + step))); };
+    if (event.key === "ArrowDown") by(1);
+    else if (event.key === "ArrowUp") by(-1);
+    else if (event.key === "PageDown") by(8);
+    else if (event.key === "PageUp") by(-8);
+    else if (event.key === "Enter") { event.preventDefault(); if (shown[active]) pick(shown[active]); }
+    else if (event.key === "Escape") { event.preventDefault(); close(); }
+    else if (event.key === "Tab") close(false);
+  };
+
+  const label = chosen ? `${zoneName(zone)}${second ? ` (${offsetOf(zone, second)})` : ""}` : `Team time · ${zoneName(team)}`;
+  return <div className="jobs-zone-pick" ref={root}>
+    <span className="jobs-zone-label" id="jobs-zone-label">Time zone</span>
+    <button type="button" ref={button} className="jobs-zone-button" aria-haspopup="listbox" aria-expanded={open}
+      aria-labelledby="jobs-zone-label jobs-zone-current" onClick={() => open ? close() : openList()}>
+      <span id="jobs-zone-current">{label}</span><ChevronDown />
+    </button>
+    {open && <div className="jobs-zone-pop">
+      <input className="jobs-zone-search" type="search" autoFocus value={query} placeholder="Search a city, country or UTC+5:30"
+        role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label="Search time zones"
+        aria-activedescendant={shown[active] ? `jobs-zone-${active}` : undefined}
+        onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={onKey} />
+      <ul className="jobs-zone-list" id={listId} role="listbox" ref={list} aria-label="Time zones">
+        {shown.length === 0 && <li className="jobs-zone-none">No time zone matches “{query}”.</li>}
+        {shown.map((choice, index) => <li key={`${choice.group}-${choice.value}`} id={`jobs-zone-${index}`} data-index={index}
+          role="option" aria-selected={choice.value === current} data-active={index === active || undefined}
+          data-first={(index === 0 || shown[index - 1].group !== choice.group) ? choice.group : undefined}
+          onPointerMove={() => setActive(index)} onClick={() => pick(choice)}>
+          <span>{choice.label}</span><span className="jobs-zone-offset">{choice.offset}</span>
+        </li>)}
+      </ul>
+    </div>}
   </div>;
 }
 

@@ -10,7 +10,7 @@ const supabase = (() => {
 })();
 const live = supabase.replace(/^http/, "ws");
 // The KIASA Live Script app, on the member's own PC (the Interview page).
-const liveScript = `ws://127.0.0.1:${process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "8765"}`;
+const liveScript = `ws://127.0.0.1:${process.env.NEXT_PUBLIC_LIVE_SCRIPT_PORT || "48765"}`;
 const policy = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",

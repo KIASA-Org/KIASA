@@ -1,19 +1,14 @@
 # KIASA Live Script
 
-The app behind **Turn on live script** on KIASA's Interview page (`/interview`). It turns
-what a Windows PC plays into text, in the way the member chooses on the page:
+The small helper behind **Turn on live script** on KIASA's Interview page (`/interview`,
+admins only). It reads **Windows Live Captions** (Windows 11, 22H2 or newer) and hands the
+words to the page: a web page cannot read another program's window, so the page needs it.
+It has no speech model of its own (from 1.2.0: KIASA's own capture is gone).
 
-- **KIASA live capture** (Windows 10 or 11): WASAPI loopback, not the microphone, through
-  our speech model, on the CPU.
-- **System live capture** (Windows 11, 22H2 or newer): Windows' own Live Captions, read
-  from its window. It needs no speech model, and the app never fetches one for it.
+Text stays on the PC: the page talks to the helper at `ws://127.0.0.1:48765/ws` (8765 before
+1.2.0, a port other programs such as JobMail also use), and only KIASA's addresses may connect.
 
-Audio and text stay on the PC: the page talks to the app at `ws://127.0.0.1:8765/ws`, and
-only KIASA's addresses may connect.
-
-- `live_script.py`: capture and recognition (Nemotron streaming model through sherpa-onnx;
-  about 660 MB, downloaded the first time KIASA live capture is turned on), and a
-  standalone window.
+- `basics.py`: where it keeps files, keeping Windows from slowing it, technical terms.
 - `system_captions.py`: system live capture. Windows has no way to subscribe to Live
   Captions, so this reads its window with UI Automation (`CaptionsTextBlock`) several times
   a second, and stitches that buffer, whose newest words Windows keeps correcting, into one

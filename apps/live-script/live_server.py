@@ -1,8 +1,7 @@
 """
 KIASA Live Script: the small service behind "Turn on live script" on KIASA's Interview page.
-The member chooses where the words come from: KIASA live capture (the speech model here,
-which is only fetched and loaded when first asked for, and then stays loaded), or system
-live capture (Windows' own Live Captions, see system_captions.py).
+It reads Windows' own Live Captions (system_captions.py) and hands their words to the page.
+It has no speech model of its own (from 1.2.0; before, it could also use one).
 
 Audio and text stay on this PC. The service only listens on this PC (127.0.0.1), and only
 pages listed in ALLOWED_ORIGINS can connect, so other websites can't start capture. Capture
@@ -11,19 +10,19 @@ page.
 
 Run from source:
     python live_server.py
-Then open http://127.0.0.1:8765 for a demo page with the button.
+Then open http://127.0.0.1:48765 for a demo page with the button.
 
 Built as KIASA Live Script.exe (see build.ps1), it registers the link kiasa-live:// for this
 Windows user the first time it runs, so the Interview page can open it.
 
 Connecting from a page:
-    const ws = new WebSocket("ws://127.0.0.1:8765/ws");
-    ws.send(JSON.stringify({action: "start", source: "kiasa"}));   // or "system"; or {action: "stop"}
+    const ws = new WebSocket("ws://127.0.0.1:48765/ws");
+    ws.send(JSON.stringify({action: "start", source: "system"}));   // or {action: "stop"}
     ws.onmessage = (e) => JSON.parse(e.data);
 Messages from the service:
-    {"type": "hello", "version": "...", "sources": ["kiasa", "system"]}   (first; apps before 1.1.0 do not say it)
-    {"type": "state", "state": "loading" | "ready" | "connecting" | "listening" | "failed",
-     "detail": "...", "source": "kiasa" | "system" | null}
+    {"type": "hello", "version": "...", "sources": ["system"]}   (first; apps before 1.1.0 do not say it)
+    {"type": "state", "state": "ready" | "connecting" | "listening" | "failed",
+     "detail": "...", "source": "system" | null}
     {"type": "text", "text": "the whole script so far"}
     {"type": "error", "message": "...", "plain": true if it is meant to be read as it is}
 
@@ -54,14 +53,16 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import broadcast, serve
 from websockets.exceptions import ConnectionClosed
 
-import live_script as ls
+import basics as ls
 import system_captions
 
-VERSION = "1.1.0"
-SOURCES = ["kiasa", "system"]
+VERSION = "1.2.0"
+# Windows Live Captions only: the app has no speech model of its own (from 1.2.0).
+SOURCES = ["system"]
 
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("LIVE_SCRIPT_PORT", "8765"))
+# Its own port: 8765, used before, is taken by other programs on some PCs (JobMail).
+PORT = int(os.environ.get("LIVE_SCRIPT_PORT", "48765"))
 DEMO_PAGE = ls.HERE / "live_demo.html"
 INTERVIEW_PAGE = "https://kiasa.tech/interview"
 ALLOWED_ORIGINS = [
@@ -87,16 +88,12 @@ class Service:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self.loop = loop
         self.clients = set()
-        self.recognizer = None
-        self.loading = False
-        self.wanted = False  # KIASA live capture was asked for, and waits for the model
         self.engine = None
         self.engine_thread = None
         self.feed = None
         self.source = None
         self.state = {"type": "state", "state": "ready", "detail": "Ready", "source": None}
         self.text = ""
-        self.shown_progress: tuple[int, int] | None = None
         self.last_page = time.monotonic()
 
     def on_engine_event(self, feed: EngineFeed, event: tuple) -> None:
@@ -128,67 +125,11 @@ class Service:
             self.state["progress"] = round(progress, 4)
         self.send(self.state)
 
-    def load_model(self) -> None:
-        try:
-            recognizer = ls.load_recognizer(self.put_status, self.put_progress)
-            self.loop.call_soon_threadsafe(self.on_loaded, recognizer)
-        except Exception as exc:
-            self.loop.call_soon_threadsafe(self.on_load_failed, f"{type(exc).__name__}: {exc}")
-
-    def put_status(self, text: str) -> None:
-        self.loop.call_soon_threadsafe(self.on_loading, text)
-
-    # The model may go on arriving after the member has turned off, or chosen system
-    # live capture: then it is nobody's concern, and the state belongs to what is on.
-    def on_loading(self, detail: str, progress: float | None = None) -> None:
-        if self.wanted:
-            self.set_state("loading", detail, progress)
-
-    def on_load_failed(self, message: str) -> None:
-        self.loading = False
-        if self.wanted:
-            self.wanted = False
-            self.source = None
-            self.send({"type": "error", "message": message})
-            self.set_state("failed", "The speech model did not load")
-
-    # The download calls this very often; the page only needs it when the whole number changes.
-    def put_progress(self, part: int, parts: int, fraction: float) -> None:
-        percent = int(fraction * 100)
-        last = self.shown_progress
-        # Only ever forward: the downloader winds its count back when it resumes a chunk.
-        if last is not None and last[0] == part and percent <= last[1]:
-            return
-        self.shown_progress = (part, percent)
-        self.loop.call_soon_threadsafe(
-            self.on_loading,
-            f"Getting speech model (first run, about 660 MB) — part {part} of {parts}, {percent}%",
-            fraction,
-        )
-
-    def on_loaded(self, recognizer) -> None:
-        self.recognizer = recognizer
-        self.loading = False
-        if self.wanted:
-            self.wanted = False
-            self.begin("kiasa", lambda feed: ls.Engine(feed, recognizer))
-
-    def start(self, source: str = "kiasa") -> None:
+    def start(self, source: str = "system") -> None:
+        """Turn on: read Windows Live Captions (whatever source a page asks for)."""
         if self.engine is not None:
             return  # already on
-        if source == "system":
-            self.wanted = False
-            self.source = None
-            self.begin("system", lambda feed: system_captions.Engine(feed, ls.fix_terms))
-        elif self.recognizer is not None:
-            self.begin("kiasa", lambda feed: ls.Engine(feed, self.recognizer))
-        else:  # the speech model comes only when it is asked for: system live capture never needs it
-            self.wanted = True
-            self.source = "kiasa"
-            self.set_state("loading", "Loading speech model...")
-            if not self.loading:
-                self.loading = True
-                threading.Thread(target=self.load_model, daemon=True).start()
+        self.begin("system", lambda feed: system_captions.Engine(feed, ls.fix_terms))
 
     def begin(self, source: str, make_engine) -> None:
         self.text = ""
@@ -206,10 +147,6 @@ class Service:
         self.engine_thread.start()
 
     def stop(self) -> None:
-        if self.wanted:  # turned off while waiting for the model
-            self.wanted = False
-            self.source = None
-            self.set_state("ready", "Stopped")
         if self.engine is None:
             return
         self.engine.close()
@@ -242,7 +179,7 @@ class Service:
                 except (ValueError, AttributeError):
                     continue
                 if action == "start":
-                    self.start("system" if message.get("source") == "system" else "kiasa")
+                    self.start()
                 elif action == "stop":
                     self.stop()
         except ConnectionClosed:

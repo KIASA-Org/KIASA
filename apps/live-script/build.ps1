@@ -6,8 +6,7 @@ param([string]$Python = "python")
 Set-Location $PSScriptRoot
 
 & $Python -m PyInstaller --noconfirm --noconsole --onedir --name "KIASA Live Script" `
-  --collect-all sherpa_onnx `
-  --add-data "models;models" --add-data "live_demo.html;." `
+  --add-data "live_demo.html;." `
   --exclude-module tkinter `
   live_server.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
